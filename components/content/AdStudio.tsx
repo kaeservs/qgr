@@ -64,12 +64,9 @@ export function AdStudio({ adSet, strategy, platforms }: { adSet: AdSet; strateg
           <h1 className="display h1">{adSet.title}</h1>
           <p className={styles.meta}>
             {strategy && (
-              <span>
-                From{' '}
-                <Link href={`/strategy/${strategy.id}`} className="link">
-                  {strategy.title}
-                </Link>
-              </span>
+              <Link href={`/strategy/${strategy.id}`} className="link">
+                View strategy
+              </Link>
             )}
             <span>{variants.length} variants</span>
             <StatusPill status={status} small />
