@@ -1,0 +1,37 @@
+# Quantum Global · AI marketing
+
+A dashboard where three agents turn what competitors are doing into ads for
+Quantum Global Residency.
+
+1. **Competitor Tracker**: give it a competitor's website, an ad library link
+   or their ads. It finds the hooks that keep running and writes a report.
+2. **Ad Strategist**: turns that report into a strategy: positioning, three
+   angles, a channel plan and guardrails.
+3. **Content Agent**: writes three ad variants, previewed as real Meta,
+   LinkedIn and X posts. Pick one to highlight it and edit it in place.
+
+A **custom run** starts from your own podcast episode, blog post, video or
+text. It has no competitor, so it skips the tracker and starts at the strategy.
+
+## Status
+
+The front end is complete, with stand-in data. The agents (n8n) and the
+backend (Supabase) come next; see `CLAUDE.md` for how they connect.
+
+## Run it
+
+    pnpm install
+    pnpm dev          # http://localhost:3000
+    pnpm test         # unit tests, no network
+    pnpm typecheck
+    pnpm build
+
+## Where things are
+
+    app/                 pages (App Router) and the /api/runs route
+    components/          shell, home, runs, competitors, strategy, content, settings, ui
+    lib/types.ts         the domain model every page and the backend share
+    lib/data.ts          the only place pages read data from
+    lib/mock-data.ts     stand-in data until Supabase is connected
+    lib/pipeline.ts      the agents' order and how a run's status is derived
+    app/globals.css      design tokens: every colour, radius and shadow

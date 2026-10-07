@@ -1,0 +1,454 @@
+.shell {
+  display: flex;
+  min-height: 100vh;
+  /* A soft brand glow behind the work area, echoing the site's hero. */
+  background:
+    radial-gradient(900px 420px at 78% -120px, rgb(122 134 228 / 0.16), transparent 70%),
+    radial-gradient(600px 300px at 30% -160px, rgb(239 183 74 / 0.1), transparent 70%),
+    var(--page);
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  padding: 8px var(--gutter) 48px;
+  min-width: 0;
+}
+
+/* ---------- Sidebar ---------- */
+
+/* The column carries the white and the border the full height of the page;
+   the panel inside it stays put while the page scrolls. */
+.sidebarCol {
+  width: var(--sidebar-w);
+  flex: none;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  padding: 22px 16px 16px;
+  z-index: 40;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 18px;
+}
+
+.logo {
+  display: block;
+  border-radius: 8px;
+}
+
+.closeNav {
+  display: none;
+}
+
+.nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  padding-top: 6px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 10px;
+}
+
+.group + .group {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.group ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.groupLabel {
+  padding: 0 14px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 46px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  color: var(--text-2);
+  font-size: 15px;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.item:hover {
+  background: var(--surface-2);
+  color: var(--indigo);
+}
+
+.itemActive,
+.itemActive:hover {
+  background: var(--indigo-50);
+  color: var(--indigo);
+  font-weight: 500;
+}
+
+/* The gold marker is the site's active-link colour, kept as an accent. */
+.itemActive::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 10px;
+  bottom: 10px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--gold);
+}
+
+.user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 6px 4px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.userText {
+  flex: 1;
+  min-width: 0;
+}
+
+.userName {
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.userRole {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.scrim {
+  display: none;
+}
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 84px;
+  padding: 0 var(--gutter);
+  background: linear-gradient(to bottom, rgb(246 246 251 / 0.94) 70%, rgb(246 246 251 / 0));
+  backdrop-filter: blur(6px);
+}
+
+.menuBtn {
+  display: none;
+}
+
+.search {
+  position: relative;
+  flex: 1;
+  max-width: 560px;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 16px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  height: 48px;
+  padding: 0 84px 0 46px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  font-size: 14px;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.searchInput::placeholder {
+  color: #85869e;
+}
+
+.searchInput:hover {
+  border-color: var(--indigo-200);
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--indigo);
+  box-shadow: 0 0 0 4px rgb(28 27 157 / 0.1);
+}
+
+.searchInput::-webkit-search-cancel-button {
+  display: none;
+}
+
+.searchKbd {
+  position: absolute;
+  right: 12px;
+  pointer-events: none;
+}
+
+.searchList {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+}
+
+.searchItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.searchItemActive {
+  background: var(--indigo-50);
+}
+
+.searchItemIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--indigo-50);
+  color: var(--indigo);
+  flex: none;
+}
+
+.searchItemActive .searchItemIcon {
+  background: var(--surface);
+}
+
+.searchItemText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.searchEmpty {
+  padding: 14px 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.topActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.popWrap {
+  position: relative;
+}
+
+.badgeDot {
+  position: absolute;
+  top: 10px;
+  right: 11px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 340px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+}
+
+.popTitle {
+  padding: 6px 10px 10px;
+  font-weight: 500;
+}
+
+.notice {
+  display: flex;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--radius);
+}
+
+.notice:hover {
+  background: var(--surface-2);
+}
+
+.noticeIcon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  flex: none;
+}
+
+.notice-review {
+  background: var(--review-bg);
+  color: var(--review);
+}
+
+.notice-done {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.notice-failed {
+  background: var(--fail-bg);
+  color: var(--fail);
+}
+
+.noticeText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+
+/* ---------- Narrow screens: the sidebar becomes a drawer ---------- */
+
+@media (max-width: 1023px) {
+  .sidebarCol {
+    width: 0;
+    border-right: 0;
+  }
+
+  .sidebar {
+    position: fixed;
+    width: var(--sidebar-w);
+    left: 0;
+    top: 0;
+    bottom: 0;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-lg);
+  }
+
+  .sidebarOpen {
+    transform: none;
+  }
+
+  .closeNav {
+    display: inline-grid;
+  }
+
+  .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgb(14 15 44 / 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .scrimOpen {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .menuBtn {
+    display: inline-grid;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar {
+    height: 72px;
+    gap: 10px;
+  }
+
+  .searchKbd {
+    display: none;
+  }
+
+  .searchInput {
+    padding-right: 14px;
+  }
+
+  .newRun {
+    width: 44px;
+    padding: 0;
+  }
+
+  .newRun span {
+    display: none;
+  }
+
+  .popover {
+    position: fixed;
+    top: 72px;
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}

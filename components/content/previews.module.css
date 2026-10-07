@@ -1,0 +1,522 @@
+/*
+ * Platform post previews. They use the reader's system font, as the platforms
+ * do, so the ad reads as an ad and not as part of this app. Only the image
+ * carries Quantum Global's own type.
+ */
+
+.post {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  color: #050505;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+
+.roundLogo,
+.squareLogo,
+.xAvatar {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  background: #fff;
+  border: 1px solid #e4e6eb;
+}
+
+.roundLogo,
+.xAvatar {
+  border-radius: 50%;
+}
+
+.squareLogo {
+  border-radius: 6px;
+}
+
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.who strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.who > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #65676b;
+  font-size: 12px;
+}
+
+.more {
+  color: #65676b;
+  flex: none;
+}
+
+.body {
+  padding: 2px 14px 10px;
+}
+
+.text {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Editable fields ---------- */
+
+.static {
+  display: block;
+}
+
+.edit {
+  position: relative;
+  display: block;
+}
+
+/* The field looks like the text it replaces until you point at it. */
+.field {
+  display: block;
+  width: 100%;
+  margin: -3px -6px;
+  padding: 3px 6px;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  resize: none;
+  overflow: hidden;
+  outline: 1.5px dashed rgb(28 27 157 / 0.35);
+  outline-offset: 0;
+  transition:
+    background-color 0.15s ease,
+    outline-color 0.15s ease;
+}
+
+.field:hover {
+  background: rgb(28 27 157 / 0.04);
+  outline-color: rgb(28 27 157 / 0.6);
+}
+
+.field:focus {
+  background: rgb(28 27 157 / 0.06);
+  outline: 2px solid var(--indigo);
+}
+
+.editOver .field {
+  outline-color: var(--fail);
+}
+
+.counter {
+  position: absolute;
+  right: -2px;
+  top: -24px;
+  z-index: 2;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.edit:focus-within .counter,
+.editOver .counter {
+  opacity: 1;
+}
+
+.counter-ok {
+  background: var(--indigo);
+  color: #fff;
+}
+
+.counter-near {
+  background: var(--gold);
+  color: var(--indigo-ink);
+}
+
+.counter-over {
+  background: var(--fail);
+  color: #fff;
+}
+
+.ctaSelect {
+  appearance: none;
+  cursor: pointer;
+  font: inherit;
+  outline: 1.5px dashed rgb(28 27 157 / 0.45);
+  outline-offset: 2px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23050505' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 26px !important;
+}
+
+.ctaSelect:focus {
+  outline: 2px solid var(--indigo);
+}
+
+/* ---------- Meta ---------- */
+
+.metaBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f0f2f5;
+}
+
+.metaBarText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.metaDomain {
+  color: #65676b;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.metaHeadline {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.metaDesc {
+  color: #65676b;
+  font-size: 13px;
+}
+
+.metaCta {
+  flex: none;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #e4e6eb;
+  color: #050505;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 14px 10px;
+  border-top: 1px solid #e4e6eb;
+  color: #65676b;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.actions span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- LinkedIn ---------- */
+
+.liBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #eef3f8;
+}
+
+.liBarText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.liHeadline {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.liDomain {
+  color: #666;
+  font-size: 12px;
+}
+
+.liCta {
+  flex: none;
+  padding: 6px 14px;
+  border: 1px solid #0a66c2;
+  border-radius: 999px;
+  background: #fff;
+  color: #0a66c2;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- X ---------- */
+
+.xPost {
+  flex-direction: row;
+  gap: 10px;
+  padding: 12px 14px 4px;
+  color: #0f1419;
+  font-size: 15px;
+}
+
+.xMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.xHead {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #536471;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.xHead strong {
+  color: #0f1419;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.xHead > span {
+  white-space: nowrap;
+}
+
+.xHead .more {
+  margin-left: auto;
+}
+
+.xText {
+  font-size: 15px;
+}
+
+.xCard {
+  border: 1px solid #cfd9de;
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.xCardFoot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.xCardTitle {
+  font-size: 14px;
+  color: #0f1419;
+}
+
+.xActions {
+  justify-content: space-between;
+  padding: 4px 4px 8px;
+  border-top: 0;
+  color: #536471;
+}
+
+/* ---------- The brand creative ---------- */
+
+.creative {
+  position: relative;
+  container-type: inline-size;
+  overflow: hidden;
+  color: #fff;
+  background: var(--indigo);
+}
+
+.ratio-square {
+  aspect-ratio: 1 / 1;
+  --type: 10.5cqi;
+}
+
+.ratio-wide {
+  aspect-ratio: 1.91 / 1;
+  --type: 7.2cqi;
+}
+
+.creativeArt {
+  position: absolute;
+  inset: 0;
+}
+
+.creativeInner {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4cqi;
+  padding: 7cqi 8cqi;
+}
+
+.creativeBrand {
+  position: absolute;
+  top: 5cqi;
+  left: 6cqi;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 5px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.95);
+  color: var(--indigo-ink);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* A thumbnail is too small to carry the chip; the words matter more. */
+@container (max-width: 220px) {
+  .creativeBrand {
+    display: none;
+  }
+}
+
+.creativeText {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--type);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: 0.005em;
+  color: var(--gold);
+  text-wrap: balance;
+}
+
+.creativeField {
+  width: 100%;
+  margin: -1cqi -2cqi;
+  padding: 1cqi 2cqi;
+  box-sizing: content-box;
+  border: 0;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.06);
+  resize: none;
+  overflow: hidden;
+  outline: 1.5px dashed rgb(255 255 255 / 0.55);
+}
+
+.creativeField:hover {
+  outline-color: rgb(255 255 255 / 0.85);
+}
+
+.creativeField:focus {
+  background: rgb(255 255 255 / 0.12);
+  outline: 2px solid var(--gold);
+}
+
+/* Arcs: the site's hero, centred low. */
+.creative-arcs .creativeArt {
+  background:
+    radial-gradient(circle at 50% 135%, #7a86e4 0 24%, transparent 24.3%),
+    radial-gradient(circle at 50% 135%, #5459c5 0 38%, transparent 38.3%),
+    radial-gradient(circle at 50% 135%, #3f44b4 0 52%, transparent 52.3%),
+    radial-gradient(circle at 50% 135%, #2f30ab 0 66%, transparent 66.3%),
+    var(--indigo);
+}
+
+.creative-arcs .creativeInner {
+  justify-content: flex-start;
+  padding-top: 18cqi;
+  text-align: center;
+  align-items: center;
+}
+
+.ratio-wide.creative-arcs .creativeInner {
+  padding-top: 13cqi;
+}
+
+/* Split: indigo copy panel beside a gold panel with the arcs. */
+.creative-split .creativeArt {
+  background:
+    radial-gradient(circle at 100% 100%, var(--indigo) 0 18%, transparent 18.3%),
+    radial-gradient(circle at 100% 100%, #2f30ab 0 30%, transparent 30.3%),
+    radial-gradient(circle at 100% 100%, #f4c66b 0 44%, transparent 44.3%),
+    linear-gradient(90deg, var(--indigo) 0 58%, var(--gold) 58% 100%);
+}
+
+.creative-split .creativeInner {
+  padding-right: 46cqi;
+}
+
+.creative-split.ratio-square {
+  --type: 8.6cqi;
+}
+
+.creative-split.ratio-wide {
+  --type: 6.2cqi;
+}
+
+/* Spotlight: light ground, indigo type, a gold rule. */
+.creative-spotlight {
+  color: var(--indigo);
+}
+
+.creative-spotlight .creativeArt {
+  background:
+    radial-gradient(circle at 0% 0%, rgb(239 183 74 / 0.45) 0 22%, transparent 22.3%),
+    radial-gradient(circle at 100% 100%, rgb(122 134 228 / 0.35) 0 30%, transparent 30.3%),
+    radial-gradient(circle at 100% 100%, rgb(122 134 228 / 0.2) 0 44%, transparent 44.3%),
+    var(--gold-50);
+}
+
+.creative-spotlight .creativeText {
+  color: var(--indigo);
+  padding-bottom: 3cqi;
+  background: linear-gradient(var(--gold), var(--gold)) left bottom / 18cqi 1.2cqi no-repeat;
+}
+
+.creative-spotlight .creativeBrand {
+  background: var(--indigo);
+  color: #fff;
+}
+
+.creative-spotlight .creativeField {
+  outline-color: rgb(28 27 157 / 0.45);
+  background-color: rgb(28 27 157 / 0.04);
+}
+
+.creative-spotlight .creativeField:focus {
+  outline-color: var(--indigo);
+}
