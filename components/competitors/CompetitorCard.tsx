@@ -17,10 +17,11 @@ export function CompetitorCard({ competitor: c, now }: { competitor: Competitor;
               {c.name}
             </Link>
           </h2>
-          <span className="muted small">{c.domain}</span>
+          <span className="muted small">{c.domain ?? 'From uploaded ads'}</span>
         </div>
         <PlatformIcons platforms={c.platforms} />
       </div>
+      {c.dataSource === 'placeholder' && <span className={`pill pill-quiet pill-sm ${styles.samplePill}`}>Sample ads</span>}
       {top && (
         <blockquote className={styles.topHook}>
           <span className="eyebrow">Top hook</span>

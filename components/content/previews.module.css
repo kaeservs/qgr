@@ -379,6 +379,22 @@
   inset: 0;
 }
 
+/* A generated image under the words, darkened enough for white words to read
+   in every style, the light spotlight included. */
+.withImage,
+.withImage.creative-spotlight {
+  color: #fff;
+}
+
+.creativeImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.62);
+}
+
 .creativeInner {
   position: relative;
   height: 100%;

@@ -13,7 +13,8 @@ const ICON = { tracker: Radar, strategist: Compass, content: Sparkles } as const
 
 export function AgentPanel({ agents }: { agents: Agent[] }) {
   const toast = useToast();
-  // Saved locally until the agents' settings live in Supabase.
+  // Switchable only on the sample data, where it is kept in the page. The live
+  // pipeline runs every agent in turn, so its cards show no switch.
   const [auto, setAuto] = useState(() => Object.fromEntries(agents.map((a) => [a.key, a.auto])) as Record<Agent['key'], boolean>);
 
   return (
@@ -41,14 +42,16 @@ export function AgentPanel({ agents }: { agents: Agent[] }) {
                     {agent.stat}
                   </p>
                 </div>
-                <Toggle
-                  checked={on}
-                  label={`Run the ${name} automatically`}
-                  onChange={(next) => {
-                    setAuto((a) => ({ ...a, [agent.key]: next }));
-                    toast(next ? `${name} runs automatically` : `${name} waits for you`, 'info');
-                  }}
-                />
+                {agent.switchable && (
+                  <Toggle
+                    checked={on}
+                    label={`Run the ${name} automatically`}
+                    onChange={(next) => {
+                      setAuto((a) => ({ ...a, [agent.key]: next }));
+                      toast(next ? `${name} runs automatically` : `${name} waits for you`, 'info');
+                    }}
+                  />
+                )}
               </div>
               <div className={styles.agentActions}>
                 <Link href={agent.href} className="btn btn-ghost btn-sm">

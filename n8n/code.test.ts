@@ -5,6 +5,8 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { guardrailWarnings } from '../lib/guardrails';
+import type { Platform, PlatformCopy } from '../lib/types';
 
 type Json = Record<string, unknown>;
 type Items = { json: Json }[];
@@ -235,7 +237,7 @@ describe('Content Agent', () => {
     const answer = {
       variants: [
         { label: 'C', creative_text: 'Ask for the file.', creative_style: 'spotlight', image_prompt: 'p', copy: copy('Clean copy.') },
-        { label: 'A', creative_text: 'Mapped out.', creative_style: 'arcs', image_prompt: 'p', copy: copy('Your green card, guaranteed in 6 months.') },
+        { label: 'A', creative_text: 'Mapped out. Risk-free.', creative_style: 'arcs', image_prompt: 'p', copy: copy('Your green card, guaranteed in 6 months.') },
         { label: 'B', creative_text: 'Move together.', creative_style: 'split', image_prompt: 'p', copy: copy('x'.repeat(290)) },
       ],
     };
@@ -243,9 +245,15 @@ describe('Content Agent', () => {
     expect(out.ok).toBe(true);
     const variants = (out.p_ad_set as { variants: { label: string; angle: string; warnings: string[] }[] }).variants;
     expect(variants.map((v) => [v.label, v.angle])).toEqual([['A', 'Clarity over hype'], ['B', 'Family first'], ['C', 'Diligence']]);
-    expect(variants[0]!.warnings).toEqual(expect.arrayContaining(['meta text says "guarantee"', 'meta text promises a timeline', 'x text says "guarantee"']));
+    expect(variants[0]!.warnings).toEqual(expect.arrayContaining(['meta text says "guarantee"', 'meta text promises a timeline', 'x text says "guarantee"', 'image text says "risk-free"']));
     expect(variants[1]!.warnings).toContain('x text is 290 characters; X allows 280');
     expect(variants[2]!.warnings).toEqual([]);
+
+    // The studio re-checks every edit with lib/guardrails.ts: it must flag exactly what the agent flagged.
+    for (const v of answer.variants) {
+      const agent = variants.find((x) => x.label === v.label)!.warnings;
+      expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'])).toEqual(agent);
+    }
 
     const imaged = run('content-images-placeholder.js', out);
     expect((imaged.p_ad_set as { variants: { image_url: unknown }[] }).variants.every((v) => v.image_url === null)).toBe(true);

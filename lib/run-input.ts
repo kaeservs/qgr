@@ -1,3 +1,4 @@
+import { hostOf } from './format';
 import { CUSTOM_SOURCES, GOALS, PLATFORMS } from './types';
 import type { Goal, Platform, RunSource } from './types';
 
@@ -98,6 +99,22 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
       ...(title ? { title } : {}),
     },
   };
+}
+
+/** The run's name: the one people gave it, or one made from what it starts from. */
+export function runTitle(input: NewRunInput): string {
+  if (input.title) return input.title;
+  const { source } = input;
+  let title: string;
+  if (source.kind === 'competitor') {
+    if (source.input === 'upload') title = source.name;
+    else title = source.input === 'website' ? hostOf(source.url) : `Ad link · ${hostOf(source.url)}`;
+  } else if (source.type === 'text') {
+    title = `Text: ${source.excerpt.slice(0, 40).trimEnd()}…`;
+  } else {
+    title = `${{ podcast: 'Podcast', blog: 'Blog post', video: 'Video' }[source.type]} · ${hostOf(source.url)}`;
+  }
+  return title.slice(0, MAX_TITLE);
 }
 
 const AD_LIBRARIES = [/facebook\.com\/ads\/library/i, /linkedin\.com\/ad-library/i, /ads\.x\.com/i, /adstransparency\.google\.com/i, /adlibrary\./i];

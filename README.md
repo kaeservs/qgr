@@ -15,26 +15,39 @@ text. It has no competitor, so it skips the tracker and starts at the strategy.
 
 ## Status
 
-The front end is complete, with stand-in data. The backend is built: the
-Supabase schema and four n8n workflows (the pipeline and one per agent).
-Competitor ads (Apify) and ad images (ChatGPT or Higgsfield) are placeholders
-for now. Joining the pages to Supabase comes next; see `CLAUDE.md`.
+Built end to end: the dashboard, the Supabase database and the four n8n
+workflows. Competitor ads (Apify) and ad images (ChatGPT or Higgsfield) are
+placeholders for now.
 
 ## Run it
 
     pnpm install
+    cp .env.example .env.local   # leave this out to run on the sample data
     pnpm dev          # http://localhost:3000
     pnpm test         # unit tests, no network
     pnpm typecheck
     pnpm build
 
+With `.env.local` the dashboard asks you to sign in. To give someone access,
+create their account in Supabase (Authentication → Users → Add user) and add
+them to the team in the SQL editor:
+
+    select private.add_team_member('name@example.com', 'owner');
+
+Runs start once `N8N_RUN_WEBHOOK_SECRET` is set and the same secret is in
+n8n's "QGR webhook secret" credential.
+
 ## Where things are
 
-    app/                 pages (App Router) and the /api/runs route
+    app/(app)/           the dashboard's pages, behind sign-in
+    app/(auth)/          sign-in and no-access
+    app/api/runs/        starts a run: Supabase, then n8n
+    proxy.ts             sends anyone signed out to /sign-in
     components/          shell, home, runs, competitors, strategy, content, settings, ui
     lib/types.ts         the domain model every page and the backend share
-    lib/data.ts          the only place pages read data from
-    lib/mock-data.ts     stand-in data until Supabase is connected
+    lib/data.ts          the only place pages read data from: Supabase or the sample data
+    lib/data/            the two sources, and the mapping from rows to lib/types.ts
+    lib/mock-data.ts     the sample data
     lib/pipeline.ts      the agents' order and how a run's status is derived
     app/globals.css      design tokens: every colour, radius and shadow
     supabase/migrations/ the database: tables, and the functions agents write through

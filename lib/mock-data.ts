@@ -1,4 +1,4 @@
-// Stand-in data until Supabase is connected. Competitors are fictional and use
+// The sample data, shown when Supabase is not configured (lib/data/sample.ts). Competitors are fictional and use
 // `.example` domains so nothing here reads as a claim about a real company.
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
@@ -671,6 +671,7 @@ export const agents: Agent[] = [
   {
     key: 'tracker',
     auto: true,
+    switchable: true,
     autoLabel: 'Scans every Monday, 9:00',
     manualLabel: 'Scans when you ask',
     stat: '4 competitors tracked',
@@ -680,6 +681,7 @@ export const agents: Agent[] = [
   {
     key: 'strategist',
     auto: true,
+    switchable: true,
     autoLabel: 'Runs after every scan',
     manualLabel: 'Waits for you',
     stat: '4 strategies',
@@ -689,6 +691,7 @@ export const agents: Agent[] = [
   {
     key: 'content',
     auto: false,
+    switchable: true,
     autoLabel: 'Writes ads from every strategy',
     manualLabel: 'Waits for your go-ahead',
     stat: '1 set to review',

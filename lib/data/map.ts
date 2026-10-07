@@ -1,0 +1,416 @@
+// Turns rows as Supabase returns them into the dashboard's shapes
+// (lib/types.ts). Pure, so it is tested with fixtures (map.test.ts). Anything
+// the database could hold that the dashboard has no shape for (an unknown
+// platform, a malformed JSON column) is dropped here rather than crashing a page.
+
+import { runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
+import { runTitle } from '../run-input';
+import type { NewRunInput } from '../run-input';
+import type { TeamRole, Viewer } from '../session';
+import type { Database, Json } from '../supabase/database.types';
+import { GOALS, PLATFORMS } from '../types';
+import type {
+  AdExample,
+  AdFormat,
+  AdSet,
+  AdSource,
+  Agent,
+  AngleShare,
+  BrandProfile,
+  ChannelPlan,
+  Competitor,
+  CreativeStyle,
+  Goal,
+  Hook,
+  Notice,
+  Platform,
+  PlatformCopy,
+  RunSource,
+  Stage,
+  StageKey,
+  StageStatus,
+  Strategy,
+  User,
+  Variant,
+} from '../types';
+import { initialsOf } from './source';
+import type { RunWithStatus } from './source';
+
+// ---------------------------------------------------------------- rows
+
+/** A one-to-one embed. PostgREST returns an object or null; an array is tolerated too. */
+export type One<T> = T | T[] | null;
+export const one = <T>(value: One<T> | undefined): T | null => (Array.isArray(value) ? (value[0] ?? null) : (value ?? null));
+
+export interface StageRow {
+  stage: string;
+  status: string;
+  summary: string | null;
+  error: string | null;
+  finished_at: string | null;
+}
+
+export interface RunRow {
+  id: string;
+  title: string;
+  kind: string;
+  input: string;
+  url: string | null;
+  competitor_name: string | null;
+  files: string[] | null;
+  excerpt: string | null;
+  platforms: string[];
+  goal: string;
+  summary: string | null;
+  competitor_id: string | null;
+  created_at: string;
+  approved_at: string | null;
+  run_stages: StageRow[];
+  strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
+  ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
+  competitor_reports: One<{ id: string; hooks: { id: string }[] }>;
+  run_events?: { at: string; text: string }[];
+}
+
+export interface CompetitorRow {
+  id: string;
+  name: string;
+  domain: string | null;
+  competitor_reports: {
+    id: string;
+    data_source: string;
+    active_ads: number;
+    platforms: string[];
+    insights: string[];
+    angles: Json;
+    created_at: string;
+    hooks: { id: string; rank: number; text: string; platform: string; format: string; days_running: number; variations: number }[];
+    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number }[];
+  }[];
+}
+
+export interface StrategyRow {
+  id: string;
+  run_id: string;
+  competitor_id: string | null;
+  title: string;
+  source_label: string | null;
+  goal: string;
+  positioning: string;
+  audiences: string[];
+  channels: Json;
+  guardrails: string[];
+  created_at: string;
+  approved_at: string | null;
+  strategy_angles: { id: string; position: number; name: string; why: string; hook: string; based_on_hook: string | null }[];
+  ad_sets: { id: string }[];
+}
+
+export interface AdSetRow {
+  id: string;
+  run_id: string;
+  strategy_id: string;
+  title: string;
+  created_at: string;
+  ad_variants: {
+    id: string;
+    label: string;
+    angle: string;
+    creative_text: string;
+    creative_style: string;
+    image_url: string | null;
+    copy: Json;
+    warnings: string[];
+    approved_at: string | null;
+  }[];
+}
+
+export type BrandRow = Database['public']['Tables']['brand_profile']['Row'];
+
+// ---------------------------------------------------------------- values
+
+const isOneOf = <T extends string>(list: readonly T[], value: unknown): value is T => typeof value === 'string' && (list as readonly string[]).includes(value);
+const isRecord = (value: unknown): value is { [key: string]: Json | undefined } => typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const FORMATS: readonly AdFormat[] = ['video', 'image', 'carousel', 'document', 'text'];
+const STATUSES: readonly StageStatus[] = ['skipped', 'queued', 'running', 'done', 'failed'];
+const STYLES: readonly CreativeStyle[] = ['arcs', 'split', 'spotlight'];
+const SOURCES: readonly AdSource[] = ['apify', 'placeholder', 'upload'];
+const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
+
+const platformsOf = (list: readonly string[] | null): Platform[] => PLATFORMS.filter((p) => (list ?? []).includes(p));
+const goalOf = (value: string): Goal => (isOneOf(GOALS, value) ? value : 'consultations');
+const formatOf = (value: string): AdFormat => (isOneOf(FORMATS, value) ? value : 'image');
+
+function anglesOf(json: Json): AngleShare[] {
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((a) => (isRecord(a) && typeof a.label === 'string' && typeof a.ads === 'number' ? [{ label: a.label, ads: a.ads }] : []));
+}
+
+function channelsOf(json: Json): ChannelPlan[] {
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((c) =>
+    isRecord(c) && isOneOf(PLATFORMS, c.platform) && typeof c.share === 'number'
+      ? [{ platform: c.platform, share: c.share, role: typeof c.role === 'string' ? c.role : '', format: typeof c.format === 'string' ? c.format : '' }]
+      : [],
+  );
+}
+
+/** Copy keyed by platform; any field that is not text is left out. */
+export function copyOf(json: Json): Partial<Record<Platform, PlatformCopy>> {
+  const copy: Partial<Record<Platform, PlatformCopy>> = {};
+  if (!isRecord(json)) return copy;
+  for (const p of PLATFORMS) {
+    const c = json[p];
+    if (!isRecord(c) || typeof c.text !== 'string' || typeof c.headline !== 'string') continue;
+    copy[p] = {
+      text: c.text,
+      headline: c.headline,
+      ...(typeof c.description === 'string' ? { description: c.description } : {}),
+      ...(typeof c.cta === 'string' ? { cta: c.cta } : {}),
+    };
+  }
+  return copy;
+}
+
+// ---------------------------------------------------------------- runs
+
+export function sourceOf(row: Pick<RunRow, 'kind' | 'input' | 'url' | 'competitor_name' | 'files' | 'excerpt' | 'title'>): RunSource {
+  if (row.kind === 'competitor') {
+    if (row.input === 'upload') return { kind: 'competitor', input: 'upload', name: row.competitor_name ?? row.title, files: row.files ?? [] };
+    return { kind: 'competitor', input: row.input === 'ad_link' ? 'ad_link' : 'website', url: row.url ?? '' };
+  }
+  if (row.input === 'text') return { kind: 'custom', type: 'text', excerpt: row.excerpt ?? '' };
+  const type = row.input === 'podcast' || row.input === 'video' ? row.input : 'blog';
+  return { kind: 'custom', type, url: row.url ?? '' };
+}
+
+function stagesOf(rows: StageRow[]): Record<StageKey, Stage> {
+  const stage = (key: StageKey): Stage => {
+    const row = rows.find((s) => s.stage === key);
+    return {
+      status: row && isOneOf(STATUSES, row.status) ? row.status : 'queued',
+      ...(row?.summary ? { summary: row.summary } : {}),
+      ...(row?.error ? { error: row.error } : {}),
+    };
+  };
+  return { tracker: stage('tracker'), strategist: stage('strategist'), content: stage('content') };
+}
+
+export function toRun(row: RunRow): RunWithStatus {
+  const strategy = one(row.strategies);
+  const adSet = one(row.ad_sets);
+  const report = one(row.competitor_reports);
+  const stages = stagesOf(row.run_stages);
+  const run = {
+    id: row.id,
+    title: row.title,
+    source: sourceOf(row),
+    platforms: platformsOf(row.platforms),
+    goal: goalOf(row.goal),
+    createdAt: row.created_at,
+    ...(row.approved_at ? { approvedAt: row.approved_at } : {}),
+    ...(row.summary ? { summary: row.summary } : {}),
+    stages,
+    output: {
+      ...(row.competitor_id ? { competitorId: row.competitor_id } : {}),
+      ...(strategy ? { strategyId: strategy.id } : {}),
+      ...(adSet ? { adSetId: adSet.id } : {}),
+    },
+    counts: {
+      ...(report ? { hooks: report.hooks.length } : {}),
+      ...(strategy ? { angles: strategy.strategy_angles.length } : {}),
+      ...(adSet ? { variants: adSet.ad_variants.length } : {}),
+    },
+    activity: [...(row.run_events ?? [])].sort((a, b) => a.at.localeCompare(b.at)).map((e) => ({ at: e.at, text: e.text })),
+  };
+  return { ...run, status: runStatus(run) };
+}
+
+/** One update per run, the latest thing that happened to it, newest first. */
+export function toNotices(rows: RunRow[], limit = 6): Notice[] {
+  const notices = rows.flatMap((row): Notice[] => {
+    const stage = (key: StageKey) => row.run_stages.find((s) => s.stage === key);
+    const failed = STAGE_ORDER.find((key) => stage(key)?.status === 'failed');
+    const adSet = one(row.ad_sets);
+    if (failed) {
+      return [{ id: `${row.id}-failed`, text: `${STAGE_INFO[failed].name} stopped: ${row.title}`, at: stage(failed)?.finished_at ?? row.created_at, href: `/runs/${row.id}`, tone: 'failed' }];
+    }
+    if (adSet && row.approved_at) {
+      return [{ id: `${row.id}-approved`, text: `Approved: ${row.title}`, at: row.approved_at, href: `/content/${adSet.id}`, tone: 'done' }];
+    }
+    if (adSet) {
+      return [{ id: `${row.id}-review`, text: `Ads ready for review: ${row.title}`, at: stage('content')?.finished_at ?? row.created_at, href: `/content/${adSet.id}`, tone: 'review' }];
+    }
+    const tracker = stage('tracker');
+    if (tracker?.status === 'done' && row.competitor_id) {
+      return [{ id: `${row.id}-report`, text: `Report ready: ${row.title}`, at: tracker.finished_at ?? row.created_at, href: `/competitors/${row.competitor_id}`, tone: 'done' }];
+    }
+    return [];
+  });
+  return notices.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}
+
+// ---------------------------------------------------------------- reports, strategies, ads
+
+export function toCompetitor(row: CompetitorRow): Competitor | null {
+  const report = [...row.competitor_reports].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  if (!report) return null;
+  const hooks = [...report.hooks]
+    .sort((a, b) => a.rank - b.rank)
+    .flatMap((h): Hook[] =>
+      isOneOf(PLATFORMS, h.platform) ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_running, variations: h.variations }] : [],
+    );
+  const examples = [...report.competitor_ads]
+    .sort((a, b) => b.days_running - a.days_running)
+    .flatMap((a, i): AdExample[] =>
+      isOneOf(PLATFORMS, a.platform)
+        ? [{ id: a.id, platform: a.platform, format: formatOf(a.format), text: a.text, daysRunning: a.days_running, tone: TONES[i % TONES.length] ?? 'slate' }]
+        : [],
+    );
+  return {
+    id: row.id,
+    name: row.name,
+    ...(row.domain ? { domain: row.domain } : {}),
+    ...(isOneOf(SOURCES, report.data_source) ? { dataSource: report.data_source } : {}),
+    platforms: platformsOf(report.platforms),
+    activeAds: report.active_ads,
+    lastScanAt: report.created_at,
+    insights: report.insights,
+    hooks,
+    angles: anglesOf(report.angles),
+    examples,
+  };
+}
+
+export function toStrategy(row: StrategyRow): Strategy {
+  const adSet = row.ad_sets[0];
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: row.created_at,
+    status: row.approved_at ? 'approved' : 'draft',
+    runId: row.run_id,
+    competitorIds: row.competitor_id ? [row.competitor_id] : [],
+    ...(row.source_label ? { sourceLabel: row.source_label } : {}),
+    goal: goalOf(row.goal),
+    audiences: row.audiences,
+    positioning: row.positioning,
+    angles: [...row.strategy_angles]
+      .sort((a, b) => a.position - b.position)
+      .map((a) => ({
+        id: a.id,
+        name: a.name,
+        why: a.why,
+        hook: a.hook,
+        ...(a.based_on_hook && row.competitor_id ? { basedOn: { competitorId: row.competitor_id, hook: a.based_on_hook } } : {}),
+      })),
+    channels: channelsOf(row.channels),
+    guardrails: row.guardrails,
+    ...(adSet ? { adSetId: adSet.id } : {}),
+  };
+}
+
+export function toAdSet(row: AdSetRow): AdSet {
+  const variants = [...row.ad_variants]
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .flatMap((v): Variant[] =>
+      v.label === 'A' || v.label === 'B' || v.label === 'C'
+        ? [
+            {
+              id: v.id,
+              label: v.label,
+              angle: v.angle,
+              creative: { text: v.creative_text, style: isOneOf(STYLES, v.creative_style) ? v.creative_style : 'arcs' },
+              copy: copyOf(v.copy),
+              ...(v.approved_at ? { approved: true } : {}),
+              warnings: v.warnings,
+              ...(v.image_url ? { imageUrl: v.image_url } : {}),
+            },
+          ]
+        : [],
+    );
+  return {
+    id: row.id,
+    title: row.title,
+    createdAt: row.created_at,
+    runId: row.run_id,
+    strategyId: row.strategy_id,
+    status: variants.some((v) => v.approved) ? 'approved' : 'review',
+    variants,
+  };
+}
+
+// ---------------------------------------------------------------- the rest
+
+export const toBrandProfile = (row: BrandRow): BrandProfile => ({
+  company: row.company,
+  website: row.website,
+  offer: row.offer,
+  audience: row.audience,
+  voice: row.voice,
+  guardrails: row.guardrails,
+  pageName: row.page_name,
+  xHandle: row.x_handle,
+});
+
+const ROLE_LABEL: Record<TeamRole, string> = { owner: 'Owner', member: 'Team member' };
+
+export function toUser(viewer: Viewer): User {
+  return {
+    name: viewer.name,
+    firstName: viewer.name.split(/\s+/)[0] ?? viewer.name,
+    role: viewer.role ? ROLE_LABEL[viewer.role] : 'Not on the team',
+    initials: initialsOf(viewer.name),
+  };
+}
+
+/** The agent cards, from what is in the database. The pipeline runs every agent in turn, so nothing here can be switched yet. */
+export function toAgents(competitors: number, strategies: number, toReview: AdSet[]): Agent[] {
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const first = toReview[0];
+  return [
+    {
+      key: 'tracker',
+      auto: false,
+      switchable: false,
+      autoLabel: '',
+      manualLabel: 'Scans when you start a run',
+      stat: `${plural(competitors, 'competitor', 'competitors')} tracked`,
+      href: '/competitors',
+      action: { label: 'New scan', href: '/runs/new' },
+    },
+    {
+      key: 'strategist',
+      auto: true,
+      switchable: false,
+      autoLabel: 'Runs after every scan',
+      manualLabel: '',
+      stat: plural(strategies, 'strategy', 'strategies'),
+      href: '/strategy',
+      action: { label: 'Custom run', href: '/runs/new?type=custom' },
+    },
+    {
+      key: 'content',
+      auto: true,
+      switchable: false,
+      autoLabel: 'Writes ads from every strategy',
+      manualLabel: '',
+      stat: `${plural(toReview.length, 'set', 'sets')} to review`,
+      href: '/content',
+      action: first ? { label: 'Review', href: `/content/${first.id}` } : { label: 'View ads', href: '/content' },
+    },
+  ];
+}
+
+/** A validated new run as create_run's arguments. Absent SQL defaults are omitted, never sent as null. */
+export function toCreateRunArgs(input: NewRunInput): Database['public']['Functions']['create_run']['Args'] {
+  const { source } = input;
+  const base = { p_title: runTitle(input), p_platforms: input.platforms, p_goal: input.goal };
+  if (source.kind === 'competitor') {
+    if (source.input === 'upload') return { ...base, p_kind: 'competitor', p_input: 'upload', p_competitor_name: source.name, p_files: source.files };
+    return { ...base, p_kind: 'competitor', p_input: source.input, p_url: source.url };
+  }
+  if (source.type === 'text') return { ...base, p_kind: 'custom', p_input: 'text', p_excerpt: source.excerpt };
+  return { ...base, p_kind: 'custom', p_input: source.type, p_url: source.url };
+}

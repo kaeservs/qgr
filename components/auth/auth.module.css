@@ -1,0 +1,110 @@
+/* Sign-in and no-access: the brand's arcs on one side, one card on the other. */
+
+.auth {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  background: var(--page);
+}
+
+.art {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 14px;
+  padding: 18vh 48px 48px;
+  text-align: center;
+  color: #fff;
+  background:
+    radial-gradient(circle at 50% 118%, var(--indigo-300) 0 22%, transparent 22.2%),
+    radial-gradient(circle at 50% 118%, var(--indigo-400) 0 34%, transparent 34.2%),
+    radial-gradient(circle at 50% 118%, var(--indigo-500) 0 46%, transparent 46.2%),
+    radial-gradient(circle at 50% 118%, var(--indigo-600) 0 58%, transparent 58.2%),
+    var(--indigo);
+}
+
+.artTitle {
+  max-width: 12ch;
+  font-family: var(--font-display);
+  font-size: clamp(40px, 4.6vw, 64px);
+  font-weight: 600;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.artText {
+  max-width: 30ch;
+  font-size: 17px;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.88);
+}
+
+.panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 36px 32px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.card h1 {
+  margin-bottom: 6px;
+}
+
+.cardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--indigo-50);
+  color: var(--indigo);
+}
+
+.email {
+  font-weight: 500;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 860px) {
+  .auth {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .art {
+    display: none;
+  }
+
+  .panel {
+    padding: 32px 16px;
+  }
+
+  .card {
+    padding: 28px 20px;
+  }
+}

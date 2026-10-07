@@ -11,26 +11,36 @@ recommendation and the trade-off before building.
 
 ## State
 
-Front end complete on stand-in data (`lib/mock-data.ts`). Backend built: the
-Supabase schema (`supabase/migrations/`) and the four n8n workflows (`n8n/`).
-Apify and image generation are placeholders. Not yet joined: the pages still
-read stand-in data and `/api/runs` does not call Supabase or n8n.
+Front end, backend and agents are built and joined. With `SUPABASE_URL` and
+`SUPABASE_PUBLISHABLE_KEY` set (`.env.example`), the dashboard asks people to
+sign in and shows what is in Supabase; without them it runs on the sample data
+(`lib/mock-data.ts`) and says so ("Sample data" in the top bar). Runs start
+only once the n8n webhook settings are set too. Apify and image generation are
+placeholders. Not built yet: scheduled scans (the tracker runs when someone
+starts a run), switching agents off, publishing to the ad platforms.
 
-## How the backend connects
+## How the pieces connect
 
-    browser → POST /api/runs (Next route) → start_run() in Supabase → run id
-                                          → POST the n8n webhook { runId, startAt }
+    browser ── proxy.ts: signed in? else /sign-in
+            ── pages read lib/data.ts → Supabase as the signed-in teammate (RLS)
+            ── POST /api/runs → create_run() → POST the n8n webhook { runId, startAt }
+            ── studio and settings → server actions → save_variant(), approve_variant(),
+               update_brand_profile()
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
-    pages → read Supabase through lib/data.ts (realtime later for live status)
+    pages that show a moving run re-read it every 5 s (LiveRefresh)
 
-- The browser never calls n8n. The webhook URL and its secret live only in the
-  route handler's environment.
-- `/api/runs` has no sign-in check yet because it only touches stand-in data.
-  It must check the Supabase session before it calls `start_run` or n8n.
-- `lib/data.ts` is the only data access. Swapping mock for Supabase changes
-  that file and nothing that calls it; every function is already async.
-- `lib/types.ts` is the contract the Supabase schema follows.
+- The browser never calls Supabase or n8n. Every Supabase call is made by the
+  server with the person's own session and the publishable key; the service
+  role key exists only in n8n. The webhook URL and its secret live only in the
+  server's environment.
+- `lib/data.ts` is the only data access. It picks `lib/data/live.ts` (Supabase)
+  or `lib/data/sample.ts`; both implement `DataSource` (`lib/data/source.ts`)
+  and return the shapes in `lib/types.ts`. Rows become those shapes in
+  `lib/data/map.ts`, which is pure and tested.
+- Sign-in is email and password (Supabase Auth): Google sign-in and email links
+  both need keys that do not exist yet. Accounts are made by an owner, not by
+  sign-up (see Supabase below).
 
 ### Supabase (`supabase/migrations/`)
 
@@ -41,11 +51,27 @@ read stand-in data and `/api/runs` does not call Supabase or n8n.
   one transaction, so a half-saved stage cannot exist.
 - `agent_begin` keeps the order: a stage starts only when it is queued or
   failed and the one before it is done or skipped. A retry is the same call.
-- RLS is on for every table with no policies yet, table privileges are revoked
-  from `anon` and `authenticated`, and only `service_role` may run the
-  functions. A new table or function must do the same in its own migration:
-  Postgres and Supabase grant new objects to everyone by default.
+- People change things through their own functions, each `security definer`
+  with a team check first (`private.require_team_member()`): `create_run`,
+  `report_start_failure` (n8n could not be reached), `save_variant`,
+  `approve_variant`, `update_brand_profile`. The advisor warns that signed-in
+  users can call them; that is the point, and the check inside is the guard.
+- `team_members` decides who sees anything. Policies let a member read every
+  dashboard table; anyone else, signed in or not, reads nothing, and nobody but
+  the service role writes a table. Add a person: create the account
+  (Authentication → Users → Add user, auto-confirm), then in the SQL editor
+  `select private.add_team_member('name@example.com', 'owner');`.
+- A new table or function must revoke what Postgres and Supabase grant by
+  default (`anon`, `authenticated`, `public`) in its own migration, then grant
+  only what it needs. The test that matters: a signed-in non-member reads 0 rows.
 - Every Claude call's `usage` goes to `agent_usage`, on failure too.
+- Local migration files are named by the version Supabase recorded when it
+  applied them (`list_migrations`), so the CLI and the project agree.
+- Name the foreign key in every embed (`runs → strategies!strategies_run_id_fkey(...)`):
+  several tables link runs, strategies and competitors in more than one way.
+  The typed client catches a wrong column but not a wrong hint, so check hints
+  against `lib/supabase/database.types.ts`, which is regenerated after every
+  migration (`generate_typescript_types`).
 
 ### n8n (`n8n/`)
 
@@ -80,10 +106,17 @@ read stand-in data and `/api/runs` does not call Supabase or n8n.
 3. **No ad promises an outcome, a timeline or a return.** EB-5 is an
    investment with risk; processing times are always estimates. Strategies
    carry these as guardrails and the Content Agent must follow them.
-4. **Validate on the server.** `parseNewRun` in `lib/run-input.ts` is the rule;
-   the form checks the same things first only to answer faster.
+4. **Validate on the server.** `parseNewRun` in `lib/run-input.ts` and
+   `lib/edit-input.ts` are the rules for what the app accepts; the database
+   functions check again. The forms check first only to answer faster.
 5. Competitors in mock data are fictional on `.example` domains. Competitor ads
    are drawn in neutral tones so they are never mistaken for ours.
+6. **Flag, never rewrite.** Guardrail checks (`lib/guardrails.ts`, the same
+   rules as the Content Agent's, kept in step by `n8n/code.test.ts`) flag a
+   phrase for a person to judge before approving. Nothing edits words silently.
+7. **The sample data says it is sample data.** The top bar says so, saves say
+   "Saved for this session", and a report built from Apify's placeholder says
+   its ads are examples.
 
 ## Design
 
@@ -110,6 +143,7 @@ Supabase connector points at different infrastructure: do not use it here.
 ## Commands
 
     pnpm install
+    cp .env.example .env.local   # Supabase on; leave it out for the sample data
     pnpm dev          # http://localhost:3000
     pnpm test         # vitest, no network (includes the n8n agents' code)
     pnpm typecheck    # next typegen + tsc (TypeScript 7)

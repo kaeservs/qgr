@@ -480,3 +480,26 @@
   align-items: center;
   gap: 5px;
 }
+
+/* A report built from sample ads says so, before anyone reads it as real. */
+.sampleNote {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--gold-50);
+  border: 1px solid var(--gold-100);
+  color: var(--gold-ink);
+  font-size: 14px;
+}
+
+.sampleNote svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.samplePill {
+  align-self: flex-start;
+}

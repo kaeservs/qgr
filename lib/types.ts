@@ -1,6 +1,6 @@
-// The dashboard's domain model. The mock data in `mock-data.ts` and, later,
-// the Supabase schema both follow these shapes, so pages never change when the
-// backend arrives — only `data.ts` does.
+// The dashboard's domain model. The sample data (`mock-data.ts`) and the
+// Supabase source (`data/live.ts`) both produce these shapes, so pages never
+// know which one they are reading.
 
 export const PLATFORMS = ['meta', 'linkedin', 'x'] as const;
 export type Platform = (typeof PLATFORMS)[number];
@@ -83,10 +83,16 @@ export interface AdExample {
   tone: 'slate' | 'teal' | 'plum' | 'sand';
 }
 
+/** Where a report's ads came from. 'placeholder' means sample ads: Apify is not connected yet. */
+export type AdSource = 'apify' | 'placeholder' | 'upload';
+
 export interface Competitor {
   id: string;
   name: string;
-  domain: string;
+  /** Absent for a competitor known only from uploaded ads. */
+  domain?: string;
+  /** Where the latest report's ads came from. */
+  dataSource?: AdSource;
   platforms: Platform[];
   activeAds: number;
   lastScanAt: string;
@@ -143,8 +149,13 @@ export interface Variant {
   label: 'A' | 'B' | 'C';
   angle: string;
   creative: { text: string; style: CreativeStyle };
-  copy: Record<Platform, PlatformCopy>;
+  /** Copy for each platform the run asked for. */
+  copy: Partial<Record<Platform, PlatformCopy>>;
   approved?: boolean;
+  /** Phrases flagged against the guardrails, for a person to judge before approving. */
+  warnings?: string[];
+  /** The generated image, once an image model is connected. Until then the branded design is drawn. */
+  imageUrl?: string;
 }
 
 export interface AdSet {
@@ -160,6 +171,8 @@ export interface AdSet {
 export interface Agent {
   key: StageKey;
   auto: boolean;
+  /** Whether the dashboard can switch auto-run. Off until the pipeline can act on the switch. */
+  switchable: boolean;
   /** Shown under the name while auto-run is on. */
   autoLabel: string;
   /** Shown while it is off. */
@@ -174,6 +187,18 @@ export interface User {
   firstName: string;
   role: string;
   initials: string;
+}
+
+/** What every agent reads before it writes. */
+export interface BrandProfile {
+  company: string;
+  website: string;
+  offer: string;
+  audience: string;
+  voice: string[];
+  guardrails: string[];
+  pageName: string;
+  xHandle: string;
 }
 
 export interface Notice {

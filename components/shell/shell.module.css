@@ -326,6 +326,49 @@
   z-index: 50;
 }
 
+/* Opens upward: it sits at the foot of the sidebar. */
+.accountMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 200px;
+  padding: 6px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+}
+
+.accountItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  font-size: 14px;
+  text-align: left;
+}
+
+.accountItem:hover {
+  background: var(--indigo-50);
+  color: var(--indigo);
+}
+
+.sampleTag {
+  white-space: nowrap;
+}
+
+.popEmpty {
+  padding: 4px 10px 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .popTitle {
   padding: 6px 10px 10px;
   font-weight: 500;

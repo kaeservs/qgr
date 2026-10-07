@@ -1,18 +1,19 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { Workflow, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
 import { dayKey, formatShortDate } from '@/lib/format';
 import type { Agent, User } from '@/lib/types';
+import { EmptyState } from '../ui/EmptyState';
 import { AgentPanel } from './AgentPanel';
 import { RunCalendar } from './RunCalendar';
 import { RunCard } from './RunCard';
 import { StartRunCard } from './StartRunCard';
 import styles from './home.module.css';
 
-export function HomeDashboard({ user, runs, agents, now, nextScan }: { user: User; runs: RunWithStatus[]; agents: Agent[]; now: string; nextScan: string }) {
+export function HomeDashboard({ user, runs, agents, now, nextScan }: { user: User; runs: RunWithStatus[]; agents: Agent[]; now: string; nextScan: string | null }) {
   const [day, setDay] = useState<string | null>(null);
   const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
 
@@ -42,11 +43,17 @@ export function HomeDashboard({ user, runs, agents, now, nextScan }: { user: Use
               </Link>
             )}
           </div>
-          <div className={styles.runList}>
-            {shown.map((run) => (
-              <RunCard key={run.id} run={run} />
-            ))}
-          </div>
+          {shown.length === 0 ? (
+            <EmptyState icon={Workflow} title="No runs yet">
+              Start one above, from a competitor’s website or from your own podcast, blog post or text.
+            </EmptyState>
+          ) : (
+            <div className={styles.runList}>
+              {shown.map((run) => (
+                <RunCard key={run.id} run={run} />
+              ))}
+            </div>
+          )}
         </section>
       </div>
 

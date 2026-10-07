@@ -188,3 +188,17 @@
     max-width: none;
   }
 }
+
+.emptyState {
+  padding: 48px 24px;
+}
+
+.emptyTitle {
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.emptyText {
+  max-width: 44ch;
+}

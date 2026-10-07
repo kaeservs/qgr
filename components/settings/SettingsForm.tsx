@@ -1,27 +1,45 @@
 'use client';
 
-import { Database, Plus, Workflow, X } from 'lucide-react';
+import { CircleCheck, CircleDashed, Database, Plus, Workflow, X } from 'lucide-react';
 import { useState } from 'react';
-import { BRAND } from '@/lib/brand';
+import { saveBrandProfileAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
-import { PLATFORMS } from '@/lib/types';
 import { PLATFORM_LABEL } from '@/lib/platforms';
+import { PLATFORMS } from '@/lib/types';
+import type { BrandProfile } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
 
 const VOICES = ['Calm', 'Expert', 'Plain English', 'Warm', 'Direct', 'Premium'];
 
-/** The brand profile every agent reads. Kept in the page until Supabase stores it. */
-export function SettingsForm({ guardrails }: { guardrails: string[] }) {
-  const toast = useToast();
-  const [voice, setVoice] = useState<string[]>(['Calm', 'Expert', 'Plain English']);
-  const [rules, setRules] = useState(guardrails);
-  const [draft, setDraft] = useState('');
+function Connection({ on, onLabel, offLabel }: { on: boolean; onLabel: string; offLabel: string }) {
+  return on ? (
+    <span className={cx('pill pill-sm', styles.connected)}>
+      <CircleCheck size={13} aria-hidden />
+      {onLabel}
+    </span>
+  ) : (
+    <span className="pill pill-quiet pill-sm">
+      <CircleDashed size={13} aria-hidden />
+      {offLabel}
+    </span>
+  );
+}
 
+/** The brand profile every agent reads before it writes, and what the agents run on. */
+export function SettingsForm({ profile, connections }: { profile: BrandProfile; connections: { supabase: boolean; agents: boolean } }) {
+  const toast = useToast();
+  const [form, setForm] = useState(profile);
+  const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const voices = [...VOICES, ...form.voice.filter((v) => !VOICES.includes(v))];
+
+  const set = <K extends keyof BrandProfile>(key: K, value: BrandProfile[K]) => setForm((f) => ({ ...f, [key]: value }));
   const addRule = () => {
     const rule = draft.trim();
-    if (rule && !rules.includes(rule)) setRules([...rules, rule]);
+    if (rule && !form.guardrails.includes(rule)) set('guardrails', [...form.guardrails, rule]);
     setDraft('');
   };
 
@@ -29,9 +47,14 @@ export function SettingsForm({ guardrails }: { guardrails: string[] }) {
     <div className={styles.layout}>
       <form
         className={cx('card card-pad', styles.form)}
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault();
-          toast('Saved for this session');
+          setSaving(true);
+          setError(null);
+          const saved = await saveBrandProfileAction(form);
+          setSaving(false);
+          if (!saved.ok) return setError(saved.error);
+          toast(saved.sample ? 'Saved for this session' : 'Brand profile saved');
         }}
       >
         <div>
@@ -42,42 +65,45 @@ export function SettingsForm({ guardrails }: { guardrails: string[] }) {
         <div className={styles.row}>
           <label className="field">
             <span className="label">Company</span>
-            <input className="input" defaultValue={BRAND.legalName} />
+            <input className="input" value={form.company} onChange={(e) => set('company', e.target.value)} required />
           </label>
           <label className="field">
             <span className="label">Website</span>
-            <input className="input" defaultValue={BRAND.domain} />
+            <input className="input" value={form.website} onChange={(e) => set('website', e.target.value)} required />
           </label>
         </div>
 
         <label className="field">
           <span className="label">What you offer</span>
-          <textarea className="textarea" rows={3} defaultValue="EB-5 investor visa guidance with independent due diligence on every project, from first call to green card." />
+          <textarea className="textarea" rows={3} value={form.offer} onChange={(e) => set('offer', e.target.value)} required />
         </label>
 
         <label className="field">
           <span className="label">Who it’s for</span>
-          <textarea className="textarea" rows={2} defaultValue="Indian professionals and families planning a move to the U.S., many on H-1B visas." />
+          <textarea className="textarea" rows={2} value={form.audience} onChange={(e) => set('audience', e.target.value)} required />
         </label>
 
         <fieldset className={styles.fieldset}>
           <legend className="label">Voice</legend>
           <div className={styles.chips}>
-            {VOICES.map((v) => (
-              <button key={v} type="button" aria-pressed={voice.includes(v)} className={cx(styles.chip, voice.includes(v) && styles.chipOn)} onClick={() => setVoice((list) => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]))}>
-                {v}
-              </button>
-            ))}
+            {voices.map((v) => {
+              const on = form.voice.includes(v);
+              return (
+                <button key={v} type="button" aria-pressed={on} className={cx(styles.chip, on && styles.chipOn)} onClick={() => set('voice', on ? form.voice.filter((x) => x !== v) : [...form.voice, v])}>
+                  {v}
+                </button>
+              );
+            })}
           </div>
         </fieldset>
 
         <fieldset className={styles.fieldset}>
           <legend className="label">Guardrails every ad follows</legend>
           <ul className={styles.rules}>
-            {rules.map((r) => (
+            {form.guardrails.map((r) => (
               <li key={r}>
                 <span>{r}</span>
-                <button type="button" className="icon-btn icon-btn-plain" aria-label={`Remove: ${r}`} onClick={() => setRules(rules.filter((x) => x !== r))}>
+                <button type="button" className="icon-btn icon-btn-plain" aria-label={`Remove: ${r}`} onClick={() => set('guardrails', form.guardrails.filter((x) => x !== r))}>
                   <X size={16} />
                 </button>
               </li>
@@ -106,17 +132,22 @@ export function SettingsForm({ guardrails }: { guardrails: string[] }) {
         <div className={styles.row}>
           <label className="field">
             <span className="label">Page name in ads</span>
-            <input className="input" defaultValue={BRAND.name} />
+            <input className="input" value={form.pageName} onChange={(e) => set('pageName', e.target.value)} required />
           </label>
           <label className="field">
             <span className="label">X handle</span>
-            <input className="input" defaultValue={BRAND.xHandle} />
+            <input className="input" value={form.xHandle} onChange={(e) => set('xHandle', e.target.value)} required />
           </label>
         </div>
 
         <div className={styles.actions}>
-          <button type="submit" className="btn btn-primary">
-            Save changes
+          {error && (
+            <p className="error-text" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" className="btn btn-primary" disabled={saving}>
+            {saving ? 'Saving…' : 'Save changes'}
           </button>
         </div>
       </form>
@@ -137,7 +168,7 @@ export function SettingsForm({ guardrails }: { guardrails: string[] }) {
               <strong>Supabase</strong>
               <span className="muted small">Runs, reports and ads</span>
             </span>
-            <span className="pill pill-quiet pill-sm">Next step</span>
+            <Connection on={connections.supabase} onLabel="Connected" offLabel="Sample data" />
           </li>
           <li>
             <span className={styles.serviceIcon}>
@@ -147,7 +178,7 @@ export function SettingsForm({ guardrails }: { guardrails: string[] }) {
               <strong>n8n</strong>
               <span className="muted small">The three agents</span>
             </span>
-            <span className="pill pill-quiet pill-sm">Next step</span>
+            <Connection on={connections.agents} onLabel="Connected" offLabel="Needs keys" />
           </li>
           {PLATFORMS.map((p) => (
             <li key={p}>
