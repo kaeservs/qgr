@@ -172,6 +172,53 @@
   font-size: 15px;
 }
 
+/* A video from a link, or a clip uploaded from here. */
+.videoFrom {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  margin-top: -6px;
+  border-radius: 12px;
+  background: var(--indigo-50);
+}
+
+.videoFromOption {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.videoFromOption:hover {
+  color: var(--indigo);
+}
+
+.videoFromOn,
+.videoFromOn:hover {
+  background: var(--surface);
+  color: var(--indigo);
+  box-shadow: 0 1px 2px rgb(14 15 44 / 0.08);
+}
+
+.clipBlock {
+  display: grid;
+  gap: 14px;
+}
+
+.notes {
+  min-height: 88px;
+}
+
+.clipGo {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .excerpt {
   min-height: 112px;
 }
@@ -695,6 +742,10 @@
 
   .go {
     width: 100%;
+  }
+
+  .clipGo {
+    display: block;
   }
 
   .run {

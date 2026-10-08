@@ -22,14 +22,18 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
   'id, name, domain, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const AD_SET =
-  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_url, copy, warnings, approved_at)';
+  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_url, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
+/** Uploaded clips. Private: people play them through links the server signs as them. */
+const MEDIA_BUCKET = 'run-media';
+/** Long enough for a working session in the studio; a reload signs a fresh one. */
+const PLAY_SECONDS = 6 * 60 * 60;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RECENT = 200;
@@ -164,6 +168,44 @@ export const liveData: DataSource = {
     const { error } = await (await db()).rpc('save_variant', { p_variant_id: variantId, p_creative_text: edit.creativeText, p_copy: copy, p_warnings: warnings });
     if (error) return refused(error, 'Your changes could not be saved.');
     return { ok: true, value: { warnings }, sample: false };
+  },
+
+  saveVideoEdit: async (variantId, edit) => {
+    const { error } = await (await db()).rpc('save_video_edit', { p_variant_id: variantId, p_edit: edit as unknown as Json });
+    if (error) return refused(error, 'The video edit could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  getClipUrl: async (path) => {
+    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, PLAY_SECONDS);
+    if (error) {
+      console.error('Signing a clip link failed', error);
+      return null;
+    }
+    return data.signedUrl;
+  },
+
+  createClipUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to upload.' };
+    const path = `uploads/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    // Signed as the teammate: Storage checks they may write into this folder before it signs.
+    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing an upload link failed', error);
+      return { ok: false, status: 500, error: 'The upload could not be started.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deleteClipUpload: async (path) => {
+    // Storage refuses (by its policy) a clip that is not the caller's or that a run uses.
+    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing an unused clip failed', error);
+      return { ok: false, status: 500, error: 'The clip could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That clip is in use or already gone.' };
   },
 
   approveVariant: async (variantId) => {

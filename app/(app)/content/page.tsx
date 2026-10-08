@@ -1,4 +1,4 @@
-import { CalendarDays, Sparkles } from 'lucide-react';
+import { CalendarDays, Play, Sparkles } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Creative } from '@/components/content/Creative';
@@ -42,8 +42,14 @@ export default async function ContentPage() {
               <div className={styles.setThumbs} aria-hidden>
                 {set.variants.length > 0
                   ? set.variants.map((v) => (
-                      <div key={v.id}>
+                      <div key={v.id} className={styles.setThumb}>
                         <Creative text={v.creative.text} style={v.creative.style} image={v.imageUrl} ratio="square" />
+                        {set.clip && (
+                          <span className={styles.videoBadge}>
+                            <Play size={11} aria-hidden />
+                            Video
+                          </span>
+                        )}
                       </div>
                     ))
                   : [0, 1, 2].map((i) => (

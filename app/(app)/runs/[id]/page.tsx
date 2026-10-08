@@ -8,13 +8,15 @@ import { LiveRefresh } from '@/components/ui/LiveRefresh';
 import { PlatformIcons } from '@/components/ui/PlatformIcon';
 import { SourceIcon } from '@/components/ui/SourceIcon';
 import { StatusPill } from '@/components/ui/StatusPill';
+import { ClipPreview } from '@/components/video/ClipPreview';
 import { cx } from '@/lib/cx';
-import { getRun, usingSampleData } from '@/lib/data';
+import { getClipUrl, getRun, usingSampleData } from '@/lib/data';
 import { formatDate, formatTime } from '@/lib/format';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
 import type { Run, StageKey } from '@/lib/types';
+import { length } from '@/lib/video/edit';
 import styles from '@/components/runs/runs.module.css';
 
 type Props = { params: Promise<{ id: string }> };
@@ -38,8 +40,30 @@ function outputLink(key: StageKey, run: Run): { href: string; label: string } | 
   return null;
 }
 
-function SourceBlock({ run }: { run: Run }) {
+function SourceBlock({ run, clipUrl }: { run: Run; clipUrl: string | null }) {
   const { source } = run;
+  if ('clip' in source) {
+    const { clip } = source;
+    return (
+      <>
+        {clipUrl ? (
+          <ClipPreview url={clipUrl} name={clip.name} />
+        ) : (
+          <p className={cx(styles.pageRead, styles.pageReadFailed)}>
+            <TriangleAlert size={15} aria-hidden />
+            <span>{usingSampleData() ? 'Sample data keeps no uploads, so this clip can’t be played here.' : 'The clip can’t be played right now. Reload to try again.'}</span>
+          </p>
+        )}
+        <p className="muted small">
+          {clip.name} · {length(clip.duration)}
+          {clip.width > 0 && ` · ${clip.width}×${clip.height}`}
+          {clip.size > 0 && ` · ${(clip.size / 1024 / 1024).toFixed(1)} MB`}
+        </p>
+        <h3 className={styles.notesTitle}>What’s said in it</h3>
+        <blockquote className={styles.excerpt}>{source.notes}</blockquote>
+      </>
+    );
+  }
   if (source.kind === 'competitor' && source.input === 'upload') {
     return (
       <ul className={styles.fileList}>
@@ -83,6 +107,7 @@ export default async function RunPage({ params }: Props) {
   const run = await getRun((await params).id);
   if (!run) notFound();
   const kind = sourceKind(run.source);
+  const clipUrl = 'clip' in run.source ? await getClipUrl(run.source.clip.path) : null;
 
   return (
     <div className="page">
@@ -136,7 +161,7 @@ export default async function RunPage({ params }: Props) {
             <p className="muted small">What this run started from</p>
           </div>
         </div>
-        <SourceBlock run={run} />
+        <SourceBlock run={run} clipUrl={clipUrl} />
       </section>
 
       <section className="section" aria-labelledby="agents">
@@ -159,7 +184,7 @@ export default async function RunPage({ params }: Props) {
                     ? 'Skipped: a custom run has no competitor to track.'
                     : stage.status === 'failed'
                       ? stage.error
-                      : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : WAITING[key]))}
+                      : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && run.source.kind === 'custom' ? 'Waiting to start.' : WAITING[key]))}
                 </p>
                 {link && (
                   <Link href={link.href} className={cx('link', styles.stageLink)}>

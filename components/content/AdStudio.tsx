@@ -1,21 +1,31 @@
 'use client';
 
-import { ArrowLeft, Check, Copy, MousePointerClick, Pencil, RotateCcw, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, Check, Clapperboard, Copy, MousePointerClick, Pencil, RotateCcw, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { approveVariantAction, saveVariantAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
-import { describeWarning, guardrailWarnings } from '@/lib/guardrails';
+import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import { PLATFORM_LABEL } from '@/lib/platforms';
-import type { AdSet, Platform, PlatformCopy, Strategy, Variant } from '@/lib/types';
+import type { AdSet, Clip, Platform, PlatformCopy, Strategy, Variant } from '@/lib/types';
+import { defaultEdit } from '@/lib/video/edit';
+import type { VideoEdit } from '@/lib/video/edit';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { StatusPill } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
+import { VideoEditor } from '../video/VideoEditor';
+import type { SavedVideo } from '../video/VideoEditor';
 import { PREVIEW } from './Previews';
 import type { AdBrand } from './Previews';
 import styles from './content.module.css';
 
 const sameWords = (a: Variant, b: Variant | undefined) => !!b && a.creative.text === b.creative.text && JSON.stringify(a.copy) === JSON.stringify(b.copy);
+
+/** The variant with its video edit replaced, or taken away for the whole clip. */
+function withVideo(v: Variant, edit: VideoEdit | null): Variant {
+  const { videoEdit: _, ...rest } = v;
+  return edit ? { ...rest, videoEdit: edit } : rest;
+}
 
 function asText(copy: PlatformCopy): string {
   const lines = [copy.text, '', copy.headline];
@@ -29,9 +39,23 @@ function asText(copy: PlatformCopy): string {
  * one highlights it and makes it editable in place; the others stay as they
  * are, for comparison. Edits are saved when the variant is left (Done, Escape,
  * or picking another) and before it is approved. Guardrail flags are worked
- * out from the words on screen as they change.
+ * out from the words on screen as they change. When the run started from a
+ * clip, each variant is a video made from it, edited in the video editor.
  */
-export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; strategy: Strategy | null; platforms: Platform[]; brand: AdBrand }) {
+export function AdStudio({
+  adSet,
+  strategy,
+  platforms,
+  brand,
+  clip,
+}: {
+  adSet: AdSet;
+  strategy: Strategy | null;
+  platforms: Platform[];
+  brand: AdBrand;
+  /** The run's clip and a link to play it from (null when it can't be played here). */
+  clip?: { clip: Clip; url: string | null };
+}) {
   const toast = useToast();
   const [platform, setPlatform] = useState<Platform>(platforms[0] ?? 'meta');
   const [variants, setVariants] = useState(adSet.variants);
@@ -39,7 +63,21 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
   const [saved, setSaved] = useState(() => new Map(adSet.variants.map((v) => [v.id, v])));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'approving' | null>(null);
+  const [videoOf, setVideoOf] = useState<string | null>(null);
   const selected = variants.find((v) => v.id === selectedId);
+  const editingVideo = variants.find((v) => v.id === videoOf);
+  // One object for every variant with no edit, so previews don't redraw for nothing.
+  const wholeClip = useMemo(() => (clip ? defaultEdit(clip.clip.duration) : null), [clip]);
+  const frameBrand = useMemo(() => ({ name: brand.name, website: brand.domain }), [brand.name, brand.domain]);
+
+  function videoSaved(id: string, saved: SavedVideo) {
+    const apply = (v: Variant): Variant => ({ ...withVideo(v, saved.videoEdit), creative: { ...v.creative, text: saved.creativeText }, ...(saved.warnings ? { warnings: saved.warnings } : {}) });
+    update(id, apply);
+    setSaved((map) => {
+      const was = map.get(id);
+      return was ? new Map(map).set(id, apply(was)) : map;
+    });
+  }
   const isDirty = (v: Variant) => !sameWords(v, saved.get(v.id));
   const anyDirty = variants.some(isDirty);
 
@@ -86,9 +124,9 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
     toast(`Variant ${v.label} approved`);
   }
 
-  // Escape leaves a field first, then the variant (saving it).
+  // Escape leaves a field first, then the variant (saving it). While the video editor is open, Escape is its own.
   useEffect(() => {
-    if (!selectedId) return;
+    if (!selectedId || videoOf) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const active = document.activeElement;
@@ -188,6 +226,20 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
                 <Copy size={15} aria-hidden />
                 Copy
               </button>
+              {clip && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    // The editor saves the words too, so what is on screen is saved first.
+                    if (await persist(selected)) setVideoOf(selected.id);
+                  }}
+                >
+                  <Clapperboard size={15} aria-hidden />
+                  Edit video
+                </button>
+              )}
               <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => void leave()}>
                 Done
               </button>
@@ -210,7 +262,7 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
           const isSelected = v.id === selectedId;
           const Preview = PREVIEW[platform];
           const copy = v.copy[platform];
-          const flags = guardrailWarnings(v.creative.text, v.copy, platforms);
+          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms), ...videoWarnings(v.videoEdit)];
           return (
             <section key={v.id} className={cx(styles.variant, isSelected && styles.variantSelected)} aria-label={`Variant ${v.label}: ${v.angle}`}>
               <div className={styles.variantHead}>
@@ -245,6 +297,7 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
                       return current ? { ...x, copy: { ...x.copy, [platform]: { ...current, [field]: value } } } : x;
                     })}
                     onCreative={(text) => update(v.id, (x) => ({ ...x, creative: { ...x.creative, text } }))}
+                    video={clip && wholeClip ? { clip: clip.clip, url: clip.url, edit: v.videoEdit ?? wholeClip, brand: frameBrand, label: `Variant ${v.label}` } : undefined}
                   />
                 ) : (
                   <p className={cx('muted small', styles.noCopy)}>No {PLATFORM_LABEL[platform]} copy in this variant.</p>
@@ -262,6 +315,19 @@ export function AdStudio({ adSet, strategy, platforms, brand }: { adSet: AdSet; 
           );
         })}
       </div>
+
+      {editingVideo && clip && (
+        <VideoEditor
+          variant={editingVideo}
+          clip={clip.clip}
+          url={clip.url}
+          brand={frameBrand}
+          setTitle={adSet.title}
+          platforms={platforms}
+          onClose={() => setVideoOf(null)}
+          onSaved={(saved) => videoSaved(editingVideo.id, saved)}
+        />
+      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { supabaseConfig } from './supabase/config';
 // without them it serves the sample data, so the dashboard runs with no setup.
 // Both sources return the same shapes (lib/types.ts).
 
-export type { RunWithStatus, Saved, VariantEdit } from './data/source';
+export type { ClipExtension, RunWithStatus, Saved, VariantEdit } from './data/source';
 
 /** True when Supabase is not configured and pages show the sample data. */
 export const usingSampleData = (): boolean => supabaseConfig() === null;
@@ -37,3 +37,7 @@ export const createRun: DataSource['createRun'] = (input, page) => source().crea
 export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().saveVariant(id, edit);
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);
+export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source().saveVideoEdit(id, edit);
+export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
+export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
+export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);

@@ -5,6 +5,7 @@
 import { STAGE_INFO } from '../pipeline';
 import type { NewRunInput } from '../run-input';
 import type { AdSet, Agent, BrandProfile, Competitor, Notice, PageRead, PageSummary, Platform, PlatformCopy, Run, RunStatus, SearchItem, Strategy, User } from '../types';
+import type { VideoEdit } from '../video/edit';
 
 export type RunWithStatus = Run & { status: RunStatus };
 
@@ -16,6 +17,10 @@ export interface VariantEdit {
   creativeText: string;
   copy: Partial<Record<Platform, PlatformCopy>>;
 }
+
+/** The kinds of file Storage keeps clips as (bucket run-media). */
+export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
+export type ClipExtension = keyof typeof CLIP_TYPES;
 
 export interface DataSource {
   getNow(): Promise<string>;
@@ -43,6 +48,19 @@ export interface DataSource {
   saveVariant(variantId: string, edit: VariantEdit): Promise<Saved<{ warnings: string[] }>>;
   approveVariant(variantId: string): Promise<Saved>;
   saveBrandProfile(profile: BrandProfile): Promise<Saved>;
+
+  /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
+  saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
+  /** A link the browser can play a clip from, for a while. Null when there is none to give. */
+  getClipUrl(path: string): Promise<string | null>;
+  /**
+   * Where the browser uploads a clip: a fresh path in the teammate's own
+   * folder and a link signed for it. The sample data stores nothing, so its
+   * link is null.
+   */
+  createClipUpload(extension: ClipExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes an uploaded clip that no run uses: one cut again or taken away before the run started. */
+  deleteClipUpload(path: string): Promise<Saved>;
 }
 
 /** The app's own pages, for search. */

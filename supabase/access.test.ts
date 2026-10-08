@@ -7,6 +7,7 @@ import type { TestDatabase } from '../test/supabase';
 
 let t: TestDatabase;
 let member = '';
+let teammate = '';
 let outsider = '';
 
 const EXCERPT = 'Plain words about EB-5 for families planning a move to the United States.';
@@ -50,6 +51,7 @@ async function finishedRun(args: { mediaPath?: string } = {}): Promise<{ runId: 
 beforeAll(async () => {
   t = await testDatabase();
   member = await t.addUser('member@qgr.example', 'owner');
+  teammate = await t.addUser('teammate@qgr.example', 'member');
   outsider = await t.addUser('stranger@elsewhere.example');
 }, 60_000);
 
@@ -183,14 +185,27 @@ describe('clips and storage', () => {
     });
   });
 
-  it('starts a clip run only from the member’s own, finished upload, with notes', async () => {
-    const run = (path: string, notes = EXCERPT) =>
-      t.asUser(member, () => t.value<string>(`select public.create_run('custom','video','Clip',array['meta'],'consultations', p_excerpt => $1, p_media_path => $2, p_media => $3::jsonb)`, [notes, path, media]));
-    const runId = await run(mine());
+  it('starts a clip run from a finished upload, with notes, for anyone on the team', async () => {
+    const run = (who: string, path: string, notes = EXCERPT) =>
+      t.asUser(who, () => t.value<string>(`select public.create_run('custom','video','Clip',array['meta'],'consultations', p_excerpt => $1, p_media_path => $2, p_media => $3::jsonb)`, [notes, path, media]));
+    const runId = await run(member, mine());
     expect(await t.value<number>(`select count(*)::int from public.run_events where run_id = $1 and text = 'Clip uploaded: 0:43'`, [runId])).toBe(1);
-    await expect(run(`uploads/${outsider}/0b6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d2e.mp4`)).rejects.toThrow(/someone else/);
-    await expect(run(`uploads/${member}/11111111-2222-4333-8444-555555555555.mp4`)).rejects.toThrow(/not finished uploading/);
-    await expect(run(mine(), 'too short')).rejects.toThrow(/runs_source_present/);
+    // A teammate retrying the run uses the same clip.
+    await expect(run(teammate, mine())).resolves.toMatch(/^[0-9a-f-]{36}$/);
+    await expect(run(member, `uploads/${member}/11111111-2222-4333-8444-555555555555.mp4`)).rejects.toThrow(/not finished uploading/);
+    await expect(run(member, mine(), 'too short')).rejects.toThrow(/runs_source_present/);
+    await expect(run(outsider, mine())).rejects.toThrow(/Only the QGR team/);
+  });
+
+  it('lets the uploader remove a clip no run uses, and nobody else', async () => {
+    const unused = `uploads/${member}/2c9d8e7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f.mp4`;
+    const remove = (who: string, path: string) => t.asUser(who, () => t.value<number>(`with gone as (delete from storage.objects where bucket_id = 'run-media' and name = $1 returning 1) select count(*)::int from gone`, [path]));
+    await t.asUser(member, () => t.db.query(`insert into storage.objects (bucket_id, name) values ('run-media', $1)`, [unused]));
+    expect(await remove(teammate, unused)).toBe(0);
+    expect(await remove(outsider, unused)).toBe(0);
+    expect(await remove(member, unused)).toBe(1);
+    // mine() is the clip of the runs above.
+    expect(await remove(member, mine())).toBe(0);
   });
 
   it('saves a variant’s video edit inside the clip, and clears it', async () => {

@@ -3,7 +3,8 @@
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
 
-import type { AdSet, Agent, Competitor, Notice, Run, Strategy, User } from './types';
+import type { AdSet, Agent, Clip, Competitor, Notice, Run, Strategy, User } from './types';
+import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
 export const NOW = '2026-10-07T09:30:00Z';
@@ -147,7 +148,60 @@ const GUARDRAILS = [
   'End on the free consultation',
 ];
 
+/**
+ * The sample run's clip: a 15-second branded explainer in public/sample, marked
+ * "Sample clip" in the picture. Its path has the shape of a real upload, so a
+ * retry passes the same checks; lib/data/sample.ts serves it from public.
+ */
+export const SAMPLE_CLIP: Clip = {
+  path: 'uploads/00000000-0000-4000-8000-000000000000/7d4b6a2e-0f1c-4c8e-9b3a-2e5f8c1d4a60.mp4',
+  name: 'eb5-explainer.mp4',
+  duration: 15,
+  width: 1280,
+  height: 720,
+  size: 671397,
+};
+export const SAMPLE_CLIP_URL = '/sample/eb5-explainer.mp4';
+
+const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
+  keep: [{ start: 0, end: SAMPLE_CLIP.duration }],
+  aspect: 'original',
+  fit: 'fill',
+  focus: { x: 0.5, y: 0.5 },
+  text: { show: true, place: 'top', until: null },
+  captions: [],
+  logo: 'top-left',
+  volume: 1,
+  endCard: null,
+  cover: 0,
+  ...edit,
+});
+
 export const strategies: Strategy[] = [
+  {
+    id: 's-clip',
+    title: 'EB-5, explained',
+    createdAt: '2026-10-07T07:20:00Z',
+    status: 'draft',
+    runId: 'r-1043',
+    competitorIds: [],
+    sourceLabel: 'Uploaded clip · eb5-explainer',
+    goal: 'consultations',
+    audiences: ['H-1B professionals weighing permanent residency', 'Families comparing EB-5 advisors'],
+    positioning: 'The advisor that explains each step plainly, with estimates rather than promises.',
+    angles: [
+      { id: 'sa-13', name: 'One step at a time', why: 'The clip walks through the process in four plain steps.', hook: 'EB-5, one plain step at a time.' },
+      { id: 'sa-14', name: 'Diligence first', why: 'The clip’s second step is checking the project, a gap in the market.', hook: 'Pick the project. Then check it.' },
+      { id: 'sa-15', name: 'Plan with estimates', why: 'The clip calls timelines estimates, which earns trust.', hook: 'Plan around estimates, not promises.' },
+    ],
+    channels: [
+      { platform: 'meta', share: 50, role: 'Reach H-1B households', format: 'Short video, 1:1 and 9:16' },
+      { platform: 'linkedin', share: 30, role: 'Reach professionals at work', format: 'Video, 16:9' },
+      { platform: 'x', share: 20, role: 'Join the H-1B conversation', format: 'Short video' },
+    ],
+    guardrails: GUARDRAILS,
+    adSetId: 'a-clip',
+  },
   {
     id: 's-q4',
     title: 'Q4 consultation push',
@@ -279,6 +333,111 @@ export const strategies: Strategy[] = [
 ];
 
 export const adSets: AdSet[] = [
+  {
+    id: 'a-clip',
+    title: 'EB-5, explained',
+    createdAt: '2026-10-07T07:41:00Z',
+    runId: 'r-1043',
+    strategyId: 's-clip',
+    status: 'review',
+    clip: SAMPLE_CLIP,
+    variants: [
+      {
+        id: 'v-clip-a',
+        label: 'A',
+        angle: 'One step at a time',
+        creative: { text: 'EB-5, one plain step at a time.', style: 'arcs' },
+        videoEdit: clipEdit({ aspect: '1:1', fit: 'fit', cover: 1.8 }),
+        copy: {
+          meta: {
+            text: 'EB-5 has four plain steps. We walk you through each one, with independent due diligence on every project.',
+            headline: 'EB-5, step by step',
+            description: 'Free consultation',
+            cta: 'Book now',
+          },
+          linkedin: {
+            text: 'Considering EB-5? We explain each step plainly, from choosing a project to filing, with due diligence at every stage.',
+            headline: 'EB-5, explained step by step',
+            cta: 'Learn more',
+          },
+          x: {
+            text: 'EB-5 in four plain steps, with due diligence on every project. Watch, then book a free consultation.',
+            headline: 'EB-5, step by step',
+          },
+        },
+      },
+      {
+        id: 'v-clip-b',
+        label: 'B',
+        angle: 'Diligence first',
+        creative: { text: 'Pick the project. Then check it.', style: 'split' },
+        videoEdit: clipEdit({
+          aspect: '9:16',
+          fit: 'fit',
+          captions: [
+            { start: 0.2, end: 3.4, text: 'Most families ask us the same first question.' },
+            { start: 3.9, end: 7.2, text: 'Start with the project, and ask for its diligence file.' },
+            { start: 7.7, end: 11, text: 'Processing times are estimates, so plan around them.' },
+            { start: 11.5, end: 14.8, text: 'We answer your questions in a free consultation.' },
+          ],
+          endCard: { text: 'Book your free consultation', seconds: 3 },
+          cover: 5.6,
+        }),
+        copy: {
+          meta: {
+            text: 'Before you invest, ask for the project’s due-diligence file. We review every project we recommend.',
+            headline: 'Check the project first',
+            description: 'Free consultation',
+            cta: 'Book now',
+          },
+          linkedin: {
+            text: 'The project matters more than the paperwork. See how we check every EB-5 project before we recommend it.',
+            headline: 'How we check EB-5 projects',
+            cta: 'Learn more',
+          },
+          x: {
+            text: 'Pick the project, then check it. Ask us for the due-diligence file in a free consultation.',
+            headline: 'Check the project first',
+          },
+        },
+      },
+      {
+        id: 'v-clip-c',
+        label: 'C',
+        angle: 'Plan with estimates',
+        creative: { text: 'Plan around estimates, not promises.', style: 'spotlight' },
+        videoEdit: clipEdit({
+          keep: [
+            { start: 0, end: 3.6 },
+            { start: 7.6, end: 15 },
+          ],
+          aspect: '16:9',
+          text: { show: true, place: 'bottom', until: 3.5 },
+          logo: 'top-right',
+          volume: 0.6,
+          endCard: { text: 'Questions? Book a free call', seconds: 2.5 },
+          cover: 5.3,
+        }),
+        copy: {
+          meta: {
+            text: 'EB-5 processing times are estimates, and plans should be too. We help you plan around them, plainly.',
+            headline: 'Plan around estimates',
+            description: 'Free consultation',
+            cta: 'Book now',
+          },
+          linkedin: {
+            text: 'Timelines in EB-5 are estimates. Plan your move around them with an advisor who says so plainly.',
+            headline: 'Plan around EB-5 estimates',
+            cta: 'Learn more',
+          },
+          x: {
+            text: 'EB-5 timelines are estimates, so plan around them. Questions? Book a free consultation.',
+            headline: 'Plan around estimates',
+          },
+        },
+      },
+    ],
+  },
   {
     id: 'a-q4',
     title: 'Q4 consultation push',
@@ -531,6 +690,35 @@ export const adSets: AdSet[] = [
 
 export const runs: Run[] = [
   {
+    id: 'r-1043',
+    title: 'Video · eb5-explainer',
+    source: {
+      kind: 'custom',
+      type: 'video',
+      clip: SAMPLE_CLIP,
+      notes:
+        'A 15-second explainer in four cards: the first question families ask about EB-5; pick a project, then check its diligence; file, then plan around estimated timelines; questions answered in a free consultation.',
+    },
+    platforms: ['meta', 'linkedin', 'x'],
+    goal: 'consultations',
+    createdAt: '2026-10-07T07:05:00Z',
+    summary: 'Three video variants made from the explainer clip.',
+    stages: {
+      tracker: { status: 'skipped' },
+      strategist: { status: 'done', summary: 'Built a strategy with 3 angles from the clip.' },
+      content: { status: 'done', summary: 'Wrote 3 video variants for Meta, LinkedIn and X.' },
+    },
+    output: { strategyId: 's-clip', adSetId: 'a-clip' },
+    counts: { angles: 3, variants: 3 },
+    activity: [
+      { at: '2026-10-07T07:05:00Z', text: 'Run started from a video' },
+      { at: '2026-10-07T07:05:00Z', text: 'Competitor Tracker skipped: custom runs start at the strategy' },
+      { at: '2026-10-07T07:05:00Z', text: 'Clip uploaded: 0:15' },
+      { at: '2026-10-07T07:20:00Z', text: 'Built a strategy with 3 angles' },
+      { at: '2026-10-07T07:41:00Z', text: 'Wrote 3 ad variants for Meta, LinkedIn and X' },
+    ],
+  },
+  {
     id: 'r-1040',
     title: 'Atlas Residency Group',
     source: { kind: 'competitor', input: 'ad_link', url: 'https://adlibrary.example/atlas-residency' },
@@ -684,7 +872,7 @@ export const agents: Agent[] = [
     switchable: true,
     autoLabel: 'Runs after every scan',
     manualLabel: 'Waits for you',
-    stat: '4 strategies',
+    stat: '5 strategies',
     href: '/strategy',
     action: { label: 'Custom run', href: '/runs/new?type=custom' },
   },
@@ -694,7 +882,7 @@ export const agents: Agent[] = [
     switchable: true,
     autoLabel: 'Writes ads from every strategy',
     manualLabel: 'Waits for your go-ahead',
-    stat: '1 set to review',
+    stat: '2 sets to review',
     href: '/content',
     action: { label: 'Review', href: '/content/a-q4' },
   },
@@ -702,6 +890,7 @@ export const agents: Agent[] = [
 
 export const notices: Notice[] = [
   { id: 'n-2', text: 'Atlas Residency Group scanned: 4 winning hooks', at: '2026-10-07T09:03:00Z', href: '/competitors/c-atlas', tone: 'done' },
+  { id: 'n-4', text: 'Video ads ready for review: EB-5, explained', at: '2026-10-07T07:41:00Z', href: '/content/a-clip', tone: 'review' },
   { id: 'n-1', text: 'Ads ready for review: Q4 consultation push', at: '2026-10-06T09:58:00Z', href: '/content/a-q4', tone: 'review' },
   { id: 'n-3', text: 'Upload failed: Meridian EB-5 Advisors', at: '2026-09-29T10:24:00Z', href: '/runs/r-1038', tone: 'failed' },
 ];

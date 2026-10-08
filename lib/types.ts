@@ -2,6 +2,8 @@
 // Supabase source (`data/live.ts`) both produce these shapes, so pages never
 // know which one they are reading.
 
+import type { VideoEdit } from './video/edit';
+
 export const PLATFORMS = ['meta', 'linkedin', 'x'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 
@@ -17,14 +19,32 @@ export const CUSTOM_SOURCES = ['podcast', 'blog', 'video', 'text'] as const;
 export type CustomSourceType = (typeof CUSTOM_SOURCES)[number];
 
 /**
+ * A video a run starts from, cut in the browser and uploaded to Storage
+ * (bucket run-media) before the run exists. `path` is where it is kept.
+ */
+export interface Clip {
+  path: string;
+  /** The file's name, as the person picked it. */
+  name: string;
+  /** Seconds. */
+  duration: number;
+  width: number;
+  height: number;
+  /** Bytes. */
+  size: number;
+}
+
+/**
  * What a run starts from. A competitor run starts at the Competitor Tracker;
  * a custom run (podcast, blog, video, text) has no competitor to track and
- * starts at the Ad Strategist.
+ * starts at the Ad Strategist. A video is a link, or a clip with the team's
+ * notes on what is said in it: the agents cannot watch it.
  */
 export type RunSource =
   | { kind: 'competitor'; input: 'website' | 'ad_link'; url: string }
   | { kind: 'competitor'; input: 'upload'; name: string; files: string[] }
   | { kind: 'custom'; type: Exclude<CustomSourceType, 'text'>; url: string }
+  | { kind: 'custom'; type: 'video'; clip: Clip; notes: string }
   | { kind: 'custom'; type: 'text'; excerpt: string };
 
 /**
@@ -180,6 +200,8 @@ export interface Variant {
   warnings?: string[];
   /** The generated image, once an image model is connected. Until then the branded design is drawn. */
   imageUrl?: string;
+  /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
+  videoEdit?: VideoEdit;
 }
 
 export interface AdSet {
@@ -190,6 +212,8 @@ export interface AdSet {
   strategyId: string;
   status: 'generating' | 'review' | 'approved';
   variants: Variant[];
+  /** The clip the run started from: each variant is a video made from it. */
+  clip?: Clip;
 }
 
 export interface Agent {

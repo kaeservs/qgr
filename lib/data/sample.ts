@@ -1,7 +1,8 @@
 // The sample data, behind the same interface as Supabase. Used when Supabase is
 // not configured, so the dashboard runs with no setup. It keeps no changes:
 // edits and approvals report `sample: true`, and new runs last until the
-// server restarts.
+// server restarts. Nothing is uploaded: a clip is cut in the browser, then
+// left there, and only the sample run's own clip can be played.
 
 import { hostOf } from '../format';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
@@ -11,6 +12,7 @@ import { PLATFORM_LABEL } from '../platforms';
 import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { BrandProfile, Run } from '../types';
+import { length } from '../video/edit';
 import { searchIndex, summarizePage } from './source';
 import type { DataSource, RunWithStatus } from './source';
 
@@ -41,6 +43,9 @@ function startedFrom(input: NewRunInput): string {
   }
   return `Run started from ${{ podcast: 'a podcast episode', blog: 'a blog post', video: 'a video', text: 'pasted text' }[source.type]}`;
 }
+
+/** The sample user's uploads folder: the shape of a real one, holding nothing. */
+const SAMPLE_UPLOADS = 'uploads/00000000-0000-4000-8000-000000000000';
 
 export const sampleData: DataSource = {
   getNow: async () => mock.NOW,
@@ -82,6 +87,7 @@ export const sampleData: DataSource = {
         { at: now, text: startedFrom(input) },
         ...(input.source.kind === 'custom' ? [{ at: now, text: 'Competitor Tracker skipped: custom runs start at the strategy' }] : []),
         ...(page ? [{ at: now, text: page.ok ? `Read ${page.title ?? hostOf(page.url)}: ${page.words} words` : `Could not read ${hostOf(page.url)}: ${page.error}` }] : []),
+        ...('clip' in input.source ? [{ at: now, text: `Clip cut to ${length(input.source.clip.duration)}: sample data keeps no uploads` }] : []),
         { at: now, text: `Queued for ${platforms}` },
       ],
       ...(page ? { page: summarizePage(page) } : {}),
@@ -91,4 +97,8 @@ export const sampleData: DataSource = {
   saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy)) }, sample: true }),
   approveVariant: async () => ({ ok: true, value: null, sample: true }),
   saveBrandProfile: async () => ({ ok: true, value: null, sample: true }),
+  saveVideoEdit: async () => ({ ok: true, value: null, sample: true }),
+  getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),
+  createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
+  deleteClipUpload: async () => ({ ok: true, value: null, sample: true }),
 };

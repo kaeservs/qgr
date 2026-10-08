@@ -12,12 +12,20 @@ Quantum Global Residency.
 
 A **custom run** starts from your own podcast episode, blog post, video or
 text. It has no competitor, so it skips the tracker and starts at the strategy.
+A video can be a link, or a clip uploaded from your computer: cut it first
+(split, remove parts, trim), and only what you keep is uploaded. Every variant
+of a run from a clip is a video, which the studio's editor cuts, frames for a
+platform (1:1, 4:5, 9:16, 16:9), puts the words, captions, logo and an end card
+on, and exports to MP4, all in the browser.
 
 ## Status
 
 Built end to end: the dashboard, the Supabase database and the four n8n
-workflows. Competitor ads (Apify) and ad images (ChatGPT or Higgsfield) are
-placeholders for now.
+workflows. The app reads a run's link itself when the run starts (a
+competitor's site, or a podcast, blog or video page) and the agents work from
+what it read. Competitor ads (Apify) and ad images (ChatGPT or Higgsfield) are
+placeholders for now, and a clip has no transcript yet: the team says what is
+said in it.
 
 ## Run it
 
@@ -37,11 +45,16 @@ them to the team in the SQL editor:
 Runs start once `N8N_RUN_WEBHOOK_SECRET` is set and the same secret is in
 n8n's "QGR webhook secret" credential.
 
+The database is `supabase/migrations/`. Apply a new migration to the project
+before deploying the code that needs it.
+
 ## Where things are
 
     app/(app)/           the dashboard's pages, behind sign-in
     app/(auth)/          sign-in and no-access
-    app/api/runs/        starts a run: Supabase, then n8n
+    app/api/runs/        starts a run: reads its link, Supabase, then n8n
+    app/api/link-check/  reads a pasted link as it is typed
+    app/api/uploads/     signs a link for uploading a clip straight to Storage
     proxy.ts             sends anyone signed out to /sign-in
     components/          shell, home, runs, competitors, strategy, content, settings, ui
     lib/types.ts         the domain model every page and the backend share
@@ -49,6 +62,11 @@ n8n's "QGR webhook secret" credential.
     lib/data/            the two sources, and the mapping from rows to lib/types.ts
     lib/mock-data.ts     the sample data
     lib/pipeline.ts      the agents' order and how a run's status is derived
+    lib/page/            reads a link: safe fetching, and the page's main text
+    lib/video/           video edits, drawing a frame, making the file, uploading
+    components/video/    the cutter, the timeline, the studio's video editor
+    public/sample/       the sample data's clip
+    test/                PGlite with Supabase's roles and storage; n8n's sandbox
     app/globals.css      design tokens: every colour, radius and shadow
     supabase/migrations/ the database: tables, and the functions agents write through
     n8n/code/            each agent step's code, tested by n8n/code.test.ts

@@ -4,7 +4,7 @@
 // platform, a malformed JSON column) is dropped here rather than crashing a page.
 
 import { runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
-import { runTitle } from '../run-input';
+import { CLIP_PATH, runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
@@ -18,6 +18,7 @@ import type {
   AngleShare,
   BrandProfile,
   ChannelPlan,
+  Clip,
   Competitor,
   CreativeStyle,
   Goal,
@@ -35,6 +36,7 @@ import type {
   User,
   Variant,
 } from '../types';
+import { parseVideoEdit } from '../video/edit';
 import { initialsOf } from './source';
 import type { RunWithStatus } from './source';
 
@@ -73,6 +75,8 @@ export interface RunRow {
   page_title: string | null;
   page_words: Json | null;
   page_error: string | null;
+  media_path: string | null;
+  media: Json | null;
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -130,7 +134,9 @@ export interface AdSetRow {
     copy: Json;
     warnings: string[];
     approved_at: string | null;
+    video_edit: Json | null;
   }[];
+  runs: One<{ media_path: string | null; media: Json | null }>;
 }
 
 export type BrandRow = Database['public']['Tables']['brand_profile']['Row'];
@@ -183,12 +189,28 @@ export function copyOf(json: Json): Partial<Record<Platform, PlatformCopy>> {
 
 // ---------------------------------------------------------------- runs
 
-export function sourceOf(row: Pick<RunRow, 'kind' | 'input' | 'url' | 'competitor_name' | 'files' | 'excerpt' | 'title'>): RunSource {
+/** A run's clip from runs.media_path and runs.media; null when either is missing or malformed. */
+export function clipOf(path: string | null, media: Json | null): Clip | null {
+  if (!path || !CLIP_PATH.test(path) || !isRecord(media) || typeof media.duration !== 'number' || media.duration <= 0) return null;
+  const count = (v: Json | undefined) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+  return {
+    path,
+    name: typeof media.name === 'string' && media.name ? media.name : 'Uploaded clip',
+    duration: media.duration,
+    width: count(media.width),
+    height: count(media.height),
+    size: count(media.size),
+  };
+}
+
+export function sourceOf(row: Pick<RunRow, 'kind' | 'input' | 'url' | 'competitor_name' | 'files' | 'excerpt' | 'title' | 'media_path' | 'media'>): RunSource {
   if (row.kind === 'competitor') {
     if (row.input === 'upload') return { kind: 'competitor', input: 'upload', name: row.competitor_name ?? row.title, files: row.files ?? [] };
     return { kind: 'competitor', input: row.input === 'ad_link' ? 'ad_link' : 'website', url: row.url ?? '' };
   }
   if (row.input === 'text') return { kind: 'custom', type: 'text', excerpt: row.excerpt ?? '' };
+  const clip = row.input === 'video' ? clipOf(row.media_path, row.media) : null;
+  if (clip) return { kind: 'custom', type: 'video', clip, notes: row.excerpt ?? '' };
   const type = row.input === 'podcast' || row.input === 'video' ? row.input : 'blog';
   return { kind: 'custom', type, url: row.url ?? '' };
 }
@@ -327,24 +349,28 @@ export function toStrategy(row: StrategyRow): Strategy {
 }
 
 export function toAdSet(row: AdSetRow): AdSet {
+  const run = one(row.runs);
+  const clip = run ? clipOf(run.media_path, run.media) : null;
   const variants = [...row.ad_variants]
     .sort((a, b) => a.label.localeCompare(b.label))
-    .flatMap((v): Variant[] =>
-      v.label === 'A' || v.label === 'B' || v.label === 'C'
-        ? [
-            {
-              id: v.id,
-              label: v.label,
-              angle: v.angle,
-              creative: { text: v.creative_text, style: isOneOf(STYLES, v.creative_style) ? v.creative_style : 'arcs' },
-              copy: copyOf(v.copy),
-              ...(v.approved_at ? { approved: true } : {}),
-              warnings: v.warnings,
-              ...(v.image_url ? { imageUrl: v.image_url } : {}),
-            },
-          ]
-        : [],
-    );
+    .flatMap((v): Variant[] => {
+      if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
+      // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
+      const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      return [
+        {
+          id: v.id,
+          label: v.label,
+          angle: v.angle,
+          creative: { text: v.creative_text, style: isOneOf(STYLES, v.creative_style) ? v.creative_style : 'arcs' },
+          copy: copyOf(v.copy),
+          ...(v.approved_at ? { approved: true } : {}),
+          warnings: v.warnings,
+          ...(v.image_url ? { imageUrl: v.image_url } : {}),
+          ...(edit?.ok ? { videoEdit: edit.value } : {}),
+        },
+      ];
+    });
   return {
     id: row.id,
     title: row.title,
@@ -353,6 +379,7 @@ export function toAdSet(row: AdSetRow): AdSet {
     strategyId: row.strategy_id,
     status: variants.some((v) => v.approved) ? 'approved' : 'review',
     variants,
+    ...(clip ? { clip } : {}),
   };
 }
 
@@ -427,5 +454,9 @@ export function toCreateRunArgs(input: NewRunInput, page: PageRead | null = null
     return { ...base, p_kind: 'competitor', p_input: source.input, p_url: source.url };
   }
   if (source.type === 'text') return { ...base, p_kind: 'custom', p_input: 'text', p_excerpt: source.excerpt };
+  if ('clip' in source) {
+    const { path, name, duration, width, height, size } = source.clip;
+    return { ...base, p_kind: 'custom', p_input: 'video', p_excerpt: source.notes, p_media_path: path, p_media: { name, duration, width, height, size } };
+  }
   return { ...base, p_kind: 'custom', p_input: source.type, p_url: source.url };
 }

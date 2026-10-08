@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdStudio } from '@/components/content/AdStudio';
-import { getAdSet, getBrandProfile, getRun, getStrategy } from '@/lib/data';
+import { getAdSet, getBrandProfile, getClipUrl, getRun, getStrategy } from '@/lib/data';
 import { PLATFORMS } from '@/lib/types';
 import styles from '@/components/content/content.module.css';
 
@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AdSetPage({ params }: Props) {
   const set = await getAdSet((await params).id);
   if (!set) notFound();
-  const [run, strategy, brand] = await Promise.all([getRun(set.runId), getStrategy(set.strategyId), getBrandProfile()]);
+  const [run, strategy, brand, clipUrl] = await Promise.all([getRun(set.runId), getStrategy(set.strategyId), getBrandProfile(), set.clip ? getClipUrl(set.clip.path) : null]);
 
   if (set.status === 'generating' || set.variants.length === 0) {
     return (
@@ -43,5 +43,13 @@ export default async function AdSetPage({ params }: Props) {
 
   // The run's platforms decide which previews show; failing that, whatever copy the set holds.
   const platforms = run?.platforms ?? PLATFORMS.filter((p) => set.variants.some((v) => v.copy[p]));
-  return <AdStudio adSet={set} strategy={strategy} platforms={platforms} brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }} />;
+  return (
+    <AdStudio
+      adSet={set}
+      strategy={strategy}
+      platforms={platforms}
+      brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }}
+      {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
+    />
+  );
 }

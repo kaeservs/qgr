@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyPlatforms, describeWarning, guardrailWarnings } from './guardrails';
+import { copyPlatforms, describeWarning, guardrailWarnings, videoWarnings } from './guardrails';
 
 const copy = (text: string) => ({ meta: { text, headline: 'H', description: 'D', cta: 'Book now' }, x: { text, headline: 'H' } });
 
@@ -39,5 +39,15 @@ describe('describeWarning', () => {
     expect(describeWarning('linkedin headline promises a timeline')).toBe('LinkedIn headline promises a timeline');
     expect(describeWarning('image text says "risk-free"')).toBe('Image text says “risk-free”');
     expect(describeWarning('x text is 290 characters; X allows 280')).toBe('X text is 290 characters; X allows 280');
+  });
+});
+
+describe('videoWarnings', () => {
+  it('flags the words a video adds: its captions and its end card', () => {
+    const edit = { captions: [{ text: 'Plain answers.' }, { text: 'Approval guaranteed in 6 months.' }], endCard: { text: 'Risk-free consultation' } };
+    expect(videoWarnings(edit)).toEqual(['a caption says "guarantee"', 'end card says "risk-free"', 'a caption promises a timeline']);
+    expect(describeWarning('a caption says "guarantee"')).toBe('A caption says “guarantee”');
+    expect(videoWarnings({ captions: [], endCard: null })).toEqual([]);
+    expect(videoWarnings(undefined)).toEqual([]);
   });
 });

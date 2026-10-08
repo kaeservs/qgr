@@ -1,0 +1,751 @@
+/* The cutter, the studio's video editor and the video in an ad preview. */
+
+/* ---------- Dialog ---------- */
+
+.dialog {
+  width: min(1120px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.dialog::backdrop {
+  background: rgb(14 15 44 / 0.58);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dialogHead h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.dialogHead p {
+  margin: 2px 0 0;
+}
+
+.dialogHead > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.dialogBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* The body scrolls; nothing in it is squeezed to fit. A grid row would shrink the stage, which clips its overflow. */
+.dialogBody > * {
+  flex-shrink: 0;
+}
+
+.dialogFoot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.dialogFoot .spacer {
+  flex: 1;
+}
+
+.footNote {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- The picture ---------- */
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: var(--ink, #0e0f2c);
+  border-radius: var(--radius);
+  overflow: hidden;
+  min-height: 200px;
+}
+
+.stage video,
+.stage canvas {
+  display: block;
+  max-width: 100%;
+  max-height: min(52vh, 560px);
+  object-fit: contain;
+}
+
+.stageMessage {
+  padding: 32px;
+  color: #fff;
+  text-align: center;
+  font-size: 14px;
+}
+
+/* ---------- Controls ---------- */
+
+.controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.playButton {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--indigo);
+  color: #fff;
+  flex: none;
+}
+
+.playButton:hover {
+  background: var(--indigo-strong);
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  font-size: 14px;
+  color: var(--text-2);
+  margin-right: auto;
+}
+
+.time strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---------- Timeline ---------- */
+
+.timeline {
+  display: grid;
+  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.track {
+  position: relative;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: var(--indigo-100);
+  touch-action: none;
+  cursor: pointer;
+}
+
+.film {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.film img {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(135deg, rgb(14 15 44 / 0.72) 0 6px, rgb(14 15 44 / 0.58) 6px 12px);
+  pointer-events: none;
+}
+
+.gap span {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.part {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 2px solid rgb(255 255 255 / 0.9);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgb(28 27 157 / 0.35);
+  pointer-events: none;
+}
+
+.partOn {
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    0 0 0 1px rgb(14 15 44 / 0.25);
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  margin-left: -11px;
+  display: grid;
+  place-items: center;
+  cursor: ew-resize;
+  z-index: 2;
+  touch-action: none;
+}
+
+.handle::before {
+  content: '';
+  width: 8px;
+  height: 34px;
+  border-radius: 4px;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--indigo-ink);
+}
+
+.handle:focus-visible {
+  outline: none;
+}
+
+.handle:focus-visible::before {
+  box-shadow:
+    0 0 0 2px var(--indigo-ink),
+    0 0 0 5px rgb(239 183 74 / 0.6);
+}
+
+.playhead {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--indigo-ink);
+  z-index: 3;
+  pointer-events: none;
+}
+
+.playhead::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--indigo);
+  border: 2px solid #fff;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.playhead:focus-visible {
+  outline: none;
+}
+
+.playhead:focus-visible::before {
+  box-shadow: 0 0 0 3px rgb(28 27 157 / 0.4);
+}
+
+.ruler {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.captionLane {
+  position: relative;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px dashed var(--line-strong);
+}
+
+.captionMark {
+  position: absolute;
+  top: 2px;
+  height: 18px;
+  min-width: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid var(--indigo-300);
+  background: var(--indigo-100);
+  color: var(--indigo-ink);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.captionMarkOn {
+  background: var(--gold-100);
+  border-color: var(--gold-strong);
+}
+
+/* A caption where the clip is cut: kept, but it won't show. */
+.captionMarkCut {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.linkButton {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--indigo);
+  font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- The clip field on the start card ---------- */
+
+.clipDrop {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 120px;
+  padding: 20px;
+  border: 1.5px dashed var(--indigo-200);
+  border-radius: var(--radius);
+  background: var(--indigo-50);
+  color: var(--text-2);
+  text-align: center;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.clipDrop:hover,
+.clipDropOn {
+  border-color: var(--indigo);
+  background: var(--indigo-100);
+}
+
+.clipChip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.clipThumb {
+  width: 112px;
+  height: 63px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: var(--indigo-100);
+  flex: none;
+}
+
+.clipInfo {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.clipName {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clipStatus {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.clipStatusOk {
+  color: var(--ok);
+}
+
+.clipStatusBad {
+  color: var(--fail);
+}
+
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--indigo-100);
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--indigo);
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.clipActions {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.notes {
+  display: grid;
+  gap: 6px;
+}
+
+.notes .textarea {
+  min-height: 92px;
+}
+
+/* ---------- The studio's editor ---------- */
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.editorMain {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.panelTabs {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-radius: var(--radius);
+  background: var(--indigo-50);
+}
+
+.panelTab {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 34px;
+  padding: 0 4px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.panelTab:hover {
+  color: var(--indigo);
+}
+
+.panelTabOn {
+  background: var(--surface);
+  color: var(--indigo);
+  box-shadow: var(--shadow-sm);
+}
+
+.panelBody {
+  display: grid;
+  gap: 14px;
+}
+
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.choice {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 64px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.choice small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.choice:hover {
+  border-color: var(--indigo-200);
+  background: var(--indigo-50);
+}
+
+.choiceOn {
+  border-color: var(--indigo);
+  background: var(--indigo-50);
+  color: var(--indigo);
+  box-shadow: inset 0 0 0 1px var(--indigo);
+}
+
+.focusPad {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  background: var(--indigo-100);
+  border: 1px solid var(--line-strong);
+  cursor: crosshair;
+  touch-action: none;
+  overflow: hidden;
+}
+
+.focusDot {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 999px;
+  background: var(--gold);
+  border: 2px solid var(--indigo-ink);
+  pointer-events: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.range {
+  flex: 1;
+  min-width: 140px;
+  accent-color: var(--indigo);
+}
+
+.captionList {
+  display: grid;
+  gap: 8px;
+  max-height: 300px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.captionItem {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.captionItemOn {
+  border-color: var(--gold-strong);
+  background: var(--gold-50);
+}
+
+.captionTimes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.captionTimes input {
+  width: 74px;
+  height: 30px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.flags {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--review-bg);
+  color: var(--review);
+  font-size: 13px;
+}
+
+.flags ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+/* ---------- The video in an ad preview ---------- */
+
+.creative {
+  position: relative;
+  display: block;
+  width: 100%;
+  background: var(--indigo-deep, #15147c);
+  overflow: hidden;
+}
+
+.creative canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Plays the clip for the canvas. Hidden by size, not display: a video that is not displayed may not decode. */
+.hiddenVideo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.creativeNote {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 40px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgb(14 15 44 / 0.66);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
+.creativePlay,
+.creativePause {
+  position: absolute;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(14 15 44 / 0.62);
+  color: #fff;
+  box-shadow: 0 6px 18px rgb(14 15 44 / 0.35);
+  transition: transform 0.15s ease;
+}
+
+.creativePlay {
+  top: calc(50% - 27px);
+  left: calc(50% - 27px);
+  width: 54px;
+  height: 54px;
+}
+
+.creativePause {
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+}
+
+.creativePlay:hover,
+.creativePause:hover {
+  transform: scale(1.06);
+}
+
+.creativePlay:focus-visible,
+.creativePause:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.creativeBadge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(14 15 44 / 0.6);
+  color: #fff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ---------- A run's clip ---------- */
+
+.runClip {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  border-radius: var(--radius);
+  background: #0e0f2c;
+}

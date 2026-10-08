@@ -113,9 +113,10 @@ begin
 end
 $$;
 
--- Starts a run for the signed-in teammate. An uploaded clip must be theirs,
--- in their own folder, and finished uploading. The app's server then hands the
--- run's id to n8n; if n8n cannot be reached it calls report_start_failure.
+-- Starts a run for the signed-in teammate. An uploaded clip must have finished
+-- uploading; it may be a teammate's, so anyone on the team can retry a run.
+-- The app's server then hands the run's id to n8n; if n8n cannot be reached it
+-- calls report_start_failure.
 create function public.create_run(
   p_kind text,
   p_input text,
@@ -142,13 +143,8 @@ begin
   if cardinality(p_platforms) <> (select count(distinct p) from unnest(p_platforms) as p) then
     raise exception 'A platform is listed twice';
   end if;
-  if p_media_path is not null then
-    if split_part(p_media_path, '/', 1) <> 'uploads' or split_part(p_media_path, '/', 2) <> v_user::text then
-      raise exception 'That clip belongs to someone else';
-    end if;
-    if not exists (select 1 from storage.objects where bucket_id = 'run-media' and name = p_media_path) then
-      raise exception 'The clip has not finished uploading';
-    end if;
+  if p_media_path is not null and not exists (select 1 from storage.objects where bucket_id = 'run-media' and name = p_media_path) then
+    raise exception 'The clip has not finished uploading';
   end if;
   v_id := public.start_run(p_kind, p_input, p_title, p_platforms, p_goal, p_url, p_competitor_name, p_files, p_excerpt, p_page, p_media_path, p_media);
   update public.runs set created_by = v_user where id = v_id;
@@ -229,7 +225,7 @@ create policy "Team members read run media" on storage.objects
   using (bucket_id = 'run-media' and (select private.is_team_member()));
 
 -- Uploads go through a signed upload link the server creates as the teammate,
--- into their own folder only. No update or delete: a clip is never replaced.
+-- into their own folder only. No update: a clip is never replaced.
 create policy "Team members upload clips into their own folder" on storage.objects
   for insert to authenticated
   with check (
@@ -237,6 +233,19 @@ create policy "Team members upload clips into their own folder" on storage.objec
     and (storage.foldername(name))[1] = 'uploads'
     and (storage.foldername(name))[2] = (select auth.uid())::text
     and (select private.is_team_member())
+  );
+
+-- A clip cut again, or taken away before its run started, is removed by the
+-- person who uploaded it, so Free's storage is not filled with clips nothing
+-- uses. A clip a run uses stays.
+create policy "Team members remove their own unused clips" on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'run-media'
+    and (storage.foldername(name))[1] = 'uploads'
+    and (storage.foldername(name))[2] = (select auth.uid())::text
+    and (select private.is_team_member())
+    and not exists (select 1 from public.runs r where r.media_path = objects.name)
   );
 
 -- ---------------------------------------------------------------- access

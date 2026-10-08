@@ -37,6 +37,20 @@ export function guardrailWarnings(creativeText: string, copy: Partial<Record<Pla
   return warnings;
 }
 
+/**
+ * The same checks on the words a video adds to an ad: its captions and its
+ * end card. People write these in the studio, so they are flagged like copy.
+ */
+export function videoWarnings(edit: { captions: readonly { text: string }[]; endCard: { text: string } | null } | undefined): string[] {
+  if (!edit) return [];
+  const warnings: string[] = [];
+  for (const [rule, says] of RULES) {
+    if (edit.captions.some((c) => rule.test(c.text))) warnings.push(`a caption ${says}`);
+    if (edit.endCard && rule.test(edit.endCard.text)) warnings.push(`end card ${says}`);
+  }
+  return warnings;
+}
+
 /** The platforms a copy object covers, in the dashboard's order. */
 export const copyPlatforms = (copy: Partial<Record<Platform, PlatformCopy>>): Platform[] => PLATFORMS.filter((p) => copy[p] !== undefined);
 

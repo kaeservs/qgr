@@ -1,6 +1,7 @@
 import { hostOf } from './format';
 import { CUSTOM_SOURCES, GOALS, PLATFORMS } from './types';
-import type { Goal, Platform, RunSource } from './types';
+import type { Clip, Goal, Platform, RunSource } from './types';
+import { length, MAX_CLIP_SECONDS } from './video/edit';
 
 export interface NewRunInput {
   source: RunSource;
@@ -14,7 +15,14 @@ export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string
 export const MAX_UPLOADS = 10;
 export const MIN_EXCERPT = 50;
 export const MAX_EXCERPT = 20_000;
+/** What is said in a clip: the agents' only way to know, so it can't be a word or two. */
+export const MIN_NOTES = 20;
+/** Supabase Free's limit for one file. The browser cuts and compresses a clip to fit under it. */
+export const MAX_CLIP_BYTES = 50 * 1024 * 1024;
 const MAX_TITLE = 120;
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+/** Where an uploaded clip is kept: the uploader's own folder, a fresh name, a video extension. */
+export const CLIP_PATH = new RegExp(`^uploads/${UUID}/${UUID}\\.(mp4|webm|mov)$`);
 
 /**
  * Accepts what people paste: `horizonvisa.com`, `www.x.com/...` or a full URL.
@@ -44,6 +52,21 @@ export function normalizeUrl(raw: string): string | null {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const includes = <T extends string>(list: readonly T[], v: unknown): v is T => typeof v === 'string' && (list as readonly string[]).includes(v);
+const isCount = (v: unknown, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v > 0 && v <= max;
+
+/** An uploaded clip as the browser describes it. The database checks again that it exists. */
+export function parseClip(raw: unknown): ParseResult<Clip> {
+  if (!isRecord(raw)) return { ok: false, error: 'Add the clip first.' };
+  if (typeof raw.path !== 'string' || !CLIP_PATH.test(raw.path)) return { ok: false, error: 'That clip was not uploaded here.' };
+  const { duration } = raw;
+  if (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return { ok: false, error: 'The clip’s length is not readable.' };
+  if (duration > MAX_CLIP_SECONDS) return { ok: false, error: `Cut the clip to ${length(MAX_CLIP_SECONDS)} or less.` };
+  if (!isCount(raw.width, 8192) || !isCount(raw.height, 8192)) return { ok: false, error: 'The clip’s size is not readable.' };
+  if (!isCount(raw.size, MAX_CLIP_BYTES)) return { ok: false, error: 'The clip is over 50 MB.' };
+  // A file name is shown on the run; anything that is not plain text is dropped.
+  const name = (typeof raw.name === 'string' ? raw.name : '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'Uploaded clip';
+  return { ok: true, value: { path: raw.path, name, duration: Math.round(duration * 1000) / 1000, width: raw.width, height: raw.height, size: raw.size } };
+}
 
 function parseSource(raw: unknown): ParseResult<RunSource> {
   if (!isRecord(raw)) return { ok: false, error: 'Say what the run starts from.' };
@@ -73,6 +96,14 @@ function parseSource(raw: unknown): ParseResult<RunSource> {
       if (excerpt.length < MIN_EXCERPT) return { ok: false, error: `Paste at least ${MIN_EXCERPT} characters of text.` };
       if (excerpt.length > MAX_EXCERPT) return { ok: false, error: 'That text is too long. Paste the part that matters.' };
       return { ok: true, value: { kind: 'custom', type: 'text', excerpt } };
+    }
+    if (raw.type === 'video' && raw.clip !== undefined) {
+      const clip = parseClip(raw.clip);
+      if (!clip.ok) return clip;
+      const notes = typeof raw.notes === 'string' ? raw.notes.trim() : '';
+      if (notes.length < MIN_NOTES) return { ok: false, error: `Say what is said in the clip, in at least ${MIN_NOTES} characters: the agents can’t watch it.` };
+      if (notes.length > MAX_EXCERPT) return { ok: false, error: 'Those notes are too long. Keep the part that matters.' };
+      return { ok: true, value: { kind: 'custom', type: 'video', clip: clip.value, notes } };
     }
     const url = typeof raw.url === 'string' ? normalizeUrl(raw.url) : null;
     if (!url) return { ok: false, error: 'Paste the full link to the episode, post or video.' };
@@ -128,6 +159,8 @@ export function runTitle(input: NewRunInput): string {
     else title = source.input === 'website' ? hostOf(source.url) : `Ad link · ${hostOf(source.url)}`;
   } else if (source.type === 'text') {
     title = `Text: ${source.excerpt.slice(0, 40).trimEnd()}…`;
+  } else if ('clip' in source) {
+    title = `Video · ${source.clip.name.replace(/\.[a-z0-9]{2,4}$/i, '')}`;
   } else {
     title = `${{ podcast: 'Podcast', blog: 'Blog post', video: 'Video' }[source.type]} · ${hostOf(source.url)}`;
   }
