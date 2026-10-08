@@ -34,6 +34,7 @@ export function Notifications({ notices, now }: { notices: Notice[]; now: string
       {open && (
         <div className={styles.popover} role="dialog" aria-label="Notifications">
           <p className={styles.popTitle}>Updates</p>
+          {notices.length === 0 && <p className={styles.popEmpty}>Nothing new yet. Runs report here as they finish.</p>}
           <ul>
             {notices.map((n) => {
               const Icon = ICON[n.tone];

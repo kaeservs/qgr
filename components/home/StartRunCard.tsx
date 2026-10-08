@@ -7,10 +7,13 @@ import type { FormEvent, KeyboardEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
-import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, normalizeUrl } from '@/lib/run-input';
+import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
+import { ClipField } from '../video/ClipField';
+import type { ClipStatus } from '../video/ClipField';
+import { LinkStatus, useLinkCheck } from './LinkCheck';
 import { useToast } from '../ui/Toast';
 import styles from './home.module.css';
 
@@ -50,8 +53,20 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
   const [goal, setGoal] = useState<Goal>('consultations');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // A video is a link to read, or a clip uploaded from here.
+  const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>('link');
+  const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
+  const [notes, setNotes] = useState('');
 
   const source = SOURCES.find((s) => s.key === sourceType) ?? SOURCES[0];
+  const clipMode = tab === 'custom' && sourceType === 'video' && videoFrom === 'upload';
+
+  // The link the run will read, if this tab reads one.
+  const readsLink = tab === 'competitor' || (tab === 'custom' && sourceType !== 'text' && !clipMode);
+  const normalizedUrl = readsLink ? normalizeUrl(url) : null;
+  // An ad library link is Apify's to read, so the run does not fetch it.
+  const adLibrary = tab === 'competitor' && normalizedUrl !== null && competitorInputFor(normalizedUrl) === 'ad_link';
+  const linkCheck = useLinkCheck(normalizedUrl, adLibrary);
 
   function onTabKey(e: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -89,6 +104,13 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
     if (tab === 'custom' && sourceType === 'text') {
       if (excerpt.trim().length < MIN_EXCERPT) return `Paste at least ${MIN_EXCERPT} characters.`;
       return { kind: 'custom', type: 'text', excerpt: excerpt.trim() };
+    }
+    if (clipMode) {
+      if (clipStatus.state === 'empty') return 'Add the clip first.';
+      if (clipStatus.state === 'working') return 'Wait for the clip to finish uploading.';
+      if (clipStatus.state === 'failed') return clipStatus.error;
+      if (notes.trim().length < MIN_NOTES) return `Say what is said in the clip, in at least ${MIN_NOTES} characters: the agents can’t watch it.`;
+      return { kind: 'custom', type: 'video', clip: clipStatus.clip, notes: notes.trim() };
     }
     const normalized = normalizeUrl(url);
     if (!normalized) return tab === 'competitor' ? 'Paste a full website or ad link, like horizonvisa.com.' : 'Paste the full link.';
@@ -174,6 +196,54 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
           </div>
         )}
 
+        {tab === 'custom' && sourceType === 'video' && (
+          <div className={styles.videoFrom} role="radiogroup" aria-label="The video">
+            {(
+              [
+                ['link', 'Paste a link'],
+                ['upload', 'Upload a clip'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={videoFrom === key}
+                className={cx(styles.videoFromOption, videoFrom === key && styles.videoFromOn)}
+                onClick={() => {
+                  setVideoFrom(key);
+                  setError(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {clipMode ? (
+          <div className={styles.clipBlock}>
+            <ClipField onStatus={setClipStatus} />
+            <label className="field">
+              <span className="label">What’s said in the clip?</span>
+              <textarea
+                className={cx('textarea', styles.notes)}
+                placeholder="The agents can’t watch video yet. In a few sentences, say what is said and shown."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                maxLength={20_000}
+              />
+              <span className="muted small">{notes.trim().length < MIN_NOTES ? `At least ${MIN_NOTES} characters.` : 'The strategist and the Content Agent work from these notes.'}</span>
+            </label>
+            <div className={styles.clipGo}>
+              <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || clipStatus.state === 'working'}>
+                {busy ? 'Starting…' : clipStatus.state === 'working' ? clipStatus.label : 'Start run'}
+                {!busy && clipStatus.state !== 'working' && <ArrowRight size={17} aria-hidden />}
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className={styles.inputRow}>
           {tab === 'upload' ? (
             <input className="input" placeholder="Competitor name, e.g. Atlas Residency Group" aria-label="Competitor name" value={competitorName} onChange={(e) => setCompetitorName(e.target.value)} />
@@ -191,10 +261,22 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
             />
           )}
           <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy}>
-            {busy ? 'Starting…' : 'Start run'}
+            {busy ? (readsLink && !adLibrary ? 'Reading the page…' : 'Starting…') : 'Start run'}
             {!busy && <ArrowRight size={17} aria-hidden />}
           </button>
         </div>
+        )}
+
+        {readsLink && (
+          <LinkStatus
+            check={linkCheck}
+            needsText={tab === 'custom'}
+            onPasteText={() => {
+              setSourceType('text');
+              setError(null);
+            }}
+          />
+        )}
 
         {tab === 'upload' && (
           <div

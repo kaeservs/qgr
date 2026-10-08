@@ -42,7 +42,8 @@ export function RunCalendar({
   today: string;
   selected: string | null;
   onSelect: (day: string | null) => void;
-  nextScan: string;
+  /** Null while no scan is scheduled. */
+  nextScan: string | null;
 }) {
   const [month, setMonth] = useState(() => monthStart(today));
   const perDay = useMemo(() => {
@@ -111,12 +112,14 @@ export function RunCalendar({
         </tbody>
       </table>
 
-      <p className={styles.nextScan}>
-        <Radar size={16} aria-hidden />
-        <span>
-          Next scan <strong>{formatDayShort(nextScan)}</strong>, {formatTime(nextScan)}
-        </span>
-      </p>
+      {nextScan && (
+        <p className={styles.nextScan}>
+          <Radar size={16} aria-hidden />
+          <span>
+            Next scan <strong>{formatDayShort(nextScan)}</strong>, {formatTime(nextScan)}
+          </span>
+        </p>
+      )}
     </div>
   );
 }

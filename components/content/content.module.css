@@ -380,3 +380,56 @@
   outline-offset: -2px;
   border-radius: var(--radius-lg);
 }
+
+/* Guardrail flags: words a person should look at before approving. Flagged,
+   never changed: the editor and the Content Agent run the same checks. */
+.flags {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--gold-50);
+  border: 1px solid var(--gold-100);
+  color: var(--gold-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.flags svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.flags ul {
+  list-style: disc;
+  padding-left: 16px;
+}
+
+.flagsTitle {
+  font-weight: 500;
+}
+
+.noCopy {
+  padding: 48px 20px;
+  text-align: center;
+}
+
+/* A set made from a clip: its variants are videos, which the studio plays. */
+.setThumb {
+  position: relative;
+}
+
+.videoBadge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgb(14 15 44 / 0.7);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+}

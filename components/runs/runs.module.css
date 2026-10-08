@@ -542,3 +542,36 @@
   color: var(--text-2);
   font-size: 14px;
 }
+
+/* What the reader got from the run's link. */
+.pageRead {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.pageRead svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--ok);
+}
+
+.pageRead strong {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.pageReadFailed,
+.pageReadFailed svg {
+  color: var(--gold-ink);
+}
+
+.notesTitle {
+  margin: 4px 0 -4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}

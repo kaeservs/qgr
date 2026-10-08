@@ -1,12 +1,15 @@
 'use client';
 
-import { Compass, Ellipsis, House, LifeBuoy, Radar, Settings, Sparkles, Workflow, X } from 'lucide-react';
+import { Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Settings, Sparkles, Workflow, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useRef, useState } from 'react';
+import { signOut } from '@/app/(auth)/actions';
 import { cx } from '@/lib/cx';
 import type { User } from '@/lib/types';
 import { Avatar } from '../ui/Avatar';
+import { useDismiss } from '../ui/useDismiss';
 import styles from './shell.module.css';
 
 const GROUPS = [
@@ -36,7 +39,44 @@ const GROUPS = [
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
-export function Sidebar({ user, open, onClose }: { user: User; open: boolean; onClose: () => void }) {
+/** The account's own menu: Settings, and Sign out when there is an account to sign out of. */
+function AccountMenu({ canSignOut, onNavigate }: { canSignOut: boolean; onNavigate: () => void }) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  useDismiss(wrap, open, () => setOpen(false));
+  return (
+    <div className={styles.popWrap} ref={wrap}>
+      <button type="button" className="icon-btn icon-btn-plain" aria-label="Account" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <Ellipsis size={18} />
+      </button>
+      {open && (
+        <div className={styles.accountMenu}>
+          <Link
+            href="/settings"
+            className={styles.accountItem}
+            onClick={() => {
+              setOpen(false);
+              onNavigate();
+            }}
+          >
+            <Settings size={16} aria-hidden />
+            Settings
+          </Link>
+          {canSignOut && (
+            <form action={signOut}>
+              <button type="submit" className={styles.accountItem}>
+                <LogOut size={16} aria-hidden />
+                Sign out
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function Sidebar({ user, open, onClose, canSignOut }: { user: User; open: boolean; onClose: () => void; canSignOut: boolean }) {
   const pathname = usePathname();
   return (
     <>
@@ -79,9 +119,7 @@ export function Sidebar({ user, open, onClose }: { user: User; open: boolean; on
             <p className={styles.userName}>{user.name}</p>
             <p className={styles.userRole}>{user.role}</p>
           </div>
-          <Link href="/settings" className="icon-btn icon-btn-plain" aria-label="Account settings" onClick={onClose}>
-            <Ellipsis size={18} />
-          </Link>
+          <AccountMenu canSignOut={canSignOut} onNavigate={onClose} />
         </div>
       </aside>
       </div>

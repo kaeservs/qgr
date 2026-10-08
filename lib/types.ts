@@ -1,6 +1,8 @@
-// The dashboard's domain model. The mock data in `mock-data.ts` and, later,
-// the Supabase schema both follow these shapes, so pages never change when the
-// backend arrives — only `data.ts` does.
+// The dashboard's domain model. The sample data (`mock-data.ts`) and the
+// Supabase source (`data/live.ts`) both produce these shapes, so pages never
+// know which one they are reading.
+
+import type { VideoEdit } from './video/edit';
 
 export const PLATFORMS = ['meta', 'linkedin', 'x'] as const;
 export type Platform = (typeof PLATFORMS)[number];
@@ -17,15 +19,55 @@ export const CUSTOM_SOURCES = ['podcast', 'blog', 'video', 'text'] as const;
 export type CustomSourceType = (typeof CUSTOM_SOURCES)[number];
 
 /**
+ * A video a run starts from, cut in the browser and uploaded to Storage
+ * (bucket run-media) before the run exists. `path` is where it is kept.
+ */
+export interface Clip {
+  path: string;
+  /** The file's name, as the person picked it. */
+  name: string;
+  /** Seconds. */
+  duration: number;
+  width: number;
+  height: number;
+  /** Bytes. */
+  size: number;
+}
+
+/**
  * What a run starts from. A competitor run starts at the Competitor Tracker;
  * a custom run (podcast, blog, video, text) has no competitor to track and
- * starts at the Ad Strategist.
+ * starts at the Ad Strategist. A video is a link, or a clip with the team's
+ * notes on what is said in it: the agents cannot watch it.
  */
 export type RunSource =
   | { kind: 'competitor'; input: 'website' | 'ad_link'; url: string }
   | { kind: 'competitor'; input: 'upload'; name: string; files: string[] }
   | { kind: 'custom'; type: Exclude<CustomSourceType, 'text'>; url: string }
+  | { kind: 'custom'; type: 'video'; clip: Clip; notes: string }
   | { kind: 'custom'; type: 'text'; excerpt: string };
+
+/**
+ * What the reader got from a link, read when the run starts and stored with it.
+ * The agents read this text; they never fetch a link themselves.
+ */
+export type PageRead =
+  | {
+      ok: true;
+      /** Where the page ended up, after redirects. */
+      url: string;
+      title: string | null;
+      siteName: string | null;
+      description: string | null;
+      type: 'article' | 'video' | 'podcast' | 'website';
+      text: string;
+      words: number;
+      readAt: string;
+    }
+  | { ok: false; url: string; error: string; readAt: string };
+
+/** What a run's page shows of the link it read: never the text itself. */
+export type PageSummary = { ok: true; url: string; title: string | null; words: number } | { ok: false; url: string; error: string };
 
 export interface Stage {
   status: StageStatus;
@@ -53,6 +95,8 @@ export interface Run {
   output: { competitorId?: string; strategyId?: string; adSetId?: string };
   counts: { hooks?: number; angles?: number; variants?: number };
   activity: RunEvent[];
+  /** What was read from the run's link when it started. */
+  page?: PageSummary;
 }
 
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';
@@ -83,10 +127,16 @@ export interface AdExample {
   tone: 'slate' | 'teal' | 'plum' | 'sand';
 }
 
+/** Where a report's ads came from. 'placeholder' means sample ads: Apify is not connected yet. */
+export type AdSource = 'apify' | 'placeholder' | 'upload';
+
 export interface Competitor {
   id: string;
   name: string;
-  domain: string;
+  /** Absent for a competitor known only from uploaded ads. */
+  domain?: string;
+  /** Where the latest report's ads came from. */
+  dataSource?: AdSource;
   platforms: Platform[];
   activeAds: number;
   lastScanAt: string;
@@ -143,8 +193,15 @@ export interface Variant {
   label: 'A' | 'B' | 'C';
   angle: string;
   creative: { text: string; style: CreativeStyle };
-  copy: Record<Platform, PlatformCopy>;
+  /** Copy for each platform the run asked for. */
+  copy: Partial<Record<Platform, PlatformCopy>>;
   approved?: boolean;
+  /** Phrases flagged against the guardrails, for a person to judge before approving. */
+  warnings?: string[];
+  /** The generated image, once an image model is connected. Until then the branded design is drawn. */
+  imageUrl?: string;
+  /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
+  videoEdit?: VideoEdit;
 }
 
 export interface AdSet {
@@ -155,11 +212,15 @@ export interface AdSet {
   strategyId: string;
   status: 'generating' | 'review' | 'approved';
   variants: Variant[];
+  /** The clip the run started from: each variant is a video made from it. */
+  clip?: Clip;
 }
 
 export interface Agent {
   key: StageKey;
   auto: boolean;
+  /** Whether the dashboard can switch auto-run. Off until the pipeline can act on the switch. */
+  switchable: boolean;
   /** Shown under the name while auto-run is on. */
   autoLabel: string;
   /** Shown while it is off. */
@@ -174,6 +235,18 @@ export interface User {
   firstName: string;
   role: string;
   initials: string;
+}
+
+/** What every agent reads before it writes. */
+export interface BrandProfile {
+  company: string;
+  website: string;
+  offer: string;
+  audience: string;
+  voice: string[];
+  guardrails: string[];
+  pageName: string;
+  xHandle: string;
 }
 
 export interface Notice {

@@ -12,19 +12,27 @@ import styles from './previews.module.css';
 export function Creative({
   text,
   style,
+  image,
   ratio,
   editable = false,
   onChange,
 }: {
   text: string;
   style: CreativeStyle;
+  /** A generated image to draw instead of the brand's pattern. */
+  image?: string | undefined;
   ratio: 'square' | 'wide';
   editable?: boolean;
   onChange?: (text: string) => void;
 }) {
   return (
-    <div className={cx(styles.creative, styles[`creative-${style}`], styles[`ratio-${ratio}`])}>
-      <span className={styles.creativeArt} aria-hidden />
+    <div className={cx(styles.creative, styles[`creative-${style}`], styles[`ratio-${ratio}`], image && styles.withImage)}>
+      {image ? (
+        // A plain img: the address is our own storage's, and the frame sets the size.
+        <img className={styles.creativeImage} src={image} alt="" />
+      ) : (
+        <span className={styles.creativeArt} aria-hidden />
+      )}
       <div className={styles.creativeInner}>
         <span className={styles.creativeBrand}>
           <Image src="/brand/qgr-mark.png" alt="" width={18} height={18} />

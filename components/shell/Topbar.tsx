@@ -7,7 +7,7 @@ import { Notifications } from './Notifications';
 import { SearchBox } from './SearchBox';
 import styles from './shell.module.css';
 
-export function Topbar({ onMenu, searchIndex, notices, now }: { onMenu: () => void; searchIndex: SearchItem[]; notices: Notice[]; now: string }) {
+export function Topbar({ onMenu, searchIndex, notices, now, sample }: { onMenu: () => void; searchIndex: SearchItem[]; notices: Notice[]; now: string; sample: boolean }) {
   return (
     <header className={styles.topbar}>
       <button type="button" className={`icon-btn ${styles.menuBtn}`} onClick={onMenu} aria-label="Open menu">
@@ -15,6 +15,11 @@ export function Topbar({ onMenu, searchIndex, notices, now }: { onMenu: () => vo
       </button>
       <SearchBox index={searchIndex} />
       <div className={styles.topActions}>
+        {sample && (
+          <span className={`pill pill-quiet pill-sm ${styles.sampleTag}`} title="Supabase is not connected, so these runs are examples">
+            Sample data
+          </span>
+        )}
         <Notifications notices={notices} now={now} />
         <Link href="/runs/new" className={`btn btn-primary ${styles.newRun}`} aria-label="New run">
           <Plus size={18} strokeWidth={2.2} aria-hidden />

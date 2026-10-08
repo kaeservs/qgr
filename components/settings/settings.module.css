@@ -105,10 +105,21 @@
 
 .actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  padding-top: 4px;
-  border-top: 1px solid var(--line);
+  gap: 16px;
+  flex-wrap: wrap;
   padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.actions :global(.error-text) {
+  margin-right: auto;
+}
+
+.connected {
+  background: var(--ok-bg);
+  color: var(--ok);
 }
 
 .connections {
