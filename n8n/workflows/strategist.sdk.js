@@ -29,7 +29,7 @@ const begin = node({
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
-  output: [{ stage: 'strategist', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }],
+  output: [{ stage: 'strategist', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null, page: { ok: true, url: 'https://example.com/', title: 'Example', text: 'Example', words: 1 }, media_path: null, media: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }],
 });
 
 const plan = node({
@@ -38,54 +38,9 @@ const plan = node({
   config: {
     name: "Gather the material",
     onError: 'continueErrorOutput',
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// What the strategy is built from: the tracker's report on a competitor run,\n// or QGR's own content on a custom run.\nconst ctx = $input.first().json;\nconst run = ctx.run;\nconst KIND = { podcast: 'Podcast', blog: 'Blog post', video: 'Video', text: 'Text' };\nconst custom = run.kind === 'custom';\nconst needsSource = custom && run.input !== 'text';\nreturn [{\n  json: {\n    runId: run.id,\n    run: run,\n    brand: ctx.brand,\n    report: ctx.report,\n    needsSource: needsSource,\n    sourceUrl: needsSource ? run.url : '',\n    sourceText: run.input === 'text' ? run.excerpt : '',\n    sourceLabel: custom ? KIND[run.input] + ' · ' + run.title : null,\n  },\n}];\n" },
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// What the strategy is built from: the tracker's report on a competitor run,\n// or QGR's own content on a custom run. A link's page was read by the app when\n// the run started (run.page); an uploaded clip comes with the team's notes on\n// what is said in it (run.excerpt), since there is no transcript.\nconst ctx = $input.first().json;\nconst run = ctx.run;\nconst KIND = { podcast: 'Podcast', blog: 'Blog post', video: 'Video', text: 'Text' };\nconst custom = run.kind === 'custom';\nconst page = run.page && run.page.ok ? run.page : null;\nconst clip = run.media_path ? run.media : null;\n\nlet sourceText = '';\nif (run.input === 'text' || clip) sourceText = run.excerpt || '';\nelse if (page) sourceText = page.text || '';\n\nreturn [{\n  json: {\n    runId: run.id,\n    run: run,\n    brand: ctx.brand,\n    report: ctx.report,\n    page: page ? { title: page.title || null, description: page.description || null, type: page.type || null } : null,\n    clip: clip ? { duration: clip.duration } : null,\n    sourceText: sourceText,\n    sourceLabel: custom ? (clip ? 'Uploaded clip' : KIND[run.input]) + ' · ' + run.title : null,\n  },\n}];\n" },
   },
-  output: [{ runId: 'run-id', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations' }, brand: { guardrails: [] }, report: null, needsSource: true, sourceUrl: 'https://example.com/ep-1', sourceText: '', sourceLabel: 'Podcast · Ep. 1' }],
-});
-
-const needsSource = ifElse({
-  version: 2.3,
-  config: {
-    name: 'Read the source first?',
-    parameters: {
-      conditions: {
-        options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.needsSource }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
-        combinator: 'and',
-      },
-    },
-  },
-});
-
-const readSource = node({
-  type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
-  config: {
-    name: 'Read the source page',
-    onError: 'continueRegularOutput',
-    parameters: {
-      method: 'GET',
-      url: expr('{{ $json.sourceUrl }}'),
-      sendHeaders: true,
-      headerParameters: { parameters: [{ name: 'User-Agent', value: 'QGR-Ad-Strategist/1.0' }] },
-      options: {
-        timeout: 20000,
-        redirect: { redirect: { followRedirects: true, maxRedirects: 5 } },
-        response: { response: { responseFormat: 'text', outputPropertyName: 'data' } },
-      },
-    },
-  },
-  output: [{ data: '<html><body>Episode notes</body></html>' }],
-});
-
-const keepSourceText = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: "Keep the source text",
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// The page's words without markup, capped so the prompt stays small.\n// Used after \"Read their website\" (tracker) and \"Read the source page\" (strategist).\nconst plan = $('Gather the material').first().json;\nconst html = String($input.first().json.data || '');\nconst text = html\n  .replace(/<(script|style|noscript|svg|template)[\\s\\S]*?<\\/\\1>/gi, ' ')\n  .replace(/<!--[\\s\\S]*?-->/g, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&(rsquo|lsquo|#39);/g, \"'\")\n  .replace(/&(rdquo|ldquo|quot);/g, '\"')\n  .replace(/&[a-z]+;|&#\\d+;/gi, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 12000);\nreturn [{ json: Object.assign({}, plan, { sourceText: text }) }];\n" },
-  },
-  output: [{ runId: 'run-id', sourceText: 'Episode notes' }],
+  output: [{ runId: 'run-id', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations' }, brand: { guardrails: [] }, report: null, page: null, clip: null, sourceText: '', sourceLabel: 'Podcast · Ep. 1' }],
 });
 
 const buildRequest = node({
@@ -94,7 +49,7 @@ const buildRequest = node({
   config: {
     name: "Build the Claude request",
     onError: 'continueErrorOutput',
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// The Claude request: Opus 5.5 at high effort, because the strategy is the\n// judgement the rest of the run depends on. JSON constrained by the schema;\n// server-side fallback if a classifier declines; no temperature.\nconst MODEL = 'claude-opus-5-5';\nconst EFFORT = 'high';\nconst p = $input.first().json;\nconst run = p.run;\nconst GOALS = {\n  consultations: 'Book free consultations',\n  webinar: 'Webinar sign-ups',\n  awareness: 'Brand awareness',\n  guide: 'Guide downloads',\n};\n\nconst system = [\n  \"You are the ad strategist for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. From the material given (a report on a competitor's ads, or QGR's own content), write the strategy QGR's next ads follow.\",\n  '',\n  \"- positioning: one sentence QGR can own, built on its real strengths in the brand profile. Never borrow a competitor's claim.\",\n  \"- angles: exactly three, strongest first. For each: a short name; why it should work, naming the evidence (a competitor hook that keeps running, a gap no one covers, or a moment in the source); and one hook to test, in QGR's voice. With a competitor report, set based_on_hook to the competitor hook the angle answers, word for word, or null when the angle exploits a gap. Without one, based_on_hook is null.\",\n  '- audiences: one to three, specific enough to target.',\n  \"- channels: one for each platform in the run, with its share of the budget, its role and the formats to use.\",\n  \"- guardrails: at most two rules specific to this strategy; the brand's own guardrails always apply on top.\",\n  '- title: a short name for this push. summary: the strategy in under 90 characters.',\n  '',\n  'EB-5 is an investment with risk: nothing may promise an outcome, a timeline or a return.',\n].join('\\n');\n\nconst material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };\nif (p.report) {\n  material.competitor_report = {\n    competitor: p.report.competitor,\n    summary: p.report.summary,\n    insights: p.report.insights,\n    angles_in_their_ads: p.report.angles,\n    winning_hooks: p.report.hooks,\n    website_summary: p.report.website_summary,\n  };\n} else {\n  material.source = { type: run.input, title: run.title, url: run.url, text: p.sourceText || '' };\n  if (run.input === 'podcast' || run.input === 'video') {\n    material.source.note = 'No transcript yet: this is the text of the episode or video page.';\n  }\n}\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  required: ['title', 'summary', 'positioning', 'audiences', 'angles', 'channels', 'guardrails'],\n  properties: {\n    title: { type: 'string' },\n    summary: { type: 'string' },\n    positioning: { type: 'string' },\n    audiences: { type: 'array', items: { type: 'string' } },\n    angles: {\n      type: 'array',\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        required: ['name', 'why', 'hook', 'based_on_hook'],\n        properties: {\n          name: { type: 'string' },\n          why: { type: 'string' },\n          hook: { type: 'string' },\n          based_on_hook: { anyOf: [{ type: 'string' }, { type: 'null' }] },\n        },\n      },\n    },\n    channels: {\n      type: 'array',\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        required: ['platform', 'share', 'role', 'format'],\n        properties: {\n          platform: { type: 'string', enum: run.platforms },\n          share: { type: 'integer' },\n          role: { type: 'string' },\n          format: { type: 'string' },\n        },\n      },\n    },\n    guardrails: { type: 'array', items: { type: 'string' } },\n  },\n};\n\nreturn [{\n  json: {\n    body: {\n      model: MODEL,\n      max_tokens: 16000,\n      fallbacks: 'default',\n      output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },\n      system: system,\n      messages: [{ role: 'user', content: 'The material, as JSON:\\n' + JSON.stringify(material) }],\n    },\n  },\n}];\n" },
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// The Claude request: Opus 5.5 at high effort, because the strategy is the\n// judgement the rest of the run depends on. JSON constrained by the schema;\n// server-side fallback if a classifier declines; no temperature.\nconst MODEL = 'claude-opus-5-5';\nconst EFFORT = 'high';\nconst p = $input.first().json;\nconst run = p.run;\nconst GOALS = {\n  consultations: 'Book free consultations',\n  webinar: 'Webinar sign-ups',\n  awareness: 'Brand awareness',\n  guide: 'Guide downloads',\n};\n\nconst system = [\n  \"You are the ad strategist for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. From the material given (a report on a competitor's ads, or QGR's own content), write the strategy QGR's next ads follow.\",\n  '',\n  \"- positioning: one sentence QGR can own, built on its real strengths in the brand profile. Never borrow a competitor's claim.\",\n  \"- angles: exactly three, strongest first. For each: a short name; why it should work, naming the evidence (a competitor hook that keeps running, a gap no one covers, or a moment in the source); and one hook to test, in QGR's voice. With a competitor report, set based_on_hook to the competitor hook the angle answers, word for word, or null when the angle exploits a gap. Without one, based_on_hook is null.\",\n  '- audiences: one to three, specific enough to target.',\n  \"- channels: one for each platform in the run, with its share of the budget, its role and the formats to use.\",\n  \"- guardrails: at most two rules specific to this strategy; the brand's own guardrails always apply on top.\",\n  '- title: a short name for this push. summary: the strategy in under 90 characters.',\n  '',\n  'EB-5 is an investment with risk: nothing may promise an outcome, a timeline or a return.',\n].join('\\n');\n\nconst material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };\nif (p.report) {\n  material.competitor_report = {\n    competitor: p.report.competitor,\n    summary: p.report.summary,\n    insights: p.report.insights,\n    angles_in_their_ads: p.report.angles,\n    winning_hooks: p.report.hooks,\n    website_summary: p.report.website_summary,\n  };\n} else {\n  material.source = { type: run.input, title: (p.page && p.page.title) || run.title, text: p.sourceText || '' };\n  if (run.url) material.source.url = run.url;\n  if (p.page && p.page.description && p.sourceText.indexOf(p.page.description) === -1) {\n    material.source.description = p.page.description;\n  }\n  if (p.clip) {\n    const seconds = Math.round(p.clip.duration);\n    const length = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');\n    material.source.note = 'An uploaded video clip of ' + length + ', which the ads will use. There is no transcript: the text is the team\\'s own description of what is said in it.';\n  } else if (run.input === 'podcast' || run.input === 'video') {\n    material.source.note = 'No transcript yet: this is the text of the episode or video page.';\n  }\n}\n\nconst schema = {\n  type: 'object',\n  additionalProperties: false,\n  required: ['title', 'summary', 'positioning', 'audiences', 'angles', 'channels', 'guardrails'],\n  properties: {\n    title: { type: 'string' },\n    summary: { type: 'string' },\n    positioning: { type: 'string' },\n    audiences: { type: 'array', items: { type: 'string' } },\n    angles: {\n      type: 'array',\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        required: ['name', 'why', 'hook', 'based_on_hook'],\n        properties: {\n          name: { type: 'string' },\n          why: { type: 'string' },\n          hook: { type: 'string' },\n          based_on_hook: { anyOf: [{ type: 'string' }, { type: 'null' }] },\n        },\n      },\n    },\n    channels: {\n      type: 'array',\n      items: {\n        type: 'object',\n        additionalProperties: false,\n        required: ['platform', 'share', 'role', 'format'],\n        properties: {\n          platform: { type: 'string', enum: run.platforms },\n          share: { type: 'integer' },\n          role: { type: 'string' },\n          format: { type: 'string' },\n        },\n      },\n    },\n    guardrails: { type: 'array', items: { type: 'string' } },\n  },\n};\n\nreturn [{\n  json: {\n    body: {\n      model: MODEL,\n      max_tokens: 16000,\n      fallbacks: 'default',\n      output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },\n      system: system,\n      messages: [{ role: 'user', content: 'The material, as JSON:\\n' + JSON.stringify(material) }],\n    },\n  },\n}];\n" },
   },
   output: [{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }],
 });
@@ -265,15 +220,14 @@ const done = node({
   output: [{ ok: true, runId: 'run-id' }],
 });
 
-const noteSource = sticky('## Custom runs\nA blog post is read from its page. A podcast or video has **no transcript yet**: the strategist reads the episode page and is told so. Pasted text is used as it is.', [needsSource, readSource, keepSourceText], { color: 3 });
+const noteSource = sticky('## Custom runs\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the team\'s notes on what is said in it. Pasted text is used as it is.', [plan], { color: 3 });
 const noteModel = sticky('## Claude\nOpus 5.5, high effort: the strategy is the judgement the rest of the run depends on. Budget shares are made to add up to 100 in code, and the brand guardrails always lead.', [buildRequest, claude, readAnswer], { color: 6 });
 
 export default workflow('qgr-ad-strategist', 'QGR · Ad Strategist')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(needsSource.onTrue(readSource.to(keepSourceText.to(buildRequest))).onFalse(buildRequest))
-  .add(buildRequest.onError(whyFailed))
+  .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
   .to(readAnswer.onError(whyFailed))
   .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))

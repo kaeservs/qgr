@@ -33,7 +33,7 @@ export const getNotices: DataSource['getNotices'] = () => source().getNotices();
 export const getSearchIndex: DataSource['getSearchIndex'] = () => source().getSearchIndex();
 export const getBrandProfile: DataSource['getBrandProfile'] = () => source().getBrandProfile();
 
-export const createRun: DataSource['createRun'] = (input) => source().createRun(input);
+export const createRun: DataSource['createRun'] = (input, page) => source().createRun(input, page);
 export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().saveVariant(id, edit);
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);

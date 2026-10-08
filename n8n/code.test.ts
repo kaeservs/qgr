@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { inN8n } from '../test/n8n';
 import { guardrailWarnings } from '../lib/guardrails';
 import type { Platform, PlatformCopy } from '../lib/types';
 
@@ -23,7 +24,7 @@ function run(file: string, input: Json, nodes: Record<string, Json> = {}, swap: 
     if (!json) throw new Error(`Node "${name}" has not run`);
     return { first: () => ({ json }) };
   };
-  const items = new Function('$input', '$', code)($input, $) as Items;
+  const items = inN8n(code, $input, $) as Items;
   expect(items).toHaveLength(1);
   return items[0]!.json;
 }
@@ -75,18 +76,26 @@ function assertRequest(body: Json, effort: string) {
 }
 
 describe('Competitor Tracker', () => {
+  // The page as the app stored it when the run started (lib/page/read.ts).
+  const page = { ok: true, url: 'https://www.horizonvisa.com/', title: 'Horizon Visa Partners', siteName: 'Horizon Visa', description: 'EB-5 advisors.', type: 'website', text: 'EB-5 & you\nFamilies first.', words: 5, readAt: '2026-10-08T09:00:00Z' };
   const ctx = {
-    run: { id: 'run-1', kind: 'competitor', input: 'website', url: 'https://www.horizonvisa.com/', platforms: ['meta', 'linkedin'], goal: 'consultations', title: 'horizonvisa.com' },
+    run: { id: 'run-1', kind: 'competitor', input: 'website', url: 'https://www.horizonvisa.com/', platforms: ['meta', 'linkedin'], goal: 'consultations', title: 'horizonvisa.com', page },
     brand,
   };
   const plan = run('tracker-plan.js', ctx);
-  const withSite = run('shared-page-text.js', { data: '<html><head><style>p{}</style><script>var x=1</script></head><body><h1>EB-5 &amp; you</h1><p>Families&nbsp;first.</p></body></html>' }, { 'Plan the scan': plan }, { __PLAN__: 'Plan the scan', __FIELD__: 'websiteText' });
-  const raw = run('tracker-placeholder-ads.js', withSite);
+  const raw = run('tracker-placeholder-ads.js', plan);
   const prepared = run('tracker-prepare-ads.js', raw);
 
-  it('reads the competitor from the run and strips the website to words', () => {
-    expect(plan).toMatchObject({ runId: 'run-1', domain: 'horizonvisa.com', competitorHint: 'horizonvisa', websiteUrl: 'https://www.horizonvisa.com/' });
-    expect(withSite.websiteText).toBe('EB-5 & you Families first.');
+  it('takes the website’s words from what the app read, never fetching it', () => {
+    expect(plan).toMatchObject({ runId: 'run-1', domain: 'horizonvisa.com', competitorHint: 'Horizon Visa', websiteText: 'Horizon Visa Partners\n\nEB-5 advisors.\n\nEB-5 & you\nFamilies first.' });
+    expect(plan).not.toHaveProperty('websiteUrl');
+    expect(raw.websiteText).toBe(plan.websiteText);
+  });
+
+  it('works from the ads alone when the website could not be read', () => {
+    const unread = run('tracker-plan.js', { ...ctx, run: { ...ctx.run, page: { ok: false, url: 'https://www.horizonvisa.com/', error: 'The site turned the reader away (403).' } } });
+    expect(unread).toMatchObject({ websiteText: '', competitorHint: 'horizonvisa' });
+    expect(run('tracker-plan.js', { ...ctx, run: { ...ctx.run, page: null } })).toMatchObject({ websiteText: '' });
   });
 
   it('marks placeholder ads as samples and computes days running itself', () => {
@@ -101,7 +110,7 @@ describe('Competitor Tracker', () => {
     assertRequest(body, 'medium');
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
     expect(material.ads).toHaveLength(10);
-    expect(material.website_text).toBe('EB-5 & you Families first.');
+    expect(material.website_text).toBe('Horizon Visa Partners\n\nEB-5 advisors.\n\nEB-5 & you\nFamilies first.');
   });
 
   it('builds hooks and angle counts from the ads, not from the model', () => {
@@ -157,21 +166,34 @@ describe('Competitor Tracker', () => {
 describe('Ad Strategist', () => {
   const report = { competitor: 'Horizon', summary: 's', insights: ['i'], angles: [], hooks: [{ rank: 1, text: 'h' }], website_summary: null };
   const competitorCtx = { run: { id: 'run-2', kind: 'competitor', input: 'website', url: 'https://h.com/', title: 'h.com', platforms: ['meta', 'x'], goal: 'consultations' }, brand, report };
-  const customCtx = { run: { id: 'run-3', kind: 'custom', input: 'podcast', url: 'https://pod.example/ep-12', title: 'Ep. 12: From H-1B to EB-5', platforms: ['meta', 'linkedin', 'x'], goal: 'webinar' }, brand, report: null };
+  const podcastPage = { ok: true, url: 'https://pod.example/ep-12', title: 'Ep. 12 · The Green Card Hour', siteName: null, description: 'Three questions to ask before you pick a project.', type: 'podcast', text: 'Three questions to ask before you pick a project.', words: 9, readAt: '2026-10-08T09:00:00Z' };
+  const customCtx = { run: { id: 'run-3', kind: 'custom', input: 'podcast', url: 'https://pod.example/ep-12', title: 'Ep. 12: From H-1B to EB-5', platforms: ['meta', 'linkedin', 'x'], goal: 'webinar', page: podcastPage }, brand, report: null };
 
-  it('builds from the report on a competitor run, and from the page on a custom one', () => {
+  it('builds from the report on a competitor run, and from the stored page on a custom one', () => {
     const fromReport = run('strategist-plan.js', competitorCtx);
-    expect(fromReport).toMatchObject({ needsSource: false, sourceLabel: null });
+    expect(fromReport).toMatchObject({ sourceText: '', sourceLabel: null, clip: null });
     const fromPodcast = run('strategist-plan.js', customCtx);
-    expect(fromPodcast).toMatchObject({ needsSource: true, sourceUrl: 'https://pod.example/ep-12', sourceLabel: 'Podcast · Ep. 12: From H-1B to EB-5' });
+    expect(fromPodcast).toMatchObject({ sourceText: 'Three questions to ask before you pick a project.', sourceLabel: 'Podcast · Ep. 12: From H-1B to EB-5', page: { title: 'Ep. 12 · The Green Card Hour' } });
 
     const { body } = run('strategist-build-request.js', fromPodcast) as { body: Json };
     assertRequest(body, 'high');
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.source).toMatchObject({ type: 'podcast', title: 'Ep. 12 · The Green Card Hour', url: 'https://pod.example/ep-12', text: 'Three questions to ask before you pick a project.' });
     expect(material.source.note).toMatch(/No transcript yet/);
     expect(material.goal).toBe('Webinar sign-ups');
     const channelEnum = (body.output_config as Json & { format: { schema: Json } }).format.schema;
     expect(JSON.stringify(channelEnum)).toContain('"enum":["meta","linkedin","x"]');
+  });
+
+  it('builds from the team’s notes on an uploaded clip', () => {
+    const clipCtx = { run: { id: 'run-6', kind: 'custom', input: 'video', url: null, title: 'Founder clip', excerpt: 'Our founder explains concurrent filing for families on H-1B visas.', media_path: 'uploads/u/c.mp4', media: { duration: 42.6 }, platforms: ['meta'], goal: 'consultations' }, brand, report: null };
+    const plan = run('strategist-plan.js', clipCtx);
+    expect(plan).toMatchObject({ sourceText: clipCtx.run.excerpt, clip: { duration: 42.6 }, sourceLabel: 'Uploaded clip · Founder clip' });
+    const { body } = run('strategist-build-request.js', plan) as { body: Json };
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.source).toMatchObject({ type: 'video', title: 'Founder clip', text: clipCtx.run.excerpt });
+    expect(material.source).not.toHaveProperty('url');
+    expect(material.source.note).toBe("An uploaded video clip of 0:43, which the ads will use. There is no transcript: the text is the team's own description of what is said in it.");
   });
 
   it('keeps one channel per platform with shares adding to 100, and the brand guardrails first', () => {
@@ -257,6 +279,19 @@ describe('Content Agent', () => {
 
     const imaged = run('content-images-placeholder.js', out);
     expect((imaged.p_ad_set as { variants: { image_url: unknown }[] }).variants.every((v) => v.image_url === null)).toBe(true);
+  });
+
+  it('writes over the team’s clip on a clip run, with no image to describe', () => {
+    const clipCtx = { ...ctx, run: { ...ctx.run, media_path: 'uploads/u/c.mp4', media: { duration: 42.6 }, excerpt: 'Our founder explains concurrent filing.' } };
+    const { body } = run('content-build-request.js', clipCtx) as { body: Json };
+    expect(String(body.system)).toContain("the line shown over the team's video clip (0:43)");
+    expect(String(body.system)).toContain('image_prompt: an empty string');
+    expect(String(body.system)).not.toContain('no real or identifiable people');
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.clip).toEqual({ length: '0:43', what_is_said: 'Our founder explains concurrent filing.' });
+    // A run without a clip is asked for images, as before.
+    const plain = run('content-build-request.js', ctx) as { body: Json };
+    expect(String(plain.body.system)).toContain('no real or identifiable people');
   });
 
   it('fails when a variant is missing', () => {

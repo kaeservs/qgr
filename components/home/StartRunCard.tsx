@@ -11,6 +11,7 @@ import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, normalizeUrl } from '@/li
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
+import { LinkStatus, useLinkCheck } from './LinkCheck';
 import { useToast } from '../ui/Toast';
 import styles from './home.module.css';
 
@@ -52,6 +53,13 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
   const [busy, setBusy] = useState(false);
 
   const source = SOURCES.find((s) => s.key === sourceType) ?? SOURCES[0];
+
+  // The link the run will read, if this tab reads one.
+  const readsLink = tab === 'competitor' || (tab === 'custom' && sourceType !== 'text');
+  const normalizedUrl = readsLink ? normalizeUrl(url) : null;
+  // An ad library link is Apify's to read, so the run does not fetch it.
+  const adLibrary = tab === 'competitor' && normalizedUrl !== null && competitorInputFor(normalizedUrl) === 'ad_link';
+  const linkCheck = useLinkCheck(normalizedUrl, adLibrary);
 
   function onTabKey(e: KeyboardEvent<HTMLButtonElement>, index: number) {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
@@ -191,10 +199,21 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
             />
           )}
           <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy}>
-            {busy ? 'Starting…' : 'Start run'}
+            {busy ? (readsLink && !adLibrary ? 'Reading the page…' : 'Starting…') : 'Start run'}
             {!busy && <ArrowRight size={17} aria-hidden />}
           </button>
         </div>
+
+        {readsLink && (
+          <LinkStatus
+            check={linkCheck}
+            needsText={tab === 'custom'}
+            onPasteText={() => {
+              setSourceType('text');
+              setError(null);
+            }}
+          />
+        )}
 
         {tab === 'upload' && (
           <div

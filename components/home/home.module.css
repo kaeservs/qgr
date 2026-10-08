@@ -123,6 +123,49 @@
   height: 52px;
 }
 
+/* What the reader made of a pasted link. */
+.linkStatus {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: -6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.linkStatus svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.linkStatus strong {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.linkOk svg {
+  color: var(--ok);
+}
+
+.linkWarn {
+  color: var(--gold-ink);
+}
+
+.linkBad {
+  color: var(--fail);
+}
+
+.linkAction {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--indigo);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .go {
   height: 52px;
   padding: 0 22px;

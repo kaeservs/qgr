@@ -73,25 +73,40 @@ const schema = {
 };
 
 const lengths = run.platforms.map(function (p) { return '  ' + NAMES[p] + ': ' + LIMITS[p]; }).join('\n');
+
+// A run from the team's own clip uses that video as the creative: the words go
+// over it, and no image needs describing.
+const clip = run.media_path ? run.media : null;
+const clipLength = clip ? Math.floor(Math.round(clip.duration) / 60) + ':' + String(Math.round(clip.duration) % 60).padStart(2, '0') : null;
+const creativeLines = clip
+  ? [
+      '- creative_text: the line shown over the team\'s video clip (' + clipLength + '), eight words at most. Each ad uses that clip; the copy can invite people to watch it.',
+      '- creative_style: arcs, split or spotlight, each used once across the three variants.',
+      '- image_prompt: an empty string. No image is needed: the clip is the creative.',
+    ]
+  : [
+      '- creative_text: the words on the image, eight words at most.',
+      '- creative_style: arcs, split or spotlight, each used once across the three variants.',
+      '- image_prompt: a prompt for an image model describing the scene only: no words in the image, QGR indigo (#1C1B9D) and gold (#EFB74A), no real or identifiable people, no flags.',
+    ];
 const system = [
   'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. Write three variants: A follows the strategy\'s first angle, B the second, C the third.',
   '',
   'For each variant:',
   '- copy for each of these platforms, written for that platform rather than one text cut down, within these lengths:',
   lengths,
-  '- creative_text: the words on the image, eight words at most.',
-  '- creative_style: arcs, split or spotlight, each used once across the three variants.',
-  '- image_prompt: a prompt for an image model describing the scene only: no words in the image, QGR indigo (#1C1B9D) and gold (#EFB74A), no real or identifiable people, no flags.',
+].concat(creativeLines, [
   '',
   'Voice: ' + (brand.voice || []).join(', ') + '. Every ad leads to ' + GOALS[run.goal] + '.',
   'Rules every ad follows: ' + strategy.guardrails.join('; ') + '.',
   'Never say guaranteed, never promise approval, a timeline or a return, and never name a competitor. Processing times are estimates.',
-].join('\n');
+]).join('\n');
 
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
   strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: strategy.angles, channels: strategy.channels },
 };
+if (clip) material.clip = { length: clipLength, what_is_said: run.excerpt || '' };
 
 return [{
   json: {

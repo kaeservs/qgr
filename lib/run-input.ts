@@ -18,12 +18,16 @@ const MAX_TITLE = 120;
 
 /**
  * Accepts what people paste: `horizonvisa.com`, `www.x.com/...` or a full URL.
- * Anything that is not http(s) with a dotted host is refused.
+ * Anything that is not an ordinary public link is refused: another protocol, a
+ * host without a dot, a bare IP address, a password in the link or an odd port.
+ * The page reader checks again, against the address the name resolves to.
  */
 export function normalizeUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed || /\s/.test(trimmed)) return null;
-  const withScheme = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  // `horizonvisa.com:443/x` has a port, not a scheme: only `x://` or a known non-web scheme counts as one.
+  const hasScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(trimmed) || /^(javascript|data|mailto|tel|file|blob|vbscript|about):/i.test(trimmed);
+  const withScheme = hasScheme ? trimmed : `https://${trimmed}`;
   let url: URL;
   try {
     url = new URL(withScheme);
@@ -32,6 +36,9 @@ export function normalizeUrl(raw: string): string | null {
   }
   if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
   if (!url.hostname.includes('.') || url.hostname.endsWith('.')) return null;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(url.hostname) || url.hostname.startsWith('[')) return null;
+  if (url.username || url.password) return null;
+  if (url.port && url.port !== '80' && url.port !== '443') return null;
   return url.toString();
 }
 
@@ -99,6 +106,16 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
       ...(title ? { title } : {}),
     },
   };
+}
+
+/**
+ * The link a run reads when it starts, if any: a competitor's website, or the
+ * page of a podcast, blog post or video. An ad library link is Apify's to read
+ * (not connected yet), and text or an upload has nothing to fetch.
+ */
+export function linkToRead(source: RunSource): string | null {
+  if (source.kind === 'competitor') return source.input === 'website' ? source.url : null;
+  return 'url' in source ? source.url : null;
 }
 
 /** The run's name: the one people gave it, or one made from what it starts from. */

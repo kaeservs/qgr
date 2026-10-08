@@ -36,8 +36,16 @@ if (p.report) {
     website_summary: p.report.website_summary,
   };
 } else {
-  material.source = { type: run.input, title: run.title, url: run.url, text: p.sourceText || '' };
-  if (run.input === 'podcast' || run.input === 'video') {
+  material.source = { type: run.input, title: (p.page && p.page.title) || run.title, text: p.sourceText || '' };
+  if (run.url) material.source.url = run.url;
+  if (p.page && p.page.description && p.sourceText.indexOf(p.page.description) === -1) {
+    material.source.description = p.page.description;
+  }
+  if (p.clip) {
+    const seconds = Math.round(p.clip.duration);
+    const length = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+    material.source.note = 'An uploaded video clip of ' + length + ', which the ads will use. There is no transcript: the text is the team\'s own description of what is said in it.';
+  } else if (run.input === 'podcast' || run.input === 'video') {
     material.source.note = 'No transcript yet: this is the text of the episode or video page.';
   }
 }

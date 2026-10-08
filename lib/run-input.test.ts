@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeUrl, parseNewRun } from './run-input';
+import { linkToRead, normalizeUrl, parseNewRun } from './run-input';
 
 describe('normalizeUrl', () => {
   it('accepts what people paste', () => {
@@ -12,6 +12,13 @@ describe('normalizeUrl', () => {
     for (const bad of ['', 'horizon', 'javascript:alert(1)', 'ftp://files.example/x', 'two words.com', 'https://localhost/']) {
       expect(normalizeUrl(bad)).toBeNull();
     }
+  });
+
+  it('refuses links that are not ordinary public pages', () => {
+    for (const bad of ['http://169.254.169.254/latest', '10.0.0.1', 'https://[::1]/', 'https://user:pw@horizonvisa.com/', 'horizonvisa.com:8443']) {
+      expect(normalizeUrl(bad), bad).toBeNull();
+    }
+    expect(normalizeUrl('horizonvisa.com:443/x')).toBe('https://horizonvisa.com/x');
   });
 });
 
@@ -62,5 +69,15 @@ describe('competitorInputFor', () => {
     expect(competitorInputFor('https://www.facebook.com/ads/library/?id=123')).toBe('ad_link');
     expect(competitorInputFor('https://www.linkedin.com/ad-library/search?companyIds=1')).toBe('ad_link');
     expect(competitorInputFor('https://horizonvisa.com/')).toBe('website');
+  });
+});
+
+describe('linkToRead', () => {
+  it('reads a website or a content page, never an ad library, text or an upload', () => {
+    expect(linkToRead({ kind: 'competitor', input: 'website', url: 'https://horizonvisa.com/' })).toBe('https://horizonvisa.com/');
+    expect(linkToRead({ kind: 'competitor', input: 'ad_link', url: 'https://facebook.com/ads/library/?id=1' })).toBeNull();
+    expect(linkToRead({ kind: 'competitor', input: 'upload', name: 'Atlas', files: ['a.png'] })).toBeNull();
+    expect(linkToRead({ kind: 'custom', type: 'blog', url: 'https://journal.example/post' })).toBe('https://journal.example/post');
+    expect(linkToRead({ kind: 'custom', type: 'text', excerpt: 'x'.repeat(60) })).toBeNull();
   });
 });

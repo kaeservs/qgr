@@ -154,7 +154,7 @@ const beginNode = (stage) =>
     'Begin: load the run',
     'agent_begin',
     `{{ JSON.stringify({ p_run_id: $json.runId, p_stage: "${stage}" }) }}`,
-    `{ stage: '${stage}', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }`,
+    `{ stage: '${stage}', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null, page: { ok: true, url: 'https://example.com/', title: 'Example', text: 'Example', words: 1 }, media_path: null, media: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }`,
     "\n    onError: 'continueErrorOutput',",
   );
 
@@ -165,43 +165,7 @@ const sampleRun = `{ id: 'run-id', kind: 'competitor', input: 'website', url: 'h
 const tracker = `${IMPORTS}
 ${subTrigger}
 ${beginNode('tracker')}
-${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', websiteUrl: 'https://example.com/', domain: 'example.com', competitorHint: 'example', files: [], platforms: ['meta'] }`, "\n    onError: 'continueErrorOutput',")}
-
-const hasWebsite = ifElse({
-  version: 2.3,
-  config: {
-    name: 'Has a website to read?',
-    parameters: {
-      conditions: {
-        options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.websiteUrl }}'), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } }],
-        combinator: 'and',
-      },
-    },
-  },
-});
-
-const readWebsite = node({
-  type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
-  config: {
-    name: 'Read their website',
-    onError: 'continueRegularOutput',
-    parameters: {
-      method: 'GET',
-      url: expr('{{ $json.websiteUrl }}'),
-      sendHeaders: true,
-      headerParameters: { parameters: [{ name: 'User-Agent', value: 'QGR-Competitor-Tracker/1.0' }] },
-      options: {
-        timeout: 20000,
-        redirect: { redirect: { followRedirects: true, maxRedirects: 5 } },
-        response: { response: { responseFormat: 'text', outputPropertyName: 'data' } },
-      },
-    },
-  },
-  output: [{ data: '<html><body>Example</body></html>' }],
-});
-${codeNode('keepWebsiteText', 'Keep the website text', code('shared-page-text.js', { __PLAN__: 'Plan the scan', __FIELD__: 'websiteText' }), `{ runId: 'run-id', websiteText: 'Example' }`)}
+${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'] }`, "\n    onError: 'continueErrorOutput',")}
 ${codeNode('placeholderAds', 'Apify: competitor ads (placeholder)', code('tracker-placeholder-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [] }`)}
 ${codeNode('prepareAds', 'Prepare the ads', code('tracker-prepare-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [{ id: 'a1', platform: 'meta', format: 'video', days_running: 63, text: 'Hook', hook_line: 'Hook' }] }`, "\n    onError: 'continueErrorOutput',")}
 ${codeNode('buildRequest', 'Build the Claude request', code('tracker-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
@@ -211,6 +175,7 @@ ${isOk('answerOk', 'Report ready?')}
 ${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_report: $json.p_report, p_usage: $json.p_usage }) }}', `{ data: 'report-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('tracker')}
 
+const noteWebsite = sticky('## Their website\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
 const noteApify = sticky('## Apify goes here\\nThis node returns **sample ads** so the run works end to end, and the report is marked as sample data.\\n\\nTo connect Apify: replace it with an HTTP Request to your actor\\'s **run-sync-get-dataset-items** endpoint (an Apify token credential), then a Code node mapping each item to { id, platform, format, startDate, isActive, pageName, text, headline, cta, adUrl, mediaUrl } with dataSource \\'apify\\'.', [placeholderAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\\nClaude groups ads into hooks by id and names each ad\\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
 const noteModel = sticky('## Claude\\nOpus 5.5, medium effort, JSON constrained by a schema, server-side fallback on a refusal. No temperature: Opus 5.5 rejects it. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
@@ -219,8 +184,7 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(hasWebsite.onTrue(readWebsite.to(keepWebsiteText.to(placeholderAds))).onFalse(placeholderAds))
-  .add(placeholderAds)
+  .to(placeholderAds)
   .to(prepareAds.onError(whyFailed))
   .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
@@ -229,6 +193,7 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(whyFailed)
   .to(markFailed)
   .to(failed)
+  .add(noteWebsite)
   .add(noteApify)
   .add(noteNumbers)
   .add(noteModel);
@@ -239,43 +204,7 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
 const strategist = `${IMPORTS}
 ${subTrigger}
 ${beginNode('strategist')}
-${codeNode('plan', 'Gather the material', code('strategist-plan.js'), `{ runId: 'run-id', run: ${sampleRun}, brand: { guardrails: [] }, report: null, needsSource: true, sourceUrl: 'https://example.com/ep-1', sourceText: '', sourceLabel: 'Podcast · Ep. 1' }`, "\n    onError: 'continueErrorOutput',")}
-
-const needsSource = ifElse({
-  version: 2.3,
-  config: {
-    name: 'Read the source first?',
-    parameters: {
-      conditions: {
-        options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.needsSource }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
-        combinator: 'and',
-      },
-    },
-  },
-});
-
-const readSource = node({
-  type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
-  config: {
-    name: 'Read the source page',
-    onError: 'continueRegularOutput',
-    parameters: {
-      method: 'GET',
-      url: expr('{{ $json.sourceUrl }}'),
-      sendHeaders: true,
-      headerParameters: { parameters: [{ name: 'User-Agent', value: 'QGR-Ad-Strategist/1.0' }] },
-      options: {
-        timeout: 20000,
-        redirect: { redirect: { followRedirects: true, maxRedirects: 5 } },
-        response: { response: { responseFormat: 'text', outputPropertyName: 'data' } },
-      },
-    },
-  },
-  output: [{ data: '<html><body>Episode notes</body></html>' }],
-});
-${codeNode('keepSourceText', 'Keep the source text', code('shared-page-text.js', { __PLAN__: 'Gather the material', __FIELD__: 'sourceText' }), `{ runId: 'run-id', sourceText: 'Episode notes' }`)}
+${codeNode('plan', 'Gather the material', code('strategist-plan.js'), `{ runId: 'run-id', run: ${sampleRun}, brand: { guardrails: [] }, report: null, page: null, clip: null, sourceText: '', sourceLabel: 'Podcast · Ep. 1' }`, "\n    onError: 'continueErrorOutput',")}
 ${codeNode('buildRequest', 'Build the Claude request', code('strategist-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
 ${claudeNode('claude', 'Claude: write the strategy')}
 ${codeNode('readAnswer', "Read Claude's answer", code('strategist-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_strategy: { angles: [] }, p_usage: { model: 'claude-opus-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
@@ -283,15 +212,14 @@ ${isOk('answerOk', 'Strategy ready?')}
 ${rpcNode('save', 'Save the strategy', 'agent_finish_strategist', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}', `{ data: 'strategy-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('strategist')}
 
-const noteSource = sticky('## Custom runs\\nA blog post is read from its page. A podcast or video has **no transcript yet**: the strategist reads the episode page and is told so. Pasted text is used as it is.', [needsSource, readSource, keepSourceText], { color: 3 });
+const noteSource = sticky('## Custom runs\\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the team\\'s notes on what is said in it. Pasted text is used as it is.', [plan], { color: 3 });
 const noteModel = sticky('## Claude\\nOpus 5.5, high effort: the strategy is the judgement the rest of the run depends on. Budget shares are made to add up to 100 in code, and the brand guardrails always lead.', [buildRequest, claude, readAnswer], { color: 6 });
 
 export default workflow('qgr-ad-strategist', 'QGR · Ad Strategist')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(needsSource.onTrue(readSource.to(keepSourceText.to(buildRequest))).onFalse(buildRequest))
-  .add(buildRequest.onError(whyFailed))
+  .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
   .to(readAnswer.onError(whyFailed))
   .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))

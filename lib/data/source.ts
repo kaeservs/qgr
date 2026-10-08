@@ -4,7 +4,7 @@
 
 import { STAGE_INFO } from '../pipeline';
 import type { NewRunInput } from '../run-input';
-import type { AdSet, Agent, BrandProfile, Competitor, Notice, Platform, PlatformCopy, Run, RunStatus, SearchItem, Strategy, User } from '../types';
+import type { AdSet, Agent, BrandProfile, Competitor, Notice, PageRead, PageSummary, Platform, PlatformCopy, Run, RunStatus, SearchItem, Strategy, User } from '../types';
 
 export type RunWithStatus = Run & { status: RunStatus };
 
@@ -37,8 +37,8 @@ export interface DataSource {
   getSearchIndex(): Promise<SearchItem[]>;
   getBrandProfile(): Promise<BrandProfile>;
 
-  /** Records a run and hands it to the agents. */
-  createRun(input: NewRunInput): Promise<Saved<{ id: string }>>;
+  /** Records a run, with what was read from its link, and hands it to the agents. */
+  createRun(input: NewRunInput, page: PageRead | null): Promise<Saved<{ id: string }>>;
   /** Saves an edit and returns the guardrail flags for the new words. */
   saveVariant(variantId: string, edit: VariantEdit): Promise<Saved<{ warnings: string[] }>>;
   approveVariant(variantId: string): Promise<Saved>;
@@ -72,3 +72,7 @@ export const initialsOf = (name: string) =>
     .slice(0, 2)
     .map((w) => w.charAt(0).toUpperCase())
     .join('');
+
+/** The part of a page read the dashboard shows. */
+export const summarizePage = (page: PageRead): PageSummary =>
+  page.ok ? { ok: true, url: page.url, title: page.title, words: page.words } : { ok: false, url: page.url, error: page.error };

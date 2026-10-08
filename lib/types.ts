@@ -27,6 +27,28 @@ export type RunSource =
   | { kind: 'custom'; type: Exclude<CustomSourceType, 'text'>; url: string }
   | { kind: 'custom'; type: 'text'; excerpt: string };
 
+/**
+ * What the reader got from a link, read when the run starts and stored with it.
+ * The agents read this text; they never fetch a link themselves.
+ */
+export type PageRead =
+  | {
+      ok: true;
+      /** Where the page ended up, after redirects. */
+      url: string;
+      title: string | null;
+      siteName: string | null;
+      description: string | null;
+      type: 'article' | 'video' | 'podcast' | 'website';
+      text: string;
+      words: number;
+      readAt: string;
+    }
+  | { ok: false; url: string; error: string; readAt: string };
+
+/** What a run's page shows of the link it read: never the text itself. */
+export type PageSummary = { ok: true; url: string; title: string | null; words: number } | { ok: false; url: string; error: string };
+
 export interface Stage {
   status: StageStatus;
   /** One line on what the agent produced. */
@@ -53,6 +75,8 @@ export interface Run {
   output: { competitorId?: string; strategyId?: string; adSetId?: string };
   counts: { hooks?: number; angles?: number; variants?: number };
   activity: RunEvent[];
+  /** What was read from the run's link when it started. */
+  page?: PageSummary;
 }
 
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';

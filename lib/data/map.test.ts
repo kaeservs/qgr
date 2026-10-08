@@ -21,6 +21,11 @@ const runRow = (extra: Partial<RunRow> = {}): RunRow => ({
   competitor_id: null,
   created_at: '2026-10-07T10:00:00Z',
   approved_at: null,
+  page_ok: null,
+  page_url: null,
+  page_title: null,
+  page_words: null,
+  page_error: null,
   run_stages: [stage('tracker', 'queued'), stage('strategist', 'queued'), stage('content', 'queued')],
   strategies: null,
   ad_sets: null,
@@ -65,6 +70,12 @@ describe('toRun', () => {
     expect(run.counts).toEqual({ hooks: 2, angles: 3, variants: 3 });
     expect(run.activity.map((e) => e.text)).toEqual(['Run started', 'Ready for review']);
     expect(toRun(runRow({ approved_at: '2026-10-07T11:00:00Z', run_stages: [stage('tracker', 'done'), stage('strategist', 'done'), stage('content', 'done')] })).status).toBe('approved');
+  });
+
+  it('shows what was read from the link, or why not', () => {
+    expect(toRun(runRow({ page_ok: true, page_url: 'https://horizonvisa.example/', page_title: 'Horizon', page_words: 640 })).page).toEqual({ ok: true, url: 'https://horizonvisa.example/', title: 'Horizon', words: 640 });
+    expect(toRun(runRow({ page_ok: false, page_url: 'https://atlas.example/', page_error: 'The site turned the reader away (403).' })).page).toEqual({ ok: false, url: 'https://atlas.example/', error: 'The site turned the reader away (403).' });
+    expect(toRun(runRow())).not.toHaveProperty('page');
   });
 
   it('shows a failure with its reason', () => {
@@ -223,6 +234,11 @@ describe('toAgents and toUser', () => {
 });
 
 describe('toCreateRunArgs', () => {
+  it('passes the page that was read', () => {
+    const page = { ok: true as const, url: 'https://horizonvisa.example/', title: 'Horizon', siteName: null, description: null, type: 'website' as const, text: 'Words.', words: 1, readAt: '2026-10-08T09:00:00Z' };
+    expect(toCreateRunArgs({ source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.example/' }, platforms: ['meta'], goal: 'consultations' }, page)).toMatchObject({ p_page: page });
+  });
+
   it('sends only the arguments a run of that kind has', () => {
     expect(toCreateRunArgs({ source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.example/' }, platforms: ['meta'], goal: 'consultations' })).toEqual({
       p_kind: 'competitor',

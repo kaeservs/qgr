@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, CalendarDays, ExternalLink, Target } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CalendarDays, CircleCheck, ExternalLink, Target, TriangleAlert } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -55,10 +55,27 @@ function SourceBlock({ run }: { run: Run }) {
     return <blockquote className={styles.excerpt}>{source.excerpt}</blockquote>;
   }
   return (
-    <a href={source.url} className={cx('link', styles.sourceUrl)} target="_blank" rel="noreferrer noopener">
-      {source.url}
-      <ExternalLink size={14} aria-hidden />
-    </a>
+    <>
+      <a href={source.url} className={cx('link', styles.sourceUrl)} target="_blank" rel="noreferrer noopener">
+        {source.url}
+        <ExternalLink size={14} aria-hidden />
+      </a>
+      {run.page && (
+        <p className={cx(styles.pageRead, !run.page.ok && styles.pageReadFailed)}>
+          {run.page.ok ? <CircleCheck size={15} aria-hidden /> : <TriangleAlert size={15} aria-hidden />}
+          <span>
+            {run.page.ok ? (
+              <>
+                Read <strong>{run.page.title ?? 'the page'}</strong>
+                {run.page.words > 0 && ` · ${run.page.words.toLocaleString('en-GB')} words`}
+              </>
+            ) : (
+              run.page.error
+            )}
+          </span>
+        </p>
+      )}
+    </>
   );
 }
 

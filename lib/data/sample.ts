@@ -11,7 +11,7 @@ import { PLATFORM_LABEL } from '../platforms';
 import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { BrandProfile, Run } from '../types';
-import { searchIndex } from './source';
+import { searchIndex, summarizePage } from './source';
 import type { DataSource, RunWithStatus } from './source';
 
 // Runs created in this process, kept on globalThis so the API route and the
@@ -63,7 +63,7 @@ export const sampleData: DataSource = {
   getSearchIndex: async () => searchIndex(mock.competitors, mock.strategies, mock.adSets, runList()),
   getBrandProfile: async () => brand,
 
-  createRun: async (input) => {
+  createRun: async (input, page) => {
     const now = new Date().toISOString();
     const list = runList();
     const next = Math.max(...list.map((r) => Number(r.id.slice(2)) || 0)) + 1;
@@ -81,8 +81,10 @@ export const sampleData: DataSource = {
       activity: [
         { at: now, text: startedFrom(input) },
         ...(input.source.kind === 'custom' ? [{ at: now, text: 'Competitor Tracker skipped: custom runs start at the strategy' }] : []),
+        ...(page ? [{ at: now, text: page.ok ? `Read ${page.title ?? hostOf(page.url)}: ${page.words} words` : `Could not read ${hostOf(page.url)}: ${page.error}` }] : []),
         { at: now, text: `Queued for ${platforms}` },
       ],
+      ...(page ? { page: summarizePage(page) } : {}),
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },

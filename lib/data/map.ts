@@ -23,6 +23,8 @@ import type {
   Goal,
   Hook,
   Notice,
+  PageRead,
+  PageSummary,
   Platform,
   PlatformCopy,
   RunSource,
@@ -65,6 +67,12 @@ export interface RunRow {
   competitor_id: string | null;
   created_at: string;
   approved_at: string | null;
+  /** Read from runs.page by JSON path, so the page's text is never fetched for a list. */
+  page_ok: Json | null;
+  page_url: string | null;
+  page_title: string | null;
+  page_words: Json | null;
+  page_error: string | null;
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -223,8 +231,15 @@ export function toRun(row: RunRow): RunWithStatus {
       ...(adSet ? { variants: adSet.ad_variants.length } : {}),
     },
     activity: [...(row.run_events ?? [])].sort((a, b) => a.at.localeCompare(b.at)).map((e) => ({ at: e.at, text: e.text })),
+    ...(pageOf(row) ? { page: pageOf(row) as PageSummary } : {}),
   };
   return { ...run, status: runStatus(run) };
+}
+
+function pageOf(row: Pick<RunRow, 'page_ok' | 'page_url' | 'page_title' | 'page_words' | 'page_error'>): PageSummary | null {
+  if (row.page_ok === null || row.page_url === null) return null;
+  if (row.page_ok === true) return { ok: true, url: row.page_url, title: row.page_title, words: typeof row.page_words === 'number' ? row.page_words : 0 };
+  return { ok: false, url: row.page_url, error: row.page_error ?? 'The page could not be read.' };
 }
 
 /** One update per run, the latest thing that happened to it, newest first. */
@@ -404,9 +419,9 @@ export function toAgents(competitors: number, strategies: number, toReview: AdSe
 }
 
 /** A validated new run as create_run's arguments. Absent SQL defaults are omitted, never sent as null. */
-export function toCreateRunArgs(input: NewRunInput): Database['public']['Functions']['create_run']['Args'] {
+export function toCreateRunArgs(input: NewRunInput, page: PageRead | null = null): Database['public']['Functions']['create_run']['Args'] {
   const { source } = input;
-  const base = { p_title: runTitle(input), p_platforms: input.platforms, p_goal: input.goal };
+  const base = { p_title: runTitle(input), p_platforms: input.platforms, p_goal: input.goal, ...(page ? { p_page: page as unknown as Json } : {}) };
   if (source.kind === 'competitor') {
     if (source.input === 'upload') return { ...base, p_kind: 'competitor', p_input: 'upload', p_competitor_name: source.name, p_files: source.files };
     return { ...base, p_kind: 'competitor', p_input: source.input, p_url: source.url };

@@ -29,7 +29,7 @@ const begin = node({
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
-  output: [{ stage: 'tracker', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }],
+  output: [{ stage: 'tracker', run: { id: 'run-id', kind: 'competitor', input: 'website', url: 'https://example.com/', title: 'example.com', platforms: ['meta', 'linkedin', 'x'], goal: 'consultations', excerpt: null, competitor_name: null, files: null, page: { ok: true, url: 'https://example.com/', title: 'Example', text: 'Example', words: 1 }, media_path: null, media: null }, brand: { company: 'Quantum Global Residency', guardrails: [], voice: [] }, report: null, strategy: null }],
 });
 
 const plan = node({
@@ -38,54 +38,9 @@ const plan = node({
   config: {
     name: "Plan the scan",
     onError: 'continueErrorOutput',
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// What to scan, from the run the database handed back.\nconst ctx = $input.first().json;\nconst run = ctx.run;\nlet domain = null;\nif (run.input === 'website' && run.url) {\n  domain = new URL(run.url).hostname.replace(/^www\\./, '').toLowerCase();\n}\nreturn [{\n  json: {\n    runId: run.id,\n    input: run.input,\n    url: run.url || null,\n    websiteUrl: run.input === 'website' ? run.url : '',\n    domain: domain,\n    competitorHint: run.competitor_name || (domain ? domain.split('.')[0] : null),\n    files: run.files || [],\n    platforms: run.platforms,\n  },\n}];\n" },
+    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// What to scan, from the run the database handed back. The app read the\n// competitor's website when the run started and stored it with the run\n// (run.page): the agents never fetch a link themselves.\nconst ctx = $input.first().json;\nconst run = ctx.run;\nconst page = run.page && run.page.ok ? run.page : null;\n// n8n's Code node has no URL class, so the host is read with a pattern.\nlet domain = null;\nconst host = run.input === 'website' && run.url ? /^https?:\\/\\/([^/:?#]+)/i.exec(run.url) : null;\nif (host && host[1]) domain = host[1].replace(/^www\\./, '').toLowerCase();\nreturn [{\n  json: {\n    runId: run.id,\n    input: run.input,\n    url: run.url || null,\n    domain: domain,\n    competitorHint: run.competitor_name || (page && page.siteName) || (domain ? domain.split('.')[0] : null),\n    websiteText: page ? [page.title, page.description, page.text].filter(Boolean).join('\\n\\n') : '',\n    files: run.files || [],\n    platforms: run.platforms,\n  },\n}];\n" },
   },
-  output: [{ runId: 'run-id', input: 'website', url: 'https://example.com/', websiteUrl: 'https://example.com/', domain: 'example.com', competitorHint: 'example', files: [], platforms: ['meta'] }],
-});
-
-const hasWebsite = ifElse({
-  version: 2.3,
-  config: {
-    name: 'Has a website to read?',
-    parameters: {
-      conditions: {
-        options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.websiteUrl }}'), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } }],
-        combinator: 'and',
-      },
-    },
-  },
-});
-
-const readWebsite = node({
-  type: 'n8n-nodes-base.httpRequest',
-  version: 4.5,
-  config: {
-    name: 'Read their website',
-    onError: 'continueRegularOutput',
-    parameters: {
-      method: 'GET',
-      url: expr('{{ $json.websiteUrl }}'),
-      sendHeaders: true,
-      headerParameters: { parameters: [{ name: 'User-Agent', value: 'QGR-Competitor-Tracker/1.0' }] },
-      options: {
-        timeout: 20000,
-        redirect: { redirect: { followRedirects: true, maxRedirects: 5 } },
-        response: { response: { responseFormat: 'text', outputPropertyName: 'data' } },
-      },
-    },
-  },
-  output: [{ data: '<html><body>Example</body></html>' }],
-});
-
-const keepWebsiteText = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: "Keep the website text",
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// The page's words without markup, capped so the prompt stays small.\n// Used after \"Read their website\" (tracker) and \"Read the source page\" (strategist).\nconst plan = $('Plan the scan').first().json;\nconst html = String($input.first().json.data || '');\nconst text = html\n  .replace(/<(script|style|noscript|svg|template)[\\s\\S]*?<\\/\\1>/gi, ' ')\n  .replace(/<!--[\\s\\S]*?-->/g, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ')\n  .replace(/&amp;/g, '&')\n  .replace(/&(rsquo|lsquo|#39);/g, \"'\")\n  .replace(/&(rdquo|ldquo|quot);/g, '\"')\n  .replace(/&[a-z]+;|&#\\d+;/gi, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 12000);\nreturn [{ json: Object.assign({}, plan, { websiteText: text }) }];\n" },
-  },
-  output: [{ runId: 'run-id', websiteText: 'Example' }],
+  output: [{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'] }],
 });
 
 const placeholderAds = node({
@@ -286,6 +241,8 @@ const done = node({
   output: [{ ok: true, runId: 'run-id' }],
 });
 
+const noteWebsite = sticky('## Their website
+The app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page's words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
 const noteApify = sticky('## Apify goes here\nThis node returns **sample ads** so the run works end to end, and the report is marked as sample data.\n\nTo connect Apify: replace it with an HTTP Request to your actor\'s **run-sync-get-dataset-items** endpoint (an Apify token credential), then a Code node mapping each item to { id, platform, format, startDate, isActive, pageName, text, headline, cta, adUrl, mediaUrl } with dataSource \'apify\'.', [placeholderAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\nClaude groups ads into hooks by id and names each ad\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
 const noteModel = sticky('## Claude\nOpus 5.5, medium effort, JSON constrained by a schema, server-side fallback on a refusal. No temperature: Opus 5.5 rejects it. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
@@ -294,8 +251,7 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(hasWebsite.onTrue(readWebsite.to(keepWebsiteText.to(placeholderAds))).onFalse(placeholderAds))
-  .add(placeholderAds)
+  .to(placeholderAds)
   .to(prepareAds.onError(whyFailed))
   .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
@@ -304,6 +260,7 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(whyFailed)
   .to(markFailed)
   .to(failed)
+  .add(noteWebsite)
   .add(noteApify)
   .add(noteNumbers)
   .add(noteModel);

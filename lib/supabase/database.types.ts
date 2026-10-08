@@ -71,6 +71,7 @@ export type Database = {
           label: string
           updated_at: string
           updated_by: string | null
+          video_edit: Json | null
           warnings: string[]
         }
         Insert: {
@@ -87,6 +88,7 @@ export type Database = {
           label: string
           updated_at?: string
           updated_by?: string | null
+          video_edit?: Json | null
           warnings?: string[]
         }
         Update: {
@@ -103,6 +105,7 @@ export type Database = {
           label?: string
           updated_at?: string
           updated_by?: string | null
+          video_edit?: Json | null
           warnings?: string[]
         }
         Relationships: [
@@ -438,6 +441,9 @@ export type Database = {
           id: string
           input: string
           kind: string
+          media: Json | null
+          media_path: string | null
+          page: Json | null
           platforms: string[]
           summary: string | null
           title: string
@@ -455,6 +461,9 @@ export type Database = {
           id?: string
           input: string
           kind: string
+          media?: Json | null
+          media_path?: string | null
+          page?: Json | null
           platforms: string[]
           summary?: string | null
           title: string
@@ -472,6 +481,9 @@ export type Database = {
           id?: string
           input?: string
           kind?: string
+          media?: Json | null
+          media_path?: string | null
+          page?: Json | null
           platforms?: string[]
           summary?: string | null
           title?: string
@@ -647,6 +659,9 @@ export type Database = {
           p_goal: string
           p_input: string
           p_kind: string
+          p_media?: Json
+          p_media_path?: string
+          p_page?: Json
           p_platforms: string[]
           p_title: string
           p_url?: string
@@ -674,6 +689,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      save_video_edit: {
+        Args: { p_edit: Json; p_variant_id: string }
+        Returns: undefined
+      }
       start_run: {
         Args: {
           p_competitor_name?: string
@@ -682,6 +701,9 @@ export type Database = {
           p_goal: string
           p_input: string
           p_kind: string
+          p_media?: Json
+          p_media_path?: string
+          p_page?: Json
           p_platforms: string[]
           p_title: string
           p_url?: string
