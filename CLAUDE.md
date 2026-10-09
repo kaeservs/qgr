@@ -224,7 +224,16 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   is cancelled. Saving the same words again changes nothing.
 - The Posts page lists what needs a look, what is scheduled, what went out
   and what was cancelled, in the team's time; a stand-in result says nothing
-  was posted.
+  was posted. Its Calendar view (`?view=calendar`) puts each post on the day
+  it goes out in the team's zone (`lib/posts.ts`), and a post none of whose
+  places has started going out moves to another time or goes now
+  (`reschedule_post`, which locks the places first so the publisher cannot be
+  claiming them). Home's calendar marks the days with posts beside the days
+  with runs, and lists what is coming up.
+- Text a client component renders must be the same on the server and in the
+  browser: day and month names are spelled out in code (`dayLabel`), because
+  Node and Chromium disagree on Intl's short forms (`Mon 28 Sep` against
+  `Mon, 28 Sept`), which is a hydration error.
 
 ### Video (`lib/video/`, `components/video/`)
 

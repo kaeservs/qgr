@@ -2,10 +2,12 @@
 
 import { Workflow, X } from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
 import { dayKey, formatShortDate } from '@/lib/format';
-import type { Agent, User } from '@/lib/types';
+import { postsByDay, postState } from '@/lib/posts';
+import type { Agent, Post, User } from '@/lib/types';
+import { PostRows } from '../posts/PostRows';
 import { EmptyState } from '../ui/EmptyState';
 import { AgentPanel } from './AgentPanel';
 import { RunCalendar } from './RunCalendar';
@@ -16,6 +18,7 @@ import styles from './home.module.css';
 export function HomeDashboard({
   user,
   runs,
+  posts,
   agents,
   now,
   nextScan,
@@ -24,6 +27,7 @@ export function HomeDashboard({
 }: {
   user: User;
   runs: RunWithStatus[];
+  posts: Post[];
   agents: Agent[];
   now: string;
   nextScan: string | null;
@@ -32,6 +36,9 @@ export function HomeDashboard({
 }) {
   const [day, setDay] = useState<string | null>(null);
   const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
+  const byDay = useMemo(() => postsByDay(posts, timeZone), [posts, timeZone]);
+  // A chosen day's posts; otherwise the next few still to go out.
+  const dayPosts = day ? (byDay.get(day) ?? []) : [...byDay.values()].flat().filter((p) => postState(p) === 'waiting').slice(0, 3);
 
   return (
     <div className={styles.home}>
@@ -60,9 +67,13 @@ export function HomeDashboard({
             )}
           </div>
           {shown.length === 0 ? (
-            <EmptyState icon={Workflow} title="No runs yet">
-              Start one above, from a competitor’s website or from your own podcast, blog post or text.
-            </EmptyState>
+            day ? (
+              <p className="muted small">No runs started that day.</p>
+            ) : (
+              <EmptyState icon={Workflow} title="No runs yet">
+                Start one above, from a competitor’s website or from your own podcast, blog post or text.
+              </EmptyState>
+            )
           ) : (
             <div className={styles.runList}>
               {shown.map((run) => (
@@ -71,10 +82,33 @@ export function HomeDashboard({
             </div>
           )}
         </section>
+
+        {dayPosts.length > 0 && (
+          <section className="section" aria-labelledby="home-posts">
+            <div className="section-head">
+              <h2 id="home-posts" className="display h2">
+                {day ? `Posts on ${formatShortDate(day)}` : 'Coming up'}
+              </h2>
+              <Link href="/posts?view=calendar" className="link small">
+                Calendar
+              </Link>
+            </div>
+            <PostRows posts={dayPosts} timeZone={timeZone} />
+          </section>
+        )}
       </div>
 
       <aside className={`card ${styles.sideCol}`} aria-label="Calendar and agents">
-        <RunCalendar runDates={runs.map((r) => r.createdAt)} today={now} selected={day} onSelect={setDay} nextScan={nextScan} nextPost={nextPost} timeZone={timeZone} />
+        <RunCalendar
+          runDates={runs.map((r) => r.createdAt)}
+          postDays={[...byDay].flatMap(([d, list]) => list.map(() => d))}
+          today={now}
+          selected={day}
+          onSelect={setDay}
+          nextScan={nextScan}
+          nextPost={nextPost}
+          timeZone={timeZone}
+        />
         <AgentPanel agents={agents} />
       </aside>
     </div>

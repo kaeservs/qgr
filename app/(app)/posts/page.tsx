@@ -1,13 +1,19 @@
+import { CalendarDays, List } from 'lucide-react';
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { PostsCalendar } from '@/components/posts/PostsCalendar';
 import { PostsList } from '@/components/posts/PostsList';
+import styles from '@/components/posts/posts.module.css';
 import { LiveRefresh } from '@/components/ui/LiveRefresh';
-import { getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
-import { zoneLabel } from '@/lib/schedule';
+import { getNow, getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
+import { dayInZone, zoneLabel } from '@/lib/schedule';
 
 export const metadata: Metadata = { title: 'Posts' };
 
-export default async function PostsPage() {
-  const [posts, settings] = await Promise.all([getPosts(), getTeamSettings()]);
+export default async function PostsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const params = await searchParams;
+  const calendar = params.view === 'calendar';
+  const [posts, settings, now] = await Promise.all([getPosts(), getTeamSettings(), getNow()]);
   // While one is going out, or about to, the page follows it.
   const soon = Date.now() + 2 * 60_000;
   const moving = !usingSampleData() && posts.some((p) => p.targets.some((t) => t.status === 'posting' || (t.status === 'scheduled' && Date.parse(p.scheduledFor) <= soon)));
@@ -19,8 +25,18 @@ export default async function PostsPage() {
           <h1 className="display h1">Posts</h1>
           <p className="lead">Approved variants sent to Facebook, Instagram and LinkedIn, and when. Times are {zoneLabel(settings.timeZone)} time.</p>
         </div>
+        <nav className={styles.views} aria-label="Show posts as">
+          <Link href="/posts" aria-current={calendar ? undefined : 'page'}>
+            <List size={16} aria-hidden />
+            List
+          </Link>
+          <Link href="/posts?view=calendar" aria-current={calendar ? 'page' : undefined}>
+            <CalendarDays size={16} aria-hidden />
+            Calendar
+          </Link>
+        </nav>
       </header>
-      <PostsList posts={posts} timeZone={settings.timeZone} />
+      {calendar ? <PostsCalendar posts={posts} timeZone={settings.timeZone} today={dayInZone(now, settings.timeZone)} /> : <PostsList posts={posts} timeZone={settings.timeZone} />}
     </div>
   );
 }

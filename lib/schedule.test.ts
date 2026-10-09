@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatInZone, localTime, nextScanAt, scanLabel, wallTime, zonedToUtc, zoneLabel } from './schedule';
+import { dayLabel, formatInZone, localTime, nextScanAt, scanLabel, wallTime, zonedToUtc, zoneLabel } from './schedule';
 
 describe('times in the team’s zone', () => {
   it('reads a wall time as the instant it names, across daylight saving', () => {
@@ -12,6 +12,9 @@ describe('times in the team’s zone', () => {
   it('shows an instant as the zone’s wall time', () => {
     expect(wallTime('2026-10-12T13:00:00Z', 'America/New_York')).toEqual({ date: '2026-10-12', time: '09:00' });
     expect(formatInZone('2026-10-12T13:00:00Z', 'America/New_York')).toBe('Mon 12 Oct, 09:00');
+    // Spelled the same on the server and in every browser.
+    expect(formatInZone('2026-09-28T03:30:00Z', 'America/New_York')).toBe('Sun 27 Sep, 23:30');
+    expect(dayLabel('2027-02-01')).toBe('Mon 1 Feb');
     expect(zoneLabel('America/New_York')).toBe('New York');
     expect(zoneLabel('UTC')).toBe('UTC');
   });

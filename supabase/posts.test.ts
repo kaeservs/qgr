@@ -249,6 +249,40 @@ describe('the publisher', () => {
   });
 });
 
+describe('moving a post', () => {
+  const when = (postId: string) => t.value<string>(`select to_char(scheduled_for at time zone 'America/New_York', 'YYYY-MM-DD HH24:MI') from public.posts where id = $1`, [postId]);
+
+  it('gives a waiting post another time in the team’s zone, or sends it now', async () => {
+    const { runId, variant } = await adSet();
+    await approve(member, variant.A);
+    const postId = await schedule(member, variant.A, [{ place: 'facebook' }, { place: 'linkedin' }], localIn(5));
+    const later = localIn(24 * 7);
+    await t.asUser(teammate, () => t.db.query(`select public.reschedule_post($1, $2)`, [postId, later]));
+    expect(await when(postId)).toBe(later);
+    expect((await events(runId)).at(-1)).toMatch(/^Variant A moved to \w{3} \d{1,2} \w{3}, \d{2}:\d{2}$/);
+    expect(await takeDue()).toEqual([]);
+
+    await t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [postId]));
+    expect((await takeDue()).map((d) => d.place)).toEqual(['facebook', 'linkedin']);
+    expect((await events(runId)).at(-1)).toBe('Variant A sent now instead of at its time');
+  });
+
+  it('refuses a post that has started going out, and times it cannot take', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.B);
+    const postId = await schedule(member, variant.B, [{ place: 'linkedin' }], localIn(5));
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, '2020-01-01 09:00')`, [postId]))).rejects.toThrow(/has not passed/);
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, '2099-01-01 09:00')`, [postId]))).rejects.toThrow(/90 days ahead/);
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, 'soon')`, [postId]))).rejects.toThrow(/not readable/);
+
+    await t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [postId]));
+    await takeDue();
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, $2)`, [postId, localIn(8)]))).rejects.toThrow(/not started going out/);
+    await t.asUser(outsider, () => expect(t.db.query(`select public.reschedule_post($1)`, [postId])).rejects.toThrow(/Only the QGR team/));
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [uuid()]))).rejects.toThrow(/no longer exists/);
+  });
+});
+
 describe('post files in Storage', () => {
   it('lets a member upload only into their own folder, and remove only what no open post needs', async () => {
     const { variant } = await adSet();

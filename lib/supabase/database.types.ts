@@ -872,6 +872,10 @@ export type Database = {
         Args: { p_error: string; p_run_id: string }
         Returns: undefined
       }
+      reschedule_post: {
+        Args: { p_local_time?: string; p_post_id: string }
+        Returns: string
+      }
       retry_post: {
         Args: { p_place: string; p_post_id: string }
         Returns: undefined

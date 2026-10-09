@@ -52,6 +52,7 @@ export const continueRun: DataSource['continueRun'] = (runId) => source().contin
 export const getPosts: DataSource['getPosts'] = () => source().getPosts();
 export const schedulePost: DataSource['schedulePost'] = (post) => source().schedulePost(post);
 export const cancelPost: DataSource['cancelPost'] = (id) => source().cancelPost(id);
+export const reschedulePost: DataSource['reschedulePost'] = (id, at) => source().reschedulePost(id, at);
 export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
 export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);
 export const deletePostMedia: DataSource['deletePostMedia'] = (path) => source().deletePostMedia(path);

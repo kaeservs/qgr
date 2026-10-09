@@ -323,6 +323,14 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
+  reschedulePost: async (postId, at) => {
+    const { data, error } = await (await db()).rpc('reschedule_post', { p_post_id: postId, ...(at ? { p_local_time: at } : {}) });
+    if (error) return refused(error, 'The post could not be moved.');
+    const publisher = publisherConfig();
+    if (!at && publisher) await pingPublisher(publisher);
+    return { ok: true, value: { at: data }, sample: false };
+  },
+
   retryPost: async (postId, place) => {
     const { error } = await (await db()).rpc('retry_post', { p_post_id: postId, p_place: place });
     if (error) return refused(error, 'The post could not be tried again.');

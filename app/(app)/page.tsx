@@ -12,7 +12,7 @@ export default async function HomePage() {
   return (
     <>
       <LiveRefresh active={moving} />
-      <HomeDashboard user={user} runs={runs} agents={agents} now={now} nextScan={nextScan} nextPost={nextPost ?? null} timeZone={settings.timeZone} />
+      <HomeDashboard user={user} runs={runs} posts={posts} agents={agents} now={now} nextScan={nextScan} nextPost={nextPost ?? null} timeZone={settings.timeZone} />
     </>
   );
 }

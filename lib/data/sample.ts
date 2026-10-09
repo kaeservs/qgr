@@ -174,6 +174,16 @@ export const sampleData: DataSource = {
     for (const t of open) t.status = 'cancelled';
     return { ok: true, value: null, sample: true };
   },
+  reschedulePost: async (postId, at) => {
+    const post = postList().find((p) => p.id === postId);
+    if (!post) return { ok: false, status: 404, error: 'That post no longer exists.' };
+    if (post.targets.some((t) => t.status !== 'scheduled')) return { ok: false, status: 400, error: 'Only a post that has not started going out can be moved.' };
+    const now = new Date().toISOString();
+    post.scheduledFor = at ? zonedToUtc(at, settings().timeZone) : now;
+    // Sent now, it goes straight through the stand-in.
+    if (!at) for (const t of post.targets) Object.assign(t, { status: 'posted', postedAt: now, standIn: true });
+    return { ok: true, value: { at: post.scheduledFor }, sample: true };
+  },
   retryPost: async (postId, place) => {
     const target = postList()
       .find((p) => p.id === postId)

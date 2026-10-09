@@ -557,14 +557,39 @@
   transition: background-color 0.15s ease;
 }
 
-.dayHasRuns::after {
-  content: '';
+/* A run is a gold dot under the date, a post an indigo one. */
+.marks {
   position: absolute;
-  bottom: 5px;
+  bottom: 4px;
+  display: flex;
+  gap: 3px;
+}
+
+.markRun,
+.markPost {
+  display: inline-block;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--gold);
+}
+
+.markPost {
+  background: var(--indigo-400);
+}
+
+.calKey {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 0;
+  padding-left: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.calKey .markPost {
+  margin-left: 8px;
 }
 
 .dayHasRuns:hover {
@@ -584,7 +609,8 @@
   box-shadow: 0 6px 14px rgb(28 27 157 / 0.3);
 }
 
-.daySelected::after {
+.daySelected .markRun,
+.daySelected .markPost {
   background: #fff;
 }
 
