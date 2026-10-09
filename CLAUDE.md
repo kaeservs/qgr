@@ -175,11 +175,24 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   website run in n8n.)
 - A workflow change is proven in n8n with `test_workflow`, pinning the
   trigger, Claude and Supabase nodes and running the code for real.
-- Claude is called with the HTTP Request node: `claude-opus-5-5`, JSON held to
-  a schema (`output_config.format`), effort set explicitly, no `temperature`
-  (Opus 5.5 rejects it), the server-side refusal fallback on. Days running,
-  versions, counts and budget shares are computed in code from the data,
-  never taken from the model.
+- Live runs use each workflow's published version, the agents called from
+  Run pipeline included: an update is a draft until that workflow is
+  published again. n8n publishes a workflow only once every workflow it calls
+  is published (the three agents before Run pipeline, Run pipeline before
+  Scheduled scans).
+- Claude is called with the HTTP Request node: `claude-haiku-5-5` for all
+  three agents while the app is being built, the owner's choice on 2026-10-09
+  (estimated at a cent or two a run against 25 to 60 cents on
+  `claude-opus-5-5`, before either was measured; a person approves every ad
+  before it posts). An agent moves up by changing `MODEL` in its
+  `*-build-request.js`; Sonnet 5.5 costs half what Opus 5.5 does. JSON held
+  to a schema (`output_config.format`), effort set explicitly (medium for the
+  tracker, high for the strategist and the ads), no `temperature` (Haiku 5.5
+  and Opus 5.5 can reject it). `fallbacks: 'default'` retries a refused
+  request on another model on Sonnet and Opus; Haiku has no fallback, so
+  there a refusal stands and the run says so. Days running, versions, counts
+  and budget shares are computed in code from the data, never taken from the
+  model.
 - Credentials, created in n8n and attached by hand: `Anthropic` (Anthropic
   API), `Supabase QGR` (Supabase API: project URL and service role key, on
   every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's,
@@ -188,6 +201,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   `api_key`; this n8n refuses a new plain Header Auth credential on the HTTP
   node). The Meta and LinkedIn tokens and the image model's key will be n8n
   credentials too; nothing that posts or draws is kept in Supabase or the app.
+  A node holds its credential by id, so renaming one in n8n changes nothing
+  (the webhook secret was saved as "Header Auth account").
 - A node names its credential only once that credential exists in n8n: a
   reference to a missing one fails every run before it starts, even a test
   with pinned data ("uses invalid credential").

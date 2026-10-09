@@ -1,8 +1,9 @@
-// The Claude request: Opus 5.5 at high effort, because this copy goes out in
-// QGR's name. The schema asks only for the platforms this run selected, with
-// each platform's own call-to-action buttons. Lengths are in the prompt; the
-// editor flags anything long. No temperature.
-const MODEL = 'claude-opus-5-5';
+// The Claude request: Haiku 5.5 at high effort, because this copy goes out in
+// QGR's name under strict rules (high is Anthropic's advice for Haiku on
+// strict instruction following). The schema asks only for the platforms this
+// run selected, with each platform's own call-to-action buttons. Lengths are
+// in the prompt; the editor flags anything long. No temperature.
+const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'high';
 const ctx = $input.first().json;
 const run = ctx.run;
