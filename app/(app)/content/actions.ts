@@ -1,6 +1,6 @@
 'use server';
 
-import { approveVariant, saveVariant, saveVideoEdit } from '@/lib/data';
+import { approveVariant, removePicture, requestPicture, saveVariant, saveVideoEdit } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { isRecordId, parseVariantEdit } from '@/lib/edit-input';
 import { checkTeam } from '@/lib/session';
@@ -38,4 +38,20 @@ export async function saveVideoEditAction(variantId: unknown, edit: unknown): Pr
   const parsed = parseVideoEdit(edit);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   return saveVideoEdit(variantId, parsed.value);
+}
+
+/** Asks the image model for a picture for a variant, or for another one. */
+export async function requestPictureAction(variantId: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(variantId)) return GONE;
+  return requestPicture(variantId);
+}
+
+/** Takes a variant's picture away, or stops one being made: the design is drawn again. */
+export async function removePictureAction(variantId: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(variantId)) return GONE;
+  return removePicture(variantId);
 }

@@ -202,8 +202,7 @@ async function runContent(runId: string) {
   const { body } = step('content-build-request.js', beginJson) as { body: Json };
   const answer = step('content-read-answer.js', claude(body, contentAnswer), { 'Begin: load the run': beginJson });
   expect(answer.ok, String(answer.p_error)).toBe(true);
-  const imaged = step('content-images-placeholder.js', answer);
-  await rpc('agent_finish_content', { p_run_id: imaged.p_run_id, p_ad_set: imaged.p_ad_set, p_usage: imaged.p_usage });
+  await rpc('agent_finish_content', { p_run_id: answer.p_run_id, p_ad_set: answer.p_ad_set, p_usage: answer.p_usage });
   return { body };
 }
 

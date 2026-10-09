@@ -42,6 +42,7 @@ import type {
   TranscriptLine,
   User,
   Variant,
+  VariantPicture,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
 import { scanLabel } from '../schedule';
@@ -141,7 +142,11 @@ export interface AdSetRow {
     angle: string;
     creative_text: string;
     creative_style: string;
-    image_url: string | null;
+    image_prompt: string | null;
+    picture_path: string | null;
+    picture_status: string;
+    picture_error: string | null;
+    picture_requested_at: string | null;
     copy: Json;
     warnings: string[];
     approved_at: string | null;
@@ -406,7 +411,18 @@ export function toStrategy(row: StrategyRow): Strategy {
   };
 }
 
-export function toAdSet(row: AdSetRow): AdSet {
+/** A variant's picture progress: absent when nothing is pending and nothing needs saying. */
+function pictureOf(v: AdSetRow['ad_variants'][number]): VariantPicture | null {
+  const status = v.picture_status === 'making' || v.picture_status === 'failed' ? v.picture_status : 'none';
+  if (status === 'none' && !v.picture_error) return null;
+  return { status, ...(v.picture_error ? { note: v.picture_error } : {}), ...(status === 'making' && v.picture_requested_at ? { askedAt: v.picture_requested_at } : {}) };
+}
+
+/**
+ * An ad set as the studio shows it. `pictureUrl` turns a picture's path in
+ * Storage into a link the viewer may open; the bucket is private.
+ */
+export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | undefined = () => undefined): AdSet {
   const run = one(row.runs);
   const clip = run ? clipOf(run.media_path, run.media) : null;
   const variants = [...row.ad_variants]
@@ -415,6 +431,8 @@ export function toAdSet(row: AdSetRow): AdSet {
       if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
       // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
       const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
+      const picture = pictureOf(v);
       return [
         {
           id: v.id,
@@ -424,7 +442,9 @@ export function toAdSet(row: AdSetRow): AdSet {
           copy: copyOf(v.copy),
           ...(v.approved_at ? { approved: true } : {}),
           warnings: v.warnings,
-          ...(v.image_url ? { imageUrl: v.image_url } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+          ...(v.image_prompt?.trim() ? { picturePrompt: v.image_prompt.trim() } : {}),
+          ...(picture ? { picture } : {}),
           ...(edit?.ok ? { videoEdit: edit.value } : {}),
         },
       ];
@@ -514,6 +534,7 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
     timeZone: row.time_zone,
     strategistAuto: row.strategist_auto,
     contentAuto: row.content_auto,
+    picturesAuto: row.pictures_auto,
     scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
     scanDay: row.scan_day,
     scanHour: row.scan_hour,

@@ -21,10 +21,13 @@ Placeholders until their keys are in: Apify, image generation and posting.
 An approved variant is posted now or at a time to the Facebook Page,
 Instagram and the LinkedIn Page, and the whole path runs (the file made in the
 browser, the queue in Supabase, n8n's publisher), but n8n's three posting
-steps are stand-ins that post nothing and say so (Posting below). A clip's
-transcript needs `DEEPGRAM_API_KEY`; without it the team types what is said.
-Not built: paid ads (Meta Ads Manager, LinkedIn Campaign Manager) and posting
-to X, whose API is paid; X copy is for pasting.
+steps are stand-ins that post nothing and say so (Posting below). An ad's
+picture is asked for in the studio, or by every new ad, and goes through n8n's
+"QGR · Pictures" to a stand-in that makes none, so the studio says so and
+keeps the drawn design (Pictures below). A clip's transcript needs
+`DEEPGRAM_API_KEY`; without it the team types what is said. Not built: paid
+ads (Meta Ads Manager, LinkedIn Campaign Manager) and posting to X, whose API
+is paid; X copy is for pasting.
 
 The tracker scans the tracked competitors on the team's schedule, and the
 strategist and the Content Agent can each be switched off, so a run waits for
@@ -46,8 +49,9 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
             ── POST /api/post-media → a signed upload link for the file a post goes out with
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant(), approve_variant(), save_video_edit(), update_brand_profile(),
-               continue_run(), schedule_post(), cancel_post(), retry_post(),
-               update_agent_settings(), update_publishing_settings(), set_competitor_tracked()
+               continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
+               request_picture(), remove_picture(), update_agent_settings(),
+               set_pictures_auto(), update_publishing_settings(), set_competitor_tracked()
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
         asking pipeline_next() before each of the last two
     n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
@@ -55,6 +59,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
         publisher_take_due() → each place → publisher_finish() or publisher_fail()
     n8n "QGR · Post results", every six hours → results_take_due() → each place →
         results_record() or results_fail()
+    n8n "QGR · Pictures", every five minutes and on POST /webhook/qgr-picture →
+        picture_take_due() → each ad → picture_finish() or picture_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -95,12 +101,13 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   `report_start_failure` (n8n could not be reached), `save_variant`,
   `approve_variant`, `save_video_edit`, `update_brand_profile`,
   `continue_run` and `report_continue_failure`, `schedule_post`,
-  `cancel_post`, `retry_post`, `update_agent_settings`,
+  `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
+  `remove_picture`, `update_agent_settings`, `set_pictures_auto`,
   `update_publishing_settings`, `set_competitor_tracked`. The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
-  `start_due_scans`, `publisher_*`, `results_*`) is granted to the service
-  role alone.
+  `start_due_scans`, `publisher_*`, `results_*`, `picture_*`) is granted to
+  the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
   any clip, uploads only into their own folder, and removes only their own
@@ -112,13 +119,18 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   their own folder and removes a file only while no post waits on it; n8n
   removes it once the last place has it (`publisher_finish` returns
   `remove_media`), since each platform keeps its own copy.
+- An ad's picture lives in the private bucket `ad-pictures` (10 MB, PNG, JPEG
+  or WebP) at `pictures/{variant}/{uuid}.{ext}`, uploaded by n8n alone. A
+  member reads any, and removes only one no variant shows.
 - The tests run every migration in PGlite, with stand-ins for Supabase's
   roles, `auth.uid()` and storage (`test/supabase.ts`):
   `supabase/access.test.ts` checks who can read and change what,
-  `supabase/posts.test.ts` and `supabase/agents.test.ts` the posts, the
-  switches and the scan schedule, `n8n/pipeline.test.ts` takes each kind of
-  run through all three agents' scripts against them, with Claude's answers as
-  fixtures, and `n8n/publisher.test.ts` a post through the publisher.
+  `supabase/posts.test.ts`, `supabase/agents.test.ts` and
+  `supabase/pictures.test.ts` the posts, the switches, the scan schedule and
+  the pictures, `n8n/pipeline.test.ts` takes each kind of run through all
+  three agents' scripts against them, with Claude's answers as fixtures, and
+  `n8n/publisher.test.ts` a post, its results and a picture through their
+  workflows.
 - `team_members` decides who sees anything. Policies let a member read every
   dashboard table; anyone else, signed in or not, reads nothing, and nobody but
   the service role writes a table. Add a person: create the account
@@ -143,7 +155,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   (`j94ykovP9OH96SxF`), Ad Strategist (`8YaVuKkKlok2rX4K`), Content Agent
   (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
   `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
-  Post results (`bpHjnEFbijGOTrBw`, every six hours).
+  Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
+  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -164,12 +177,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   never taken from the model.
 - Credentials, created in n8n and attached by hand: `Anthropic` (Anthropic
   API), `Supabase QGR` (Supabase API: project URL and service role key, on
-  every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's
-  and the publisher's webhooks). The Meta and LinkedIn tokens will be n8n
-  credentials too; nothing that posts is kept in Supabase or the app.
+  every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's,
+  the publisher's and the pictures' webhooks). The Meta and LinkedIn tokens
+  and the image model's key will be n8n credentials too; nothing that posts or
+  draws is kept in Supabase or the app.
 - Placeholders. "Apify: competitor ads (placeholder)" returns sample ads in
   the shape Apify will, and the report is marked `data_source: placeholder`.
-  "Images (placeholder)" leaves `image_url` empty, so the studio draws the
+  "Image model (stand-in)" in Pictures makes nothing and answers
+  `stand_in: true`, so the studio says no picture was made and draws the
   branded design. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
   (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
   the dashboard says nothing went out; their three "results (stand-in)" twins
@@ -179,9 +194,10 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 ### Switches and scans (`team_settings`)
 
 - `team_settings` is one row: the team's time zone, the two switches
-  (`strategist_auto`, `content_auto`), the scan schedule (`scan_every` off,
-  day or week, with `scan_day` and `scan_hour`) and the Pages posts go to.
-  Settings changes it through `update_agent_settings` and
+  (`strategist_auto`, `content_auto`), whether every new ad asks for a picture
+  (`pictures_auto`), the scan schedule (`scan_every` off, day or week, with
+  `scan_day` and `scan_hour`) and the Pages posts go to. Settings changes it
+  through `update_agent_settings`, `set_pictures_auto` and
   `update_publishing_settings`; Home's agent cards flip the same switches.
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
@@ -253,6 +269,40 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   Node and Chromium disagree on Intl's short forms (`Mon 28 Sep` against
   `Mon, 28 Sept`), which is a hydration error.
 
+### Pictures (`ad_variants.picture_*`, "QGR · Pictures")
+
+- Every ad but a clip's carries an `image_prompt` from the Content Agent (the
+  scene only: no words, the brand's colours, no identifiable people, no
+  flags). A picture is made from it when someone asks in the studio
+  (`request_picture`: Make a picture, Try another picture) or, with the
+  team's switch on (Settings, Agents), for every new ad as it is saved (a
+  trigger on `ad_variants`). The Content Agent makes none itself: a picture
+  takes its own time, and a run should neither wait for one nor fail with it.
+- "QGR · Pictures" takes the asks (`picture_take_due`, claimed with
+  `skip locked`; a claim lost for ten minutes is taken again, three tries at
+  most) at once when the app pings `qgr-picture`, otherwise within five
+  minutes. Each goes to the image model with the path to upload to, and
+  `picture_finish` records it: the picture shows under the ad's words from
+  then on, and an approval is taken back. `picture_fail` keeps the reason. A
+  picture that arrives after its ask was stopped, or after the variant was
+  scheduled, is handed back for n8n to remove (`remove_picture`), never the
+  picture the variant shows.
+- The studio shows pictures through links the server signs as the teammate
+  for an hour (one `createSignedUrls` call for the page). Use the design
+  (`remove_picture`) goes back to the drawn design and hands back the file
+  for the app to remove. A picture asked for and not made in ten minutes may
+  be asked for again.
+- The posted image is drawn by the same function as before
+  (`lib/creative/draw.ts`): a picture covers the frame, cropped about its
+  middle, under a 38% black wash (the studio's `brightness(0.62)`), and the
+  words are gold on it in every style. The publish dialog loads it with CORS
+  so the canvas can still be exported.
+- Until an image model's key is in, "Image model (stand-in)" makes nothing
+  and answers `stand_in: true`: the ask ends, the studio says no picture was
+  made, and the design is drawn. The sample data has one picture
+  (`public/sample/picture-q4.jpg`, marked "Sample picture"), and asking for
+  one there says there is no image model to ask.
+
 ### Video (`lib/video/`, `components/video/`)
 
 - An edit is instructions, kept per variant in `ad_variants.video_edit`
@@ -322,8 +372,9 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
    flagged against the guardrails like any other words on an ad.
 10. **What was approved is what goes out.** A post copies the approved words
     and goes with a file made from the approved variant, shown before it is
-    sent. Editing an approved variant takes its approval away; one waiting to
-    post cannot be edited until its post is cancelled.
+    sent. Editing an approved variant takes its approval away, and so does a
+    new picture or going back to the design; one waiting to post cannot be
+    edited, or change its picture, until its post is cancelled.
 11. **Never post twice by accident.** A place that may have gone out
     (`unknown`) is never sent again by itself: a person checks the Page, then
     sends it again or dismisses it.

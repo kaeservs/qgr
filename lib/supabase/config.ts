@@ -35,10 +35,20 @@ export function pipelineConfig(): PipelineConfig | null {
  * waiting for the publisher's next minute. Its own setting, or else the run
  * webhook's address with /qgr-publish in place of /qgr-run; the same secret.
  */
-export function publisherConfig(): PipelineConfig | null {
+export const publisherConfig = (): PipelineConfig | null => siblingWebhook('N8N_PUBLISH_WEBHOOK_URL', 'qgr-publish');
+
+/**
+ * The "QGR · Pictures" webhook, which makes a picture someone asked for now
+ * instead of at the workflow's next five minutes. Found the same way as the
+ * publisher's.
+ */
+export const picturesConfig = (): PipelineConfig | null => siblingWebhook('N8N_PICTURES_WEBHOOK_URL', 'qgr-picture');
+
+/** A webhook beside the run pipeline's: its own setting, or the run webhook's address with its path in place of qgr-run. */
+function siblingWebhook(setting: string, path: string): PipelineConfig | null {
   const pipeline = pipelineConfig();
   if (!pipeline) return null;
-  const own = process.env.N8N_PUBLISH_WEBHOOK_URL?.trim();
+  const own = process.env[setting]?.trim();
   if (own) return { url: own, secret: pipeline.secret };
-  return /\/qgr-run$/.test(pipeline.url) ? { url: pipeline.url.replace(/\/qgr-run$/, '/qgr-publish'), secret: pipeline.secret } : null;
+  return /\/qgr-run$/.test(pipeline.url) ? { url: pipeline.url.replace(/\/qgr-run$/, `/${path}`), secret: pipeline.secret } : null;
 }

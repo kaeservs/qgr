@@ -1,4 +1,4 @@
-// Builds the n8n Workflow SDK source for the seven QGR workflows from the
+// Builds the n8n Workflow SDK source for the eight QGR workflows from the
 // Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts and
 // publisher.test.ts). The output in ./workflows is what gets validated and
 // saved to n8n through its MCP server. Scripts are embedded with
@@ -273,11 +273,10 @@ ${codeNode('buildRequest', 'Build the Claude request', code('content-build-reque
 ${claudeNode('claude', 'Claude: write the ads')}
 ${codeNode('readAnswer', "Read Claude's answer", code('content-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-opus-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Ads ready?')}
-${codeNode('images', 'Images (placeholder)', code('content-images-placeholder.js'), `{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-opus-5-5' } }`)}
 ${rpcNode('save', 'Save the ads', 'agent_finish_content', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_ad_set: $json.p_ad_set, p_usage: $json.p_usage }) }}', `{ data: 'ad-set-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('content')}
 
-const noteImages = sticky('## Images go here (ChatGPT or Higgsfield)\\nEvery variant already has an **image_prompt**. To connect: send each prompt to the image model, upload the result to Supabase Storage and set **image_url**. Until then the dashboard draws the branded text-on-indigo design.', [images], { color: 3 });
+const notePictures = sticky('## Pictures\\nEvery ad but a clip\\'s carries an **image_prompt**. Pictures are made from it by **QGR · Pictures**, not here: when someone asks in the studio, or for every ad saved here once the team turns that on (Settings, Agents). Without one the dashboard draws the branded design.', [save], { color: 3 });
 const noteGuardrails = sticky('## Guardrails\\nThe prompt carries the brand rules. This step also flags, never silently fixes, any "guarantee", "risk-free", promised timeline or X post over 280 characters, so a person sees it before approving.', [readAnswer], { color: 5 });
 
 export default workflow('qgr-content-agent', 'QGR · Content Agent')
@@ -286,11 +285,11 @@ export default workflow('qgr-content-agent', 'QGR · Content Agent')
   .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
   .to(readAnswer.onError(whyFailed))
-  .to(answerOk.onTrue(images.to(save.onError(whyFailed).to(done))).onFalse(whyFailed))
+  .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))
   .add(whyFailed)
   .to(markFailed)
   .to(failed)
-  .add(noteImages)
+  .add(notePictures)
   .add(noteGuardrails);
 `;
 
@@ -634,8 +633,98 @@ export default workflow('qgr-post-results', 'QGR · Post results')
   .add(noteStandIns);
 `;
 
+// ---------------------------------------------------------------- pictures
+
+const pictureAsk = `{ variant_id: 'variant-id', label: 'A', prompt: 'A calm skyline at dusk, indigo and gold. No words, no people, no flags.', style: 'arcs', path: 'pictures/variant-id/picture-id.png' }`;
+
+const pictures = `${IMPORTS}
+
+const everyFiveMinutes = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every five minutes',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
+  },
+  output: [{}],
+});
+
+const makeNow = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Make now',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-picture',
+      authentication: 'headerAuth',
+      responseMode: 'onReceived',
+      options: { responseCode: { values: { responseCode: 'customCode', customCode: 202 } } },
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: {} }],
+});
+${rpcNode('takeDue', 'Take the pictures asked for', 'picture_take_due', '{{ JSON.stringify({ p_limit: 5 }) }}', pictureAsk, "\n    executeOnce: true,")}
+${codeNode('eachAsk', 'One item per picture', code('shared-items.js'), pictureAsk)}
+${codeNode('imageModel', 'Image model (stand-in)', code('pictures-stand-in.js'), `{ ok: true, variant_id: 'variant-id', path: null, stand_in: true }`)}
+${isOk('made', 'Made?')}
+${rpcNode('finish', 'Record the picture', 'picture_finish', '{{ JSON.stringify({ p_variant_id: $json.variant_id, p_path: $json.path, p_stand_in: $json.stand_in === true }) }}', `{ remove_picture: null }`, "\n    onError: 'continueRegularOutput',")}
+${rpcNode('fail', 'Record why not', 'picture_fail', '{{ JSON.stringify({ p_variant_id: $json.variant_id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+const pictureToRemove = ifElse({
+  version: 2.3,
+  config: {
+    name: 'A picture no variant shows?',
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.remove_picture }}'), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+
+const removePicture = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Remove it from Storage',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'DELETE',
+      url: '${SUPABASE_STORAGE}/object/ad-pictures',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ prefixes: [$json.remove_picture] }) }}'),
+      options: { timeout: 30000 },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{}],
+});
+
+const noteFlow = sticky('## Pictures\\nAt once when someone asks in the studio, and every five minutes for the ads that asked by themselves (the team\\'s switch in Settings, Agents), the database hands over the ads waiting for a picture (**picture_take_due**, claimed so two runs never make the same one; a claim lost for ten minutes is taken again, three times at most). Each goes to the image model with its prompt and the path to upload to, and the answer is recorded (**picture_finish** or **picture_fail**). The studio shows the picture under the ad\\'s words, and takes an approval back, since the ad changed. A picture no variant shows any more is removed from Storage.', [everyFiveMinutes, makeNow, takeDue, eachAsk], { color: 4 });
+const noteStandIn = sticky('## Stand-in until the key is in\\nThis makes nothing and says so: the studio keeps the drawn design and says no picture was made. To connect an image model (ChatGPT\\'s images API or Higgsfield), replace it with steps that keep its output (see the note in its code):\\n- send the item\\'s **prompt** and take the picture back;\\n- upload it with the **Supabase QGR** credential: POST /storage/v1/object/ad-pictures/{path} with its content type (a JPEG or WebP to the same path ending .jpg or .webp);\\n- answer { ok: true, variant_id, path }, or { ok: false, variant_id, error } when the model made nothing.', [imageModel], { color: 3 });
+
+export default workflow('qgr-pictures', 'QGR · Pictures')
+  .add(everyFiveMinutes)
+  .to(takeDue)
+  .to(eachAsk)
+  .to(imageModel)
+  .to(made.onTrue(finish.to(pictureToRemove.onTrue(removePicture))).onFalse(fail))
+  .add(makeNow)
+  .to(takeDue)
+  .add(noteFlow)
+  .add(noteStandIn);
+`;
+
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

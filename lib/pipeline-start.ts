@@ -29,10 +29,12 @@ export async function startPipeline(config: PipelineConfig, runId: string, start
 }
 
 /**
- * Tells the publisher a post is due now. Best effort: the publisher also
- * looks for due posts every minute, so a ping that fails only costs a minute.
+ * Tells a workflow that works from a queue (the publisher, the pictures) that
+ * something is waiting now. Best effort: each also looks on a schedule (the
+ * publisher every minute, the pictures every five), so a ping that fails only
+ * costs that wait.
  */
-export async function pingPublisher(config: PipelineConfig, send: typeof fetch = fetch): Promise<boolean> {
+export async function pingQueue(config: PipelineConfig, send: typeof fetch = fetch): Promise<boolean> {
   try {
     const res = await send(config.url, {
       method: 'POST',

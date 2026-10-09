@@ -166,6 +166,8 @@ export const SAMPLE_CLIP: Clip = {
   size: 671397,
 };
 export const SAMPLE_CLIP_URL = '/sample/eb5-explainer.mp4';
+/** A picture standing in for one an image model made, marked "Sample picture" in the image. */
+export const SAMPLE_PICTURE_URL = '/sample/picture-q4.jpg';
 
 const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
   keep: [{ start: 0, end: SAMPLE_CLIP.duration }],
@@ -455,6 +457,9 @@ export const adSets: AdSet[] = [
         label: 'A',
         angle: 'Clarity over hype',
         creative: { text: 'Your Green Card path, mapped out.', style: 'arcs' },
+        picturePrompt: 'A city skyline at sunset across still water, the sun low and gold between the towers, the sky deep indigo above. No words, no people, no flags.',
+        // Drawn for the sample data and marked so: there is no image model to ask.
+        imageUrl: SAMPLE_PICTURE_URL,
         copy: {
           meta: {
             text: "EB-5 shouldn't feel like a maze. See the six steps to a U.S. Green Card, with independent due diligence at each one.",
@@ -478,6 +483,7 @@ export const adSets: AdSet[] = [
         label: 'B',
         angle: 'Family first',
         creative: { text: 'Move together. Plan early.', style: 'split' },
+        picturePrompt: 'A quiet suburban street at golden hour, a porch light glowing and long soft shadows under an indigo evening sky. No words, no people, no flags.',
         copy: {
           meta: {
             text: "Your children's ages can shape your EB-5 options. Plan early and keep the whole family on one path.",
@@ -501,6 +507,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Diligence you can verify',
         creative: { text: "Ask for the file. We'll send ours.", style: 'spotlight' },
+        picturePrompt: 'A neat stack of bound reports on a wooden desk under a warm gold desk lamp, a deep indigo wall behind. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Every EB-5 project we suggest comes with an independent due-diligence file. Ask any advisor for theirs, then compare.',
@@ -544,6 +551,7 @@ export const adSets: AdSet[] = [
         angle: 'Off the treadmill',
         approved: true,
         creative: { text: 'Your green card, not your employer’s.', style: 'arcs' },
+        picturePrompt: 'An open road leading out of a city toward a gold horizon at dawn, the sky indigo overhead. No words, no people, no flags.',
         copy: {
           meta: {
             text: "Layoffs shouldn't decide where your family lives. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.",
@@ -567,6 +575,7 @@ export const adSets: AdSet[] = [
         label: 'B',
         angle: 'The 60-day question',
         creative: { text: '60 days is not a plan.', style: 'split' },
+        picturePrompt: 'An hourglass on a desk by a window at dusk, its gold sand catching the light, indigo shadows around it. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Lose an H-1B job and the clock starts. Hear how families plan ahead with EB-5 instead of racing it.',
@@ -590,6 +599,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Straight answers',
         creative: { text: 'Straight answers on EB-5.', style: 'spotlight' },
+        picturePrompt: 'A studio microphone on a desk, lit warm gold against a deep indigo backdrop. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'What does EB-5 really involve for an H-1B holder? Our advisors answer the five questions we hear most.',
@@ -624,6 +634,7 @@ export const adSets: AdSet[] = [
         angle: 'Live Q&A',
         approved: true,
         creative: { text: 'EB-5, live. Ask us anything.', style: 'arcs' },
+        picturePrompt: 'An empty seminar room with rows of chairs facing a softly lit stage, gold stage light and indigo walls. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.',
@@ -648,6 +659,7 @@ export const adSets: AdSet[] = [
         angle: 'Costs, plainly',
         approved: true,
         creative: { text: 'What EB-5 really costs.', style: 'split' },
+        picturePrompt: 'A calculator and a fountain pen on a blank ledger page in warm gold light, a deep indigo background. No words or figures, no people, no flags.',
         copy: {
           meta: {
             text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
@@ -671,6 +683,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Judge a project',
         creative: { text: 'How to judge an EB-5 project.', style: 'spotlight' },
+        picturePrompt: 'A mid-rise building under construction at dusk, a crane against an indigo sky and the site lights glowing gold. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Not every EB-5 project is equal. Learn the checks we run on every one, live and free.',
@@ -889,6 +902,7 @@ export const settings: TeamSettings = {
   timeZone: 'America/New_York',
   strategistAuto: false,
   contentAuto: true,
+  picturesAuto: false,
   scanEvery: 'week',
   scanDay: 1,
   scanHour: 9,

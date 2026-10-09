@@ -3,7 +3,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdStudio } from '@/components/content/AdStudio';
-import { getAdSet, getBrandProfile, getClipUrl, getPosts, getRun, getStrategy, getTeamSettings } from '@/lib/data';
+import { LiveRefresh } from '@/components/ui/LiveRefresh';
+import { getAdSet, getBrandProfile, getClipUrl, getPosts, getRun, getStrategy, getTeamSettings, usingSampleData } from '@/lib/data';
 import { PLATFORMS } from '@/lib/types';
 import styles from '@/components/content/content.module.css';
 
@@ -50,15 +51,20 @@ export default async function AdSetPage({ params }: Props) {
 
   // The run's platforms decide which previews show; failing that, whatever copy the set holds.
   const platforms = run?.platforms ?? PLATFORMS.filter((p) => set.variants.some((v) => v.copy[p]));
+  // While a picture is being made, the page follows it.
+  const making = !usingSampleData() && set.variants.some((v) => v.picture?.status === 'making');
   return (
-    <AdStudio
-      adSet={set}
-      strategy={strategy}
-      platforms={platforms}
-      brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }}
-      {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
-      posts={posts.filter((p) => p.adSetId === set.id)}
-      publishing={{ timeZone: settings.timeZone, pages: settings.pages }}
-    />
+    <>
+      <LiveRefresh active={making} />
+      <AdStudio
+        adSet={set}
+        strategy={strategy}
+        platforms={platforms}
+        brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }}
+        {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
+        posts={posts.filter((p) => p.adSetId === set.id)}
+        publishing={{ timeZone: settings.timeZone, pages: settings.pages }}
+      />
+    </>
   );
 }

@@ -4,7 +4,7 @@ import { CalendarClock, Clapperboard, LoaderCircle, Send, X as Close } from 'luc
 import { useEffect, useRef, useState } from 'react';
 import { schedulePostAction } from '@/app/(app)/posts/actions';
 import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
-import type { CreativeRatio } from '@/lib/creative/draw';
+import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import type { NewPostTarget } from '@/lib/data/source';
 import { MAX_THUMBNAIL, PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone, localTime, wallTime, zonedToUtc, zoneLabel } from '@/lib/schedule';
@@ -46,14 +46,30 @@ function thumbnailOf(source: HTMLCanvasElement): string | null {
   return null;
 }
 
-async function drawPicture(ratio: CreativeRatio, variant: Variant, brandName: string, mark: CanvasImageSource | null): Promise<Picture> {
+/**
+ * The image model's picture, read so the canvas may be saved: it comes from
+ * Storage through a signed link, which allows any origin.
+ */
+async function loadPicture(url: string): Promise<CreativePicture> {
+  const image = new Image();
+  image.crossOrigin = 'anonymous';
+  image.src = url;
+  try {
+    await image.decode();
+  } catch {
+    throw new RenderError('The ad’s picture could not be read. Reload the page to try again.');
+  }
+  return { image, width: image.naturalWidth, height: image.naturalHeight };
+}
+
+async function drawPicture(ratio: CreativeRatio, variant: Variant, brandName: string, mark: CanvasImageSource | null, picture: CreativePicture | null): Promise<Picture> {
   const size = PICTURE_SIZE[ratio];
   const canvas = document.createElement('canvas');
   canvas.width = size.width;
   canvas.height = size.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new RenderError('This browser can’t draw the picture.');
-  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, mark });
+  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, mark }, picture);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
   if (!blob) throw new RenderError('This browser can’t make the picture.');
   return { blob, url: URL.createObjectURL(blob), canvas };
@@ -118,9 +134,13 @@ export function PublishDialog({
     let live = true;
     const made: Picture[] = [];
     void (async () => {
-      const [mark] = await Promise.all([loadMark(), loadFrameFonts()]);
+      const [mark, under] = await Promise.all([loadMark(), variant.imageUrl ? loadPicture(variant.imageUrl).catch((err: unknown) => err as RenderError) : null, loadFrameFonts()]);
+      if (under instanceof RenderError) {
+        if (live) setProblem(under.message);
+        return;
+      }
       for (const ratio of ['square', 'wide'] as const) {
-        const picture = await drawPicture(ratio, variant, brand.name, mark).catch(() => null);
+        const picture = await drawPicture(ratio, variant, brand.name, mark, under).catch(() => null);
         if (!picture) continue;
         made.push(picture);
         if (live) setPictures((p) => ({ ...p, [ratio]: picture }));

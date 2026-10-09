@@ -210,10 +210,22 @@ export interface Variant {
   approved?: boolean;
   /** Phrases flagged against the guardrails, for a person to judge before approving. */
   warnings?: string[];
-  /** The generated image, once an image model is connected. Until then the branded design is drawn. */
+  /** The picture an image model made for it, shown under its words. Without one the branded design is drawn. */
   imageUrl?: string;
+  /** What the image model is asked to draw. A video ad has none: its clip is the picture. */
+  picturePrompt?: string;
+  /** A picture asked for and not made yet, or the last ask that failed; and why, or that nothing was made. */
+  picture?: VariantPicture;
   /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
   videoEdit?: VideoEdit;
+}
+
+export interface VariantPicture {
+  /** making: asked for, waiting for the image model; failed: the last ask failed; none: nothing pending. */
+  status: 'none' | 'making' | 'failed';
+  /** Why it failed, or that nothing was made (the image model is not connected yet). */
+  note?: string;
+  askedAt?: string;
 }
 
 export interface AdSet {
@@ -339,6 +351,8 @@ export interface AgentSettings {
   timeZone: string;
   strategistAuto: boolean;
   contentAuto: boolean;
+  /** Every new ad asks the image model for a picture as it is written. */
+  picturesAuto: boolean;
   scanEvery: ScanEvery;
   /** ISO weekday, Monday = 1. */
   scanDay: number;

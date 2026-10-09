@@ -8,7 +8,9 @@ Quantum Global Residency.
 2. **Ad Strategist**: turns that report into a strategy: positioning, three
    angles, a channel plan and guardrails.
 3. **Content Agent**: writes three ad variants, previewed as real Meta,
-   LinkedIn and X posts. Pick one to highlight it and edit it in place.
+   LinkedIn and X posts. Pick one to highlight it and edit it in place, and
+   ask an image model for its picture (or have every new ad ask for one),
+   shown under its words in place of the drawn design.
 
 Approve a variant and post it to the Facebook Page, Instagram and the LinkedIn
 Page, now or at a time you pick; the Posts page shows how each one went, a
@@ -30,17 +32,19 @@ in an uploaded clip is transcribed for you to read over, and becomes captions.
 
 ## Status
 
-Built end to end: the dashboard, the Supabase database and seven n8n
-workflows (the pipeline, its three agents, the publisher, scheduled scans and
-post results). The app
+Built end to end: the dashboard, the Supabase database and eight n8n
+workflows (the pipeline, its three agents, the publisher, scheduled scans,
+post results and pictures). The app
 reads a run's link itself when the run starts (a competitor's site, or a
 podcast, blog or video page) and the agents work from what it read.
 
 Placeholders for now, each to be swapped for the real thing with the same
-output: competitor ads (Apify), ad images (ChatGPT or Higgsfield), and the
-posting itself. Until the Meta and LinkedIn keys are in n8n, a post goes all
-the way through the publisher to a stand-in that posts nothing, and the Posts
-page says so. Not built: paid ads, and posting to X (its API is paid).
+output: competitor ads (Apify), ad pictures (an image model, ChatGPT's or
+Higgsfield's), and the posting itself. Until the Meta and LinkedIn keys are in
+n8n, a post goes all the way through the publisher to a stand-in that posts
+nothing, and the Posts page says so; a picture asked for goes through "QGR ·
+Pictures" to a stand-in that makes none, and the studio says so and keeps the
+drawn design. Not built: paid ads, and posting to X (its API is paid).
 
 ## Run it
 
@@ -58,9 +62,10 @@ them to the team in the SQL editor:
     select private.add_team_member('name@example.com', 'owner');
 
 Runs start once `N8N_RUN_WEBHOOK_SECRET` is set and the same secret is in
-n8n's "QGR webhook secret" credential. Posts and scans need the "QGR ·
-Publisher", "QGR · Scheduled scans" and "QGR · Post results" workflows
-published in n8n; a clip's transcript needs `DEEPGRAM_API_KEY`.
+n8n's "QGR webhook secret" credential. Posts, scans and pictures need the "QGR
+· Publisher", "QGR · Scheduled scans", "QGR · Post results" and "QGR ·
+Pictures" workflows published in n8n; a clip's transcript needs
+`DEEPGRAM_API_KEY`.
 
 To post for real, in n8n: a Meta app whose Page access token can publish to
 the Facebook Page and its Instagram professional account (`pages_manage_posts`,
@@ -68,7 +73,9 @@ the Facebook Page and its Instagram professional account (`pages_manage_posts`,
 LinkedIn app with the Community Management API (`w_organization_social`) for
 the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" and "QGR ·
 Post results" with the steps its note lists, and put the Pages' IDs in
-Settings, Where posts go.
+Settings, Where posts go. To make pictures for real, add the image model's key
+to n8n as a credential and replace the stand-in in "QGR · Pictures" the same
+way.
 
 The database is `supabase/migrations/`. Apply a new migration to the project
 before deploying the code that needs it.
@@ -96,7 +103,7 @@ before deploying the code that needs it.
     lib/page/            reads a link: safe fetching, and the page's main text
     lib/video/           video edits, drawing a frame, making the file, uploading
     components/video/    the cutter, the timeline, the studio's video editor
-    public/sample/       the sample data's clip
+    public/sample/       the sample data's clip and picture
     test/                PGlite with Supabase's roles and storage; n8n's sandbox
     app/globals.css      design tokens: every colour, radius and shadow
     supabase/migrations/ the database: tables, and the functions agents write through

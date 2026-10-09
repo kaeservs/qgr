@@ -117,6 +117,10 @@ export interface DataSource {
   /** Records a post of an approved variant; one to send now is handed to the publisher at once. */
   schedulePost(post: NewPost): Promise<Saved<{ id: string }>>;
   cancelPost(postId: string): Promise<Saved>;
+  /** Asks the image model for a picture for a variant; n8n's "QGR · Pictures" makes it. */
+  requestPicture(variantId: string): Promise<Saved>;
+  /** Takes a variant's picture away, or stops one being made: the design is drawn again. */
+  removePicture(variantId: string): Promise<Saved>;
   /** Moves a post none of whose places has started going out: to a wall time in the team's zone, or now (null). Returns the new time. */
   reschedulePost(postId: string, at: string | null): Promise<Saved<{ at: string }>>;
   retryPost(postId: string, place: Place): Promise<Saved>;

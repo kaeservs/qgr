@@ -328,9 +328,6 @@ describe('Content Agent', () => {
       const agent = variants.find((x) => x.label === v.label)!.warnings;
       expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'])).toEqual(agent);
     }
-
-    const imaged = run('content-images-placeholder.js', out);
-    expect((imaged.p_ad_set as { variants: { image_url: unknown }[] }).variants.every((v) => v.image_url === null)).toBe(true);
   });
 
   it('writes over the team’s clip on a clip run, with no image to describe', () => {

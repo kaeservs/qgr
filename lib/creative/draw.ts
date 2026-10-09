@@ -44,6 +44,27 @@ export interface CreativeArt {
   ratio: CreativeRatio;
 }
 
+/** A picture an image model made, drawn under the words in place of the design. */
+export interface CreativePicture {
+  image: CanvasImageSource;
+  width: number;
+  height: number;
+}
+
+/**
+ * The picture filling the frame, cropped to it about the middle, then darkened
+ * as the studio shows it (brightness 0.62): a black wash at 38% is the same,
+ * and every browser's canvas draws it.
+ */
+function cover(ctx: Ctx, size: Size, picture: CreativePicture) {
+  const scale = Math.max(size.width / picture.width, size.height / picture.height);
+  const w = picture.width * scale;
+  const h = picture.height * scale;
+  ctx.drawImage(picture.image, (size.width - w) / 2, (size.height - h) / 2, w, h);
+  ctx.fillStyle = 'rgb(0 0 0 / 0.38)';
+  ctx.fillRect(0, 0, size.width, size.height);
+}
+
 /** A circle filled from `center` to `share` of the distance to the farthest corner: CSS's radial-gradient circle with a hard stop. */
 function disc(ctx: Ctx, size: Size, cx: number, cy: number, share: number, color: string) {
   const far = Math.max(Math.hypot(cx, cy), Math.hypot(size.width - cx, cy), Math.hypot(cx, size.height - cy), Math.hypot(size.width - cx, size.height - cy));
@@ -94,7 +115,8 @@ export function balanced(ctx: Ctx, text: string, width: number, max: number): st
   return wrap(ctx, text, high, max);
 }
 
-function chip(ctx: Ctx, size: Size, style: CreativeStyle, mark: CanvasImageSource | null, name: string) {
+/** The brand's chip: white, or indigo on the spotlight's light ground. */
+function chip(ctx: Ctx, size: Size, light: boolean, mark: CanvasImageSource | null, name: string) {
   const k = size.width / PREVIEW_WIDTH;
   const font = 11 * k;
   const markSize = mark ? 18 * k : 0;
@@ -104,7 +126,7 @@ function chip(ctx: Ctx, size: Size, style: CreativeStyle, mark: CanvasImageSourc
   const width = 5 * k + (mark ? markSize + 6 * k : 0) + textWidth + 10 * k;
   const x = size.width * 0.06;
   const y = size.width * 0.05;
-  ctx.fillStyle = style === 'spotlight' ? BRAND_COLORS.indigo : 'rgb(255 255 255 / 0.95)';
+  ctx.fillStyle = light ? BRAND_COLORS.indigo : 'rgb(255 255 255 / 0.95)';
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, height / 2);
   ctx.fill();
@@ -113,17 +135,23 @@ function chip(ctx: Ctx, size: Size, style: CreativeStyle, mark: CanvasImageSourc
     ctx.drawImage(mark, cursor, y + (height - markSize) / 2, markSize, markSize);
     cursor += markSize + 6 * k;
   }
-  ctx.fillStyle = style === 'spotlight' ? BRAND_COLORS.white : COLORS.indigoInk;
+  ctx.fillStyle = light ? BRAND_COLORS.white : COLORS.indigoInk;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(name, cursor, y + height / 2);
 }
 
-/** Draws the picture onto `ctx`, which is `size` large. */
-export function drawCreative(ctx: Ctx, size: Size, creative: CreativeArt, brand: { name: string; mark: CanvasImageSource | null }): void {
+/**
+ * Draws the picture onto `ctx`, which is `size` large: the design, or the
+ * image model's picture under the words when the variant has one.
+ */
+export function drawCreative(ctx: Ctx, size: Size, creative: CreativeArt, brand: { name: string; mark: CanvasImageSource | null }, picture: CreativePicture | null = null): void {
   const { width: w, height: h } = size;
   const cq = w / 100;
-  art(ctx, size, creative.style);
+  if (picture) cover(ctx, size, picture);
+  else art(ctx, size, creative.style);
+  // On a picture the spotlight's indigo words and rule give way to gold, as in the studio.
+  const light = creative.style === 'spotlight' && !picture;
 
   const fontSize = TYPE[creative.style][creative.ratio] * w;
   const lineHeight = fontSize * 1.12;
@@ -136,23 +164,23 @@ export function drawCreative(ctx: Ctx, size: Size, creative: CreativeArt, brand:
   if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
   const maxLines = Math.max(1, Math.floor((h - padY * 2) / lineHeight));
   const lines = balanced(ctx, creative.text.trim(), maxWidth, maxLines);
-  const rule = creative.style === 'spotlight' ? 3 * cq + 1.2 * cq : 0;
+  const rule = light ? 3 * cq + 1.2 * cq : 0;
   const block = lines.length * lineHeight + rule;
 
   let top: number;
   if (creative.style === 'arcs') top = (creative.ratio === 'wide' ? 13 : 18) * cq;
   else top = padY + (h - padY * 2 - block) / 2;
 
-  ctx.fillStyle = creative.style === 'spotlight' ? BRAND_COLORS.indigo : BRAND_COLORS.gold;
+  ctx.fillStyle = light ? BRAND_COLORS.indigo : BRAND_COLORS.gold;
   ctx.textBaseline = 'middle';
   ctx.textAlign = creative.style === 'arcs' ? 'center' : 'left';
   const x = creative.style === 'arcs' ? w / 2 : left;
   lines.forEach((line, i) => ctx.fillText(line, x, top + lineHeight * (i + 0.5)));
   if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
-  if (creative.style === 'spotlight') {
+  if (light) {
     ctx.fillStyle = BRAND_COLORS.gold;
     ctx.fillRect(left, top + lines.length * lineHeight + 3 * cq, 18 * cq, 1.2 * cq);
   }
-  chip(ctx, size, creative.style, brand.mark, brand.name);
+  chip(ctx, size, light, brand.mark, brand.name);
 }

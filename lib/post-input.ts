@@ -66,13 +66,14 @@ const isWhole = (v: unknown, min: number, max: number): v is number => typeof v 
 export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
   if (!isRecord(raw)) return { ok: false, error: 'Nothing to save.' };
   if (typeof raw.strategistAuto !== 'boolean' || typeof raw.contentAuto !== 'boolean') return { ok: false, error: 'Say which agents start by themselves.' };
+  if (typeof raw.picturesAuto !== 'boolean') return { ok: false, error: 'Say whether new ads get pictures.' };
   if (!SCAN_EVERY.includes(raw.scanEvery as ScanEvery)) return { ok: false, error: 'Scans run every day, every week, or only when you ask.' };
   if (!isWhole(raw.scanDay, 1, 7) || !isWhole(raw.scanHour, 0, 23)) return { ok: false, error: 'Pick a day and an hour for scans.' };
   const timeZone = text(raw.timeZone);
   if (!timeZone || !isTimeZone(timeZone)) return { ok: false, error: 'Pick a time zone.' };
   return {
     ok: true,
-    value: { strategistAuto: raw.strategistAuto, contentAuto: raw.contentAuto, scanEvery: raw.scanEvery as ScanEvery, scanDay: raw.scanDay, scanHour: raw.scanHour, timeZone },
+    value: { strategistAuto: raw.strategistAuto, contentAuto: raw.contentAuto, picturesAuto: raw.picturesAuto, scanEvery: raw.scanEvery as ScanEvery, scanDay: raw.scanDay, scanHour: raw.scanHour, timeZone },
   };
 }
 

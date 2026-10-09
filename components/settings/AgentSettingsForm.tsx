@@ -99,6 +99,15 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
       </div>
       <p className="muted small">Off: the run waits on its page until someone gives the go-ahead. A run someone starts by hand always starts.</p>
 
+      <div className={styles.switchRow}>
+        <span>
+          <strong>Pictures</strong>
+          <span className="muted small"> an image model makes one for every new ad</span>
+        </span>
+        <Toggle checked={form.picturesAuto} label="Make a picture for every new ad" onChange={(on) => set('picturesAuto', on)} />
+      </div>
+      <p className="muted small">Off: a picture is made only when someone asks for one in the studio. Either way, until the image model’s key is in n8n, none is made and the design is drawn.</p>
+
       <label className="field">
         <span className="label">Time zone</span>
         <select className="input" value={form.timeZone} onChange={(e) => set('timeZone', e.target.value)}>

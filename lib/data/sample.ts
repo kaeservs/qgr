@@ -175,6 +175,9 @@ export const sampleData: DataSource = {
     for (const t of open) t.status = 'cancelled';
     return { ok: true, value: null, sample: true };
   },
+  // Sample data has no image model to ask, and keeps no pictures.
+  requestPicture: async () => ({ ok: false, status: 503, error: 'Sample data makes no pictures: there is no image model to ask.' }),
+  removePicture: async () => ({ ok: true, value: null, sample: true }),
   reschedulePost: async (postId, at) => {
     const post = postList().find((p) => p.id === postId);
     if (!post) return { ok: false, status: 404, error: 'That post no longer exists.' };
