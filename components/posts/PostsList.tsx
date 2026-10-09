@@ -38,7 +38,7 @@ function PostCard({ post, timeZone, busy, onCancel, onRetry }: { post: Post; tim
         <p className={styles.postText}>{text}</p>
         <ul className={styles.targets}>
           {post.targets.map((t) => (
-            <PostTargetRow key={t.place} target={t} busy={busy} onRetry={() => onRetry(t.place)} />
+            <PostTargetRow key={t.place} target={t} busy={busy} timeZone={timeZone} onRetry={() => onRetry(t.place)} />
           ))}
         </ul>
       </div>

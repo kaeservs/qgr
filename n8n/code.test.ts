@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { inN8n } from '../test/n8n';
 import { guardrailWarnings } from '../lib/guardrails';
+import { engagementRate, formatRate } from '../lib/results';
 import type { Platform, PlatformCopy } from '../lib/types';
 
 type Json = Record<string, unknown>;
@@ -194,6 +195,57 @@ describe('Ad Strategist', () => {
     expect(material.source).toMatchObject({ type: 'video', title: 'Founder clip', text: clipCtx.run.excerpt });
     expect(material.source).not.toHaveProperty('url');
     expect(material.source.note).toBe("An uploaded video clip of 0:43, which the ads will use. There is no transcript: the text is the team's own description of what is said in it.");
+  });
+
+  it('says when a clip’s words are its transcript', () => {
+    const clipCtx = { run: { id: 'run-7', kind: 'custom', input: 'video', url: null, title: 'Founder clip', excerpt: 'EB-5 is an investment, and it carries risk.', media_path: 'uploads/u/c.mp4', media: { duration: 6.5, transcript: [{ start: 0.4, end: 2.9, text: 'EB-5 is an investment, and it carries risk.' }] }, platforms: ['meta'], goal: 'consultations' }, brand, report: null };
+    const plan = run('strategist-plan.js', clipCtx);
+    expect(plan).toMatchObject({ clip: { duration: 6.5, transcript: true } });
+    const { body } = run('strategist-build-request.js', plan) as { body: Json };
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.source.note).toBe('An uploaded video clip of 0:07, which the ads will use. The text is what is said in it: a transcript the team read over before the run started.');
+  });
+
+  describe('how QGR’s own posts did', () => {
+    const result = (angle: string, place: string, counts: Json) => ({ angle, creative_text: `Hook for ${angle}`, headline: `Headline ${angle}`, place, posted_at: '2026-09-28T15:00:09+00:00', reach: null, views: null, reactions: null, comments: null, shares: null, clicks: null, ...counts });
+    const results = [
+      result('Live Q&A', 'facebook', { reach: 1860, views: 2410, reactions: 71, comments: 9, shares: 6, clicks: 48 }),
+      result('Costs, plainly', 'instagram', { reach: 3120, reactions: 140, comments: 18, shares: 25 }),
+      result('Off the treadmill', 'linkedin', { reach: 1510, reactions: 64, comments: 12, shares: 9, clicks: 57 }),
+      // No reach, so per view; and one with neither, which cannot be ranked.
+      result('Judge a project', 'facebook', { views: 1000, reactions: 20 }),
+      result('Nothing back', 'linkedin', {}),
+    ];
+    const material = (body: Json) => JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+
+    it('ranks them by engagement, worked out in code the way the dashboard does', () => {
+      const plan = run('strategist-plan.js', { ...competitorCtx, results });
+      const { body } = run('strategist-build-request.js', plan) as { body: Json };
+      const past = material(body).our_past_posts as { angle: string; platform: string; reached: number; engagement: string }[];
+      expect(past.map((x) => x.angle)).toEqual(['Off the treadmill', 'Live Q&A', 'Costs, plainly', 'Judge a project']);
+      expect(past[0]).toMatchObject({ platform: 'LinkedIn', reached: 1510, hook: 'Hook for Off the treadmill', headline: 'Headline Off the treadmill', posted: '2026-09-28' });
+      // The same number the dashboard shows for each.
+      for (const x of past) {
+        const r = results.find((y) => y.angle === x.angle)!;
+        expect(x.engagement).toBe(formatRate(engagementRate({ ...r, at: '' } as never)!));
+      }
+      expect(String(body.system)).toMatch(/our_past_posts is how QGR's own recent posts did/);
+      expect(String(body.system)).toMatch(/no ad may quote them\.$/);
+    });
+
+    it('keeps the best five and the weakest three of many', () => {
+      const many = Array.from({ length: 12 }, (_, i) => result(`Angle ${i}`, 'facebook', { reach: 1000, reactions: 10 * (i + 1) }));
+      const { body } = run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, results: many })) as { body: Json };
+      expect((material(body).our_past_posts as { angle: string }[]).map((x) => x.angle)).toEqual(['Angle 11', 'Angle 10', 'Angle 9', 'Angle 8', 'Angle 7', 'Angle 2', 'Angle 1', 'Angle 0']);
+    });
+
+    it('leaves the request exactly as it was when there are none', () => {
+      const without = run('strategist-build-request.js', run('strategist-plan.js', competitorCtx)) as { body: Json };
+      const empty = run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, results: [result('Nothing back', 'linkedin', {})] })) as { body: Json };
+      expect(empty).toEqual(without);
+      expect(String(without.body.system)).not.toContain('our_past_posts');
+      expect(material(without.body)).not.toHaveProperty('our_past_posts');
+    });
   });
 
   it('keeps one channel per platform with shares adding to 100, and the brand guardrails first', () => {

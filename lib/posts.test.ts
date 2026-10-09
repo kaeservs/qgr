@@ -9,6 +9,7 @@ const post = (id: string, scheduledFor: string, ...targets: PostTarget[]): Post 
   variantLabel: 'A',
   adSetId: 'a',
   adSetTitle: 'Set',
+  angle: 'Plain answers',
   scheduledFor,
   createdAt: scheduledFor,
   targets,

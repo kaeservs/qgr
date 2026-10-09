@@ -168,8 +168,16 @@ export interface PostRow {
     remote_url: string | null;
     stand_in: boolean;
     error: string | null;
+    reach: number | null;
+    views: number | null;
+    reactions: number | null;
+    comments: number | null;
+    shares: number | null;
+    clicks: number | null;
+    results_at: string | null;
+    results_error: string | null;
   }[];
-  ad_variants: One<{ label: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
+  ad_variants: One<{ label: string; angle: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
 }
 
 // ---------------------------------------------------------------- values
@@ -535,6 +543,10 @@ export function toPost(row: PostRow): Post | null {
               ...(t.remote_url ? { url: t.remote_url } : {}),
               standIn: t.stand_in,
               ...(t.error ? { error: t.error } : {}),
+              ...(t.results_at && [t.reach, t.views, t.reactions, t.comments, t.shares, t.clicks].some((n) => n !== null)
+                ? { results: { reach: t.reach, views: t.views, reactions: t.reactions, comments: t.comments, shares: t.shares, clicks: t.clicks, at: t.results_at } }
+                : {}),
+              ...(t.results_error ? { resultsError: t.results_error } : {}),
             },
           ]
         : [],
@@ -545,6 +557,7 @@ export function toPost(row: PostRow): Post | null {
     variantLabel: variant.label,
     adSetId: variant.ad_set_id,
     adSetTitle: one(variant.ad_sets)?.title ?? 'Ads',
+    angle: variant.angle,
     scheduledFor: row.scheduled_for,
     createdAt: row.created_at,
     ...(row.thumbnail ? { thumbnail: row.thumbnail } : {}),

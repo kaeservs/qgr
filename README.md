@@ -11,7 +11,10 @@ Quantum Global Residency.
    LinkedIn and X posts. Pick one to highlight it and edit it in place.
 
 Approve a variant and post it to the Facebook Page, Instagram and the LinkedIn
-Page, now or at a time you pick; the Posts page shows how each one went. The
+Page, now or at a time you pick; the Posts page shows how each one went, a
+calendar of what goes out when, and what worked: each post's reach and
+engagement, added up by angle. The strategist reads the same results before it
+plans the next push. The
 tracker scans the competitors you track on a schedule (Settings, Agents), and
 the strategist and the Content Agent can be switched off so a run waits for
 your go-ahead before them.
@@ -27,8 +30,9 @@ in an uploaded clip is transcribed for you to read over, and becomes captions.
 
 ## Status
 
-Built end to end: the dashboard, the Supabase database and six n8n workflows
-(the pipeline, its three agents, the publisher and scheduled scans). The app
+Built end to end: the dashboard, the Supabase database and seven n8n
+workflows (the pipeline, its three agents, the publisher, scheduled scans and
+post results). The app
 reads a run's link itself when the run starts (a competitor's site, or a
 podcast, blog or video page) and the agents work from what it read.
 
@@ -55,15 +59,16 @@ them to the team in the SQL editor:
 
 Runs start once `N8N_RUN_WEBHOOK_SECRET` is set and the same secret is in
 n8n's "QGR webhook secret" credential. Posts and scans need the "QGR ·
-Publisher" and "QGR · Scheduled scans" workflows published in n8n; a clip's
-transcript needs `DEEPGRAM_API_KEY`.
+Publisher", "QGR · Scheduled scans" and "QGR · Post results" workflows
+published in n8n; a clip's transcript needs `DEEPGRAM_API_KEY`.
 
 To post for real, in n8n: a Meta app whose Page access token can publish to
 the Facebook Page and its Instagram professional account (`pages_manage_posts`,
 `pages_read_engagement`, `instagram_basic`, `instagram_content_publish`), and a
 LinkedIn app with the Community Management API (`w_organization_social`) for
-the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" with the
-steps its note lists, and put the Pages' IDs in Settings, Where posts go.
+the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" and "QGR ·
+Post results" with the steps its note lists, and put the Pages' IDs in
+Settings, Where posts go.
 
 The database is `supabase/migrations/`. Apply a new migration to the project
 before deploying the code that needs it.
@@ -85,6 +90,8 @@ before deploying the code that needs it.
     lib/mock-data.ts     the sample data
     lib/pipeline.ts      the agents' order and how a run's status is derived
     lib/schedule.ts      the team's time zone: scan times, post times, wall clock to UTC
+    lib/posts.ts         what a post's places add up to, and the calendar's days
+    lib/results.ts       how posts did: engagement worked out from the platforms' counts
     lib/creative/        draws an ad's picture for posting, as the studio shows it
     lib/page/            reads a link: safe fetching, and the page's main text
     lib/video/           video edits, drawing a frame, making the file, uploading

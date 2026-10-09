@@ -25,7 +25,38 @@ const system = [
   'EB-5 is an investment with risk: nothing may promise an outcome, a timeline or a return.',
 ].join('\n');
 
+// How QGR's own recent posts did, from the platforms' numbers: engagement per
+// person reached (per view where a platform gives no reach), computed here and
+// never by the model. The dashboard computes it the same way (lib/results.ts).
+// Only when there are some: without them the request is exactly as before.
+const PLACE = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
+const has = function (n) { return n !== null && n !== undefined; };
+function rate(r) {
+  const base = has(r.reach) ? r.reach : r.views;
+  if (!has(base) || base <= 0) return null;
+  return ((r.reactions || 0) + (r.comments || 0) + (r.shares || 0) + (r.clicks || 0)) / base;
+}
+const measured = (p.results || [])
+  .map(function (r) { return { r: r, rate: rate(r) }; })
+  .filter(function (x) { return x.rate !== null; })
+  .sort(function (a, b) { return b.rate - a.rate; });
+// The best five and, past them, the weakest three.
+const shown = measured.length > 8 ? measured.slice(0, 5).concat(measured.slice(-3)) : measured;
+const pastPosts = shown.map(function (x) {
+  return {
+    angle: x.r.angle,
+    hook: x.r.creative_text,
+    headline: x.r.headline || null,
+    platform: PLACE[x.r.place] || x.r.place,
+    posted: String(x.r.posted_at).slice(0, 10),
+    reached: has(x.r.reach) ? x.r.reach : x.r.views,
+    engagement: (Math.round(x.rate * 1000) / 10).toFixed(1) + '%',
+  };
+});
+const RESULTS_RULE = "our_past_posts is how QGR's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
+
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
+if (pastPosts.length > 0) material.our_past_posts = pastPosts;
 if (p.report) {
   material.competitor_report = {
     competitor: p.report.competitor,
@@ -44,7 +75,9 @@ if (p.report) {
   if (p.clip) {
     const seconds = Math.round(p.clip.duration);
     const length = Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
-    material.source.note = 'An uploaded video clip of ' + length + ', which the ads will use. There is no transcript: the text is the team\'s own description of what is said in it.';
+    material.source.note = 'An uploaded video clip of ' + length + ', which the ads will use. ' + (p.clip.transcript
+      ? 'The text is what is said in it: a transcript the team read over before the run started.'
+      : 'There is no transcript: the text is the team\'s own description of what is said in it.');
   } else if (run.input === 'podcast' || run.input === 'video') {
     material.source.note = 'No transcript yet: this is the text of the episode or video page.';
   }
@@ -98,7 +131,7 @@ return [{
       max_tokens: 16000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: system,
+      system: pastPosts.length > 0 ? system + '\n\n' + RESULTS_RULE : system,
       messages: [{ role: 'user', content: 'The material, as JSON:\n' + JSON.stringify(material) }],
     },
   },

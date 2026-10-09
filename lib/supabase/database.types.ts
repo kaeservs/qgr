@@ -368,50 +368,74 @@ export type Database = {
         Row: {
           attempts: number
           claimed_at: string | null
+          clicks: number | null
+          comments: number | null
           error: string | null
           media_kind: string | null
           media_path: string | null
           place: string
           post_id: string
           posted_at: string | null
+          reach: number | null
+          reactions: number | null
           remote_id: string | null
           remote_url: string | null
+          results_at: string | null
+          results_error: string | null
+          shares: number | null
           stand_in: boolean
           status: string
           text: string
           updated_at: string
+          views: number | null
         }
         Insert: {
           attempts?: number
           claimed_at?: string | null
+          clicks?: number | null
+          comments?: number | null
           error?: string | null
           media_kind?: string | null
           media_path?: string | null
           place: string
           post_id: string
           posted_at?: string | null
+          reach?: number | null
+          reactions?: number | null
           remote_id?: string | null
           remote_url?: string | null
+          results_at?: string | null
+          results_error?: string | null
+          shares?: number | null
           stand_in?: boolean
           status?: string
           text: string
           updated_at?: string
+          views?: number | null
         }
         Update: {
           attempts?: number
           claimed_at?: string | null
+          clicks?: number | null
+          comments?: number | null
           error?: string | null
           media_kind?: string | null
           media_path?: string | null
           place?: string
           post_id?: string
           posted_at?: string | null
+          reach?: number | null
+          reactions?: number | null
           remote_id?: string | null
           remote_url?: string | null
+          results_at?: string | null
+          results_error?: string | null
+          shares?: number | null
           stand_in?: boolean
           status?: string
           text?: string
           updated_at?: string
+          views?: number | null
         }
         Relationships: [
           {
@@ -876,6 +900,15 @@ export type Database = {
         Args: { p_local_time?: string; p_post_id: string }
         Returns: string
       }
+      results_fail: {
+        Args: { p_error: string; p_place: string; p_post_id: string }
+        Returns: undefined
+      }
+      results_record: {
+        Args: { p_place: string; p_post_id: string; p_results: Json }
+        Returns: undefined
+      }
+      results_take_due: { Args: { p_limit?: number }; Returns: Json }
       retry_post: {
         Args: { p_place: string; p_post_id: string }
         Returns: undefined

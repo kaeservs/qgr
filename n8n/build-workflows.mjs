@@ -1,4 +1,4 @@
-// Builds the n8n Workflow SDK source for the six QGR workflows from the
+// Builds the n8n Workflow SDK source for the seven QGR workflows from the
 // Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts and
 // publisher.test.ts). The output in ./workflows is what gets validated and
 // saved to n8n through its MCP server. Scripts are embedded with
@@ -119,6 +119,22 @@ const ${varName} = ifElse({
   },
 });`;
 
+/** An IF on any expression that comes out true or false. */
+const ifTrue = (varName, name, expression) => `
+const ${varName} = ifElse({
+  version: 2.3,
+  config: {
+    name: ${JSON.stringify(name)},
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr(${JSON.stringify(expression)}), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});`;
+
 const setNode = (varName, name, assignments, output) => `
 const ${varName} = node({
   type: 'n8n-nodes-base.set',
@@ -230,7 +246,7 @@ ${isOk('answerOk', 'Strategy ready?')}
 ${rpcNode('save', 'Save the strategy', 'agent_finish_strategist', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}', `{ data: 'strategy-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('strategist')}
 
-const noteSource = sticky('## Custom runs\\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the team\\'s notes on what is said in it. Pasted text is used as it is.', [plan], { color: 3 });
+const noteSource = sticky('## Custom runs\\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the words said in it: its transcript, read over by the team, or what they typed. Pasted text is used as it is.\\n\\n## What worked\\nThe material carries how the team\\'s own recent posts did (**QGR · Post results**), ranked by engagement per person reached, worked out in code. Without any, the request is exactly as before.', [plan], { color: 3 });
 const noteModel = sticky('## Claude\\nOpus 5.5, high effort: the strategy is the judgement the rest of the run depends on. Budget shares are made to add up to 100 in code, and the brand guardrails always lead.', [buildRequest, claude, readAnswer], { color: 6 });
 
 export default workflow('qgr-ad-strategist', 'QGR · Ad Strategist')
@@ -553,8 +569,73 @@ export default workflow('qgr-scheduled-scans', 'QGR · Scheduled scans')
   .add(noteFlow);
 `;
 
+// ---------------------------------------------------------------- post results
+
+const resultsNode = (varName, place, label) =>
+  codeNode(varName, `${label} results (stand-in)`, code('results-stand-in.js', { __PLACE_NAME__: label }), `{ ok: true, post_id: 'post-id', place: '${place}', results: null, stand_in: true }`);
+
+const results = `${IMPORTS}
+
+const everySixHours = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every six hours',
+    parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 6, triggerAtMinute: 17 }] } },
+  },
+  output: [{}],
+});
+${rpcNode('takeDue', 'Take the posts to read', 'results_take_due', '{{ JSON.stringify({ p_limit: 50 }) }}', `{ post_id: 'post-id', place: 'facebook', remote_id: '1234567890_987654321', media_kind: 'image', posted_at: '2026-10-08T13:00:12+00:00', page: { id: '1234567890' } }`, "\n    executeOnce: true,")}
+${codeNode('eachPlace', 'One item per place', code('shared-items.js'), `{ post_id: 'post-id', place: 'facebook', remote_id: '1234567890_987654321', media_kind: 'image', posted_at: '2026-10-08T13:00:12+00:00', page: { id: '1234567890' } }`)}
+
+const whichPlace = switchCase({
+  version: 3.4,
+  config: {
+    name: 'Which place?',
+    parameters: {
+      mode: 'rules',
+      rules: {
+        values: [
+          { outputKey: 'facebook', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'facebook', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+          { outputKey: 'instagram', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'instagram', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+          { outputKey: 'linkedin', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'linkedin', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+        ],
+      },
+      options: {},
+    },
+  },
+});
+${resultsNode('facebook', 'facebook', 'Facebook')}
+${resultsNode('instagram', 'instagram', 'Instagram')}
+${resultsNode('linkedin', 'linkedin', 'LinkedIn')}
+${ifTrue('gotNumbers', 'Numbers back?', '{{ $json.ok === true && $json.results !== null && typeof $json.results === "object" }}')}
+${ifTrue('refused', 'Refused?', '{{ $json.ok === false }}')}
+${rpcNode('record', 'Record the numbers', 'results_record', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_results: $json.results }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('recordWhy', 'Record why not', 'results_fail', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+const noteFlow = sticky('## Results\\nEvery six hours the database hands over the posts that went out for real in the last four weeks and were not read in the last six hours (**results_take_due**). Each place is asked for its numbers, which are recorded as counts (**results_record**). If a platform refuses, the reason is kept beside the last numbers (**results_fail**). A stand-in post has none: nothing was posted.', [everySixHours, takeDue, eachPlace], { color: 4 });
+const noteStandIns = sticky('## Stand-ins until the keys are in\\nThese read nothing. Each is replaced by a request with the same output, using the same tokens as the publisher (check the metric names against each platform\\'s current docs):\\n- **Facebook**: the post\\'s insights (reach, views, reactions, clicks) and its comments and shares.\\n- **Instagram**: the media\\'s insights (reach, views, likes, comments, shares). A feed post has no clicks: null.\\n- **LinkedIn**: organizationalEntityShareStatistics for the share (unique impressions, impressions, likes, comments, shares, clicks).', [facebook, instagram, linkedin], { color: 3 });
+
+export default workflow('qgr-post-results', 'QGR · Post results')
+  .add(everySixHours)
+  .to(takeDue)
+  .to(eachPlace)
+  .to(whichPlace
+    .onCase(0, facebook)
+    .onCase(1, instagram)
+    .onCase(2, linkedin))
+  .add(facebook)
+  .to(gotNumbers.onTrue(record).onFalse(refused.onTrue(recordWhy)))
+  .add(instagram)
+  .to(gotNumbers)
+  .add(linkedin)
+  .to(gotNumbers)
+  .add(noteFlow)
+  .add(noteStandIns);
+`;
+
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

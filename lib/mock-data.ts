@@ -646,6 +646,7 @@ export const adSets: AdSet[] = [
         id: 'v-ns-b',
         label: 'B',
         angle: 'Costs, plainly',
+        approved: true,
         creative: { text: 'What EB-5 really costs.', style: 'split' },
         copy: {
           meta: {
@@ -898,7 +899,13 @@ export const settings: TeamSettings = {
   },
 };
 
-/** Posts of approved variants: one went out through the stand-ins, one waits for Thursday morning. */
+const NS_A_META = 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.';
+
+/**
+ * Posts of approved variants: three went out in the past fortnight and have
+ * their numbers back, one went through the stand-in, one waits for Thursday
+ * morning.
+ */
 export const posts: Post[] = [
   {
     id: 'p-2',
@@ -906,11 +913,12 @@ export const posts: Post[] = [
     variantLabel: 'A',
     adSetId: 'a-northstar',
     adSetTitle: 'Webinar season',
+    angle: 'Live Q&A',
     scheduledFor: '2026-10-08T13:00:00Z',
     createdAt: '2026-10-07T08:15:00Z',
     targets: [
-      { place: 'facebook', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
-      { place: 'instagram', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
+      { place: 'facebook', text: NS_A_META, media: 'image', status: 'scheduled', standIn: false },
+      { place: 'instagram', text: NS_A_META, media: 'image', status: 'scheduled', standIn: false },
     ],
   },
   {
@@ -919,6 +927,7 @@ export const posts: Post[] = [
     variantLabel: 'A',
     adSetId: 'a-podcast',
     adSetTitle: 'From H-1B to EB-5',
+    angle: 'Off the treadmill',
     scheduledFor: '2026-10-06T14:00:00Z',
     createdAt: '2026-10-06T11:20:00Z',
     targets: [
@@ -929,6 +938,89 @@ export const posts: Post[] = [
         status: 'posted',
         postedAt: '2026-10-06T14:00:20Z',
         standIn: true,
+      },
+    ],
+  },
+  {
+    id: 'p-5',
+    variantId: 'v-pod-a',
+    variantLabel: 'A',
+    adSetId: 'a-podcast',
+    adSetTitle: 'From H-1B to EB-5',
+    angle: 'Off the treadmill',
+    scheduledFor: '2026-10-05T13:30:00Z',
+    createdAt: '2026-10-05T16:20:00Z',
+    targets: [
+      {
+        place: 'linkedin',
+        text: 'In episode 12, our advisors explain how H-1B professionals use EB-5 to stop tying their future to one employer.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-10-05T13:30:15Z',
+        standIn: false,
+        results: { reach: 1510, views: 2380, reactions: 64, comments: 12, shares: 9, clicks: 57, at: '2026-10-07T06:00:00Z' },
+      },
+    ],
+  },
+  {
+    id: 'p-4',
+    variantId: 'v-ns-b',
+    variantLabel: 'B',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    angle: 'Costs, plainly',
+    scheduledFor: '2026-09-30T14:00:00Z',
+    createdAt: '2026-09-29T10:05:00Z',
+    targets: [
+      {
+        place: 'facebook',
+        text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-30T14:00:12Z',
+        standIn: false,
+        results: { reach: 2240, views: 3010, reactions: 58, comments: 21, shares: 11, clicks: 66, at: '2026-10-07T06:00:00Z' },
+      },
+      {
+        place: 'instagram',
+        text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-30T14:00:31Z',
+        standIn: false,
+        // Instagram gives no clicks for a feed post.
+        results: { reach: 3120, views: 4050, reactions: 140, comments: 18, shares: 25, clicks: null, at: '2026-10-07T06:00:00Z' },
+      },
+    ],
+  },
+  {
+    id: 'p-3',
+    variantId: 'v-ns-a',
+    variantLabel: 'A',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    angle: 'Live Q&A',
+    scheduledFor: '2026-09-28T15:00:00Z',
+    createdAt: '2026-09-27T08:40:00Z',
+    targets: [
+      {
+        place: 'facebook',
+        text: NS_A_META,
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-28T15:00:09Z',
+        standIn: false,
+        results: { reach: 1860, views: 2410, reactions: 71, comments: 9, shares: 6, clicks: 48, at: '2026-10-07T06:00:00Z' },
+      },
+      {
+        place: 'linkedin',
+        text: 'A free live session on EB-5 for Indian professionals and families: the process, the costs, and how to judge a project.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-28T15:00:24Z',
+        standIn: false,
+        results: { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29, at: '2026-10-07T06:00:00Z' },
+        resultsError: 'LinkedIn did not answer (timeout).',
       },
     ],
   },

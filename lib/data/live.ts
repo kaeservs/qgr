@@ -33,7 +33,7 @@ const STRATEGY =
 const AD_SET =
   'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_url, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
 const POST =
-  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error), ad_variants!posts_variant_id_fkey(label, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
+  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
 const MEDIA_BUCKET = 'run-media';
 /** The files posts go out with, made in the browser. Removed once every place has its post. */

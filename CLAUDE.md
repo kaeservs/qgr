@@ -53,6 +53,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
     n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
     n8n "QGR · Publisher", every minute and on POST /webhook/qgr-publish →
         publisher_take_due() → each place → publisher_finish() or publisher_fail()
+    n8n "QGR · Post results", every six hours → results_take_due() → each place →
+        results_record() or results_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -97,7 +99,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   `update_publishing_settings`, `set_competitor_tracked`. The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
-  `start_due_scans`, `publisher_*`) is granted to the service role alone.
+  `start_due_scans`, `publisher_*`, `results_*`) is granted to the service
+  role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
   any clip, uploads only into their own folder, and removes only their own
@@ -139,7 +142,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   (`jZPgNf2YZJddmJ7y`, webhook `POST /webhook/qgr-run`), Competitor Tracker
   (`j94ykovP9OH96SxF`), Ad Strategist (`8YaVuKkKlok2rX4K`), Content Agent
   (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
-  `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly).
+  `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
+  Post results (`bpHjnEFbijGOTrBw`, every six hours).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -168,8 +172,9 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   "Images (placeholder)" leaves `image_url` empty, so the studio draws the
   branded design. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
   (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
-  the dashboard says nothing went out. Each is replaced by real steps with the
-  same output; the node's comment and the sticky beside it say what they are.
+  the dashboard says nothing went out; their three "results (stand-in)" twins
+  in Post results read nothing. Each is replaced by real steps with the same
+  output; the node's comment and the sticky beside it say what they are.
 
 ### Switches and scans (`team_settings`)
 
@@ -230,6 +235,19 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   (`reschedule_post`, which locks the places first so the publisher cannot be
   claiming them). Home's calendar marks the days with posts beside the days
   with runs, and lists what is coming up.
+- Results: once a place has gone out for real, "QGR · Post results" reads its
+  numbers every six hours for four weeks (`results_take_due`) and records them
+  on the place (`reach`, `views`, `reactions`, `comments`, `shares`, `clicks`,
+  each a count or null where the platform does not report it; `results_record`).
+  A failed read keeps the numbers before it and says why (`results_fail`). A
+  stand-in post has none. Engagement is reactions, comments, shares and clicks
+  per person reached (per view where there is no reach), computed in code,
+  never by a model: `lib/results.ts` for the dashboard and the strategist's own
+  script for its prompt, kept in step by `n8n/code.test.ts`. Posts shows each
+  place's numbers and a Results view (totals, engagement by angle, every place
+  measured). `agent_begin` hands the strategist the team's recent results; its
+  material then carries the best five and weakest three (`our_past_posts`), and
+  with none the request is exactly as before.
 - Text a client component renders must be the same on the server and in the
   browser: day and month names are spelled out in code (`dayLabel`), because
   Node and Chromium disagree on Intl's short forms (`Mon 28 Sep` against

@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { toPost } from '../lib/data/map';
+import { engagementRate, formatRate } from '../lib/results';
 import type { PostRow } from '../lib/data/map';
 import { inN8n } from '../test/n8n';
 import { testDatabase } from '../test/supabase';
@@ -124,7 +125,7 @@ describe('a post, from the dashboard to the stand-ins', () => {
       t.value<PostRow>(
         `select json_build_object('id', p.id, 'variant_id', p.variant_id, 'scheduled_for', p.scheduled_for, 'created_at', p.created_at, 'thumbnail', p.thumbnail,
           'post_targets', (select json_agg(json_build_object('place', x.place, 'text', x.text, 'media_kind', x.media_kind, 'status', x.status, 'posted_at', x.posted_at, 'remote_url', x.remote_url, 'stand_in', x.stand_in, 'error', x.error)) from public.post_targets x where x.post_id = p.id),
-          'ad_variants', (select json_build_object('label', v.label, 'ad_set_id', v.ad_set_id, 'ad_sets', (select json_build_object('title', s.title) from public.ad_sets s where s.id = v.ad_set_id)) from public.ad_variants v where v.id = p.variant_id)
+          'ad_variants', (select json_build_object('label', v.label, 'angle', v.angle, 'ad_set_id', v.ad_set_id, 'ad_sets', (select json_build_object('title', s.title) from public.ad_sets s where s.id = v.ad_set_id)) from public.ad_variants v where v.id = p.variant_id)
         ) from public.posts p where p.id = $1`,
         [postId],
       ),
@@ -155,5 +156,44 @@ describe('a post, from the dashboard to the stand-ins', () => {
       .replace(',', '');
     await t.asUser(member, () => t.db.query(`select public.schedule_post($1, '[{"place":"linkedin"}]'::jsonb, $2)`, [variantId, local]));
     expect((await publish()).posted).toEqual([]);
+  });
+});
+
+describe('results, from the platforms back to the dashboard', () => {
+  /** The dashboard's view of a post, read as a teammate. */
+  const dashboardPost = (postId: string) =>
+    t.asUser(member, () =>
+      t.value<PostRow>(
+        `select json_build_object('id', p.id, 'variant_id', p.variant_id, 'scheduled_for', p.scheduled_for, 'created_at', p.created_at, 'thumbnail', p.thumbnail,
+          'post_targets', (select json_agg(to_jsonb(x)) from public.post_targets x where x.post_id = p.id),
+          'ad_variants', (select json_build_object('label', v.label, 'angle', v.angle, 'ad_set_id', v.ad_set_id, 'ad_sets', null) from public.ad_variants v where v.id = p.variant_id)
+        ) from public.posts p where p.id = $1`,
+        [postId],
+      ),
+    ).then((row) => toPost(row)!);
+
+  it('reads a real post, records what the platform gave, and shows it with its rate', async () => {
+    const { variantId } = await approvedVariant();
+    const postId = await t.asUser(member, () => t.value<string>(`select public.schedule_post($1, '[{"place":"linkedin"}]'::jsonb)`, [variantId]));
+    await t.asService(() => t.value(`select public.publisher_take_due()`));
+    // As the real LinkedIn step will record it, once the keys are in.
+    await t.asService(() => t.db.query(`select public.publisher_finish($1, 'linkedin', 'urn:li:share:7123', 'https://www.linkedin.com/feed/update/urn:li:share:7123', false)`, [postId]));
+
+    const due = await t.asService(() => t.value<unknown[]>(`select public.results_take_due(p_limit => 50)`));
+    const items = step('shared-items.js', [{ data: due }]).filter((i) => i.post_id === postId);
+    expect(items).toEqual([expect.objectContaining({ place: 'linkedin', remote_id: 'urn:li:share:7123' })]);
+
+    // The stand-in reads nothing, and nothing is recorded.
+    const [standIn] = step('results-stand-in.js', items, { __PLACE_NAME__: 'LinkedIn' });
+    expect(standIn).toEqual({ ok: true, post_id: postId, place: 'linkedin', results: null, stand_in: true });
+    expect((await dashboardPost(postId)).targets[0]!.results).toBeUndefined();
+
+    // The real step's answer, in the shape the stand-in documents.
+    const numbers = { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29 };
+    await t.asService(() => t.db.query(`select public.results_record($1, 'linkedin', $2::jsonb)`, [postId, JSON.stringify(numbers)]));
+    const target = (await dashboardPost(postId)).targets[0]!;
+    expect(target.results).toMatchObject(numbers);
+    expect(formatRate(engagementRate(target.results!)!)).toBe('8.2%');
+    expect(target.url).toBe('https://www.linkedin.com/feed/update/urn:li:share:7123');
   });
 });

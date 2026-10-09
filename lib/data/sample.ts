@@ -153,6 +153,7 @@ export const sampleData: DataSource = {
       variantLabel: variant.label,
       adSetId: set.id,
       adSetTitle: set.title,
+      angle: variant.angle,
       scheduledFor: post.at ? zonedToUtc(post.at, settings().timeZone) : now,
       createdAt: now,
       ...(post.thumbnail ? { thumbnail: post.thumbnail } : {}),

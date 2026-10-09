@@ -83,7 +83,7 @@ export function PostDialog({ post, timeZone, actions, onClose }: { post: Post; t
         </div>
         <ul className={styles.targets}>
           {post.targets.map((t) => (
-            <PostTargetRow key={t.place} target={t} busy={busy} onRetry={() => void actions.retry(post, t.place)} />
+            <PostTargetRow key={t.place} target={t} busy={busy} timeZone={timeZone} onRetry={() => void actions.retry(post, t.place)} />
           ))}
         </ul>
 

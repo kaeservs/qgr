@@ -287,6 +287,18 @@ export type Place = (typeof PLACES)[number];
  */
 export type PostStatus = 'scheduled' | 'posting' | 'posted' | 'failed' | 'unknown' | 'cancelled';
 
+/** How a post did on one platform, as the platform counts it. Null: the platform does not report that number for this post. */
+export interface PostResults {
+  reach: number | null;
+  views: number | null;
+  reactions: number | null;
+  comments: number | null;
+  shares: number | null;
+  clicks: number | null;
+  /** When the numbers were read. */
+  at: string;
+}
+
 export interface PostTarget {
   place: Place;
   /** Exactly what goes out: the approved copy, copied when the post was made. */
@@ -299,6 +311,10 @@ export interface PostTarget {
   /** Went through a stand-in for the platform: nothing was really posted. */
   standIn: boolean;
   error?: string;
+  /** Read from the platform after it went out; only real posts have them. */
+  results?: PostResults;
+  /** Why the last read of the results failed; the numbers before it stay. */
+  resultsError?: string;
 }
 
 export interface Post {
@@ -307,6 +323,8 @@ export interface Post {
   variantLabel: Variant['label'];
   adSetId: string;
   adSetTitle: string;
+  /** The angle the variant was written to, which results are added up by. */
+  angle: string;
   scheduledFor: string;
   createdAt: string;
   /** A small JPEG of what goes out, as a data URL. */
