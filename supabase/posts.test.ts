@@ -249,6 +249,109 @@ describe('the publisher', () => {
   });
 });
 
+describe('moving a post', () => {
+  const when = (postId: string) => t.value<string>(`select to_char(scheduled_for at time zone 'America/New_York', 'YYYY-MM-DD HH24:MI') from public.posts where id = $1`, [postId]);
+
+  it('gives a waiting post another time in the team’s zone, or sends it now', async () => {
+    const { runId, variant } = await adSet();
+    await approve(member, variant.A);
+    const postId = await schedule(member, variant.A, [{ place: 'facebook' }, { place: 'linkedin' }], localIn(5));
+    const later = localIn(24 * 7);
+    await t.asUser(teammate, () => t.db.query(`select public.reschedule_post($1, $2)`, [postId, later]));
+    expect(await when(postId)).toBe(later);
+    expect((await events(runId)).at(-1)).toMatch(/^Variant A moved to \w{3} \d{1,2} \w{3}, \d{2}:\d{2}$/);
+    expect(await takeDue()).toEqual([]);
+
+    await t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [postId]));
+    expect((await takeDue()).map((d) => d.place)).toEqual(['facebook', 'linkedin']);
+    expect((await events(runId)).at(-1)).toBe('Variant A sent now instead of at its time');
+  });
+
+  it('refuses a post that has started going out, and times it cannot take', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.B);
+    const postId = await schedule(member, variant.B, [{ place: 'linkedin' }], localIn(5));
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, '2020-01-01 09:00')`, [postId]))).rejects.toThrow(/has not passed/);
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, '2099-01-01 09:00')`, [postId]))).rejects.toThrow(/90 days ahead/);
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, 'soon')`, [postId]))).rejects.toThrow(/not readable/);
+
+    await t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [postId]));
+    await takeDue();
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1, $2)`, [postId, localIn(8)]))).rejects.toThrow(/not started going out/);
+    await t.asUser(outsider, () => expect(t.db.query(`select public.reschedule_post($1)`, [postId])).rejects.toThrow(/Only the QGR team/));
+    await expect(t.asUser(member, () => t.db.query(`select public.reschedule_post($1)`, [uuid()]))).rejects.toThrow(/no longer exists/);
+  });
+});
+
+describe('how posts did', () => {
+  const resultsDue = () => t.asService(() => t.value<{ post_id: string; place: string; remote_id: string; page: { id: string | null } }[]>(`select public.results_take_due()`));
+  const record = (postId: string, place: string, results: unknown) => t.asService(() => t.db.query(`select public.results_record($1, $2, $3::jsonb)`, [postId, place, JSON.stringify(results)]));
+  const sent = async (variantId: string, place: string, standIn: boolean) => {
+    const postId = await schedule(member, variantId, [{ place }]);
+    await takeDue();
+    await t.asService(() => t.db.query(`select public.publisher_finish($1, $2, $3, null, $4)`, [postId, place, standIn ? null : `${place}_${uuid()}`, standIn]));
+    return postId;
+  };
+
+  it('reads what really went out, and nothing that went through a stand-in', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.A);
+    await approve(member, variant.B);
+    const real = await sent(variant.A, 'facebook', false);
+    const standIn = await sent(variant.B, 'facebook', true);
+    const due = await resultsDue();
+    expect(due.map((d) => d.post_id)).toContain(real);
+    expect(due.map((d) => d.post_id)).not.toContain(standIn);
+
+    await record(real, 'facebook', { reach: 1240, views: 1890, reactions: 52, comments: 6, shares: 4, clicks: 31 });
+    // Read: it waits six hours before the next read.
+    expect((await resultsDue()).map((d) => d.post_id)).not.toContain(real);
+    expect(await t.asUser(teammate, () => t.value<number>(`select reach from public.post_targets where post_id = $1`, [real]))).toBe(1240);
+    await expect(record(standIn, 'facebook', { reach: 1 })).rejects.toThrow(/has not gone out/);
+  });
+
+  it('takes only counts, and keeps the last numbers when a read fails', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.C);
+    const postId = await sent(variant.C, 'linkedin', false);
+    await expect(record(postId, 'linkedin', { reach: -1 })).rejects.toThrow(/reach result is not a count/);
+    await expect(record(postId, 'linkedin', { reach: 1.5 })).rejects.toThrow(/not a count/);
+    await expect(record(postId, 'linkedin', { reach: '12' })).rejects.toThrow(/not a count/);
+    await expect(record(postId, 'linkedin', { likes: 3 })).rejects.toThrow(/Unknown result likes/);
+    await expect(record(postId, 'linkedin', [1])).rejects.toThrow(/object of counts/);
+    // A platform that does not report a number leaves it empty.
+    await record(postId, 'linkedin', { reach: 800, views: null, reactions: 20 });
+    await t.asService(() => t.db.query(`select public.results_fail($1, 'linkedin', 'LinkedIn refused the token (401).')`, [postId]));
+    const row = await t.value<{ reach: number; views: number | null; results_error: string }>(`select to_jsonb(x) from (select reach, views, results_error from public.post_targets where post_id = $1) x`, [postId]);
+    expect(row).toEqual({ reach: 800, views: null, results_error: 'LinkedIn refused the token (401).' });
+  });
+
+  it('lets only n8n read and record results', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.A);
+    const postId = await sent(variant.A, 'linkedin', false);
+    for (const user of [member, outsider]) {
+      await t.asUser(user, async () => {
+        await expect(t.db.query('select public.results_take_due()')).rejects.toThrow(/permission denied/);
+        await expect(t.db.query(`select public.results_record($1, 'linkedin', '{}'::jsonb)`, [postId])).rejects.toThrow(/permission denied/);
+        await expect(t.db.query(`select public.results_fail($1, 'linkedin', 'x')`, [postId])).rejects.toThrow(/permission denied/);
+      });
+    }
+  });
+
+  it('shows the strategist how the team’s own posts did', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.B);
+    const postId = await sent(variant.B, 'linkedin', false);
+    await record(postId, 'linkedin', { reach: 2000, reactions: 90, comments: 10, shares: 5, clicks: 45 });
+    const next = await t.asUser(member, () => t.value<string>(`select public.create_run('custom', 'text', 'Next push', array['linkedin'], 'consultations', p_excerpt => $1)`, [EXCERPT]));
+    const begun = await t.asService(() => t.value<{ results: Record<string, unknown>[] }>(`select public.agent_begin($1, 'strategist')`, [next]));
+    expect(begun.results[0]).toMatchObject({ angle: 'Two', creative_text: 'Plan with care', headline: copy.linkedin.headline, place: 'linkedin', reach: 2000, reactions: 90, clicks: 45 });
+    // A place read but never given numbers is not shown.
+    expect(begun.results.every((r) => r.reach !== null || r.views !== null)).toBe(true);
+  });
+});
+
 describe('post files in Storage', () => {
   it('lets a member upload only into their own folder, and remove only what no open post needs', async () => {
     const { variant } = await adSet();

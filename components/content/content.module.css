@@ -157,6 +157,18 @@
   color: #fff;
 }
 
+.picturePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--indigo-50);
+  color: var(--indigo);
+}
+
+.pictureNote {
+  margin: 0;
+}
+
 .postPill {
   display: inline-flex;
   align-items: center;

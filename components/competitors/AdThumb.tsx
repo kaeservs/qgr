@@ -1,4 +1,4 @@
-import { Clock3, Play } from 'lucide-react';
+import { Clock3, ExternalLink, Play } from 'lucide-react';
 import { cx } from '@/lib/cx';
 import type { AdExample } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
@@ -6,7 +6,7 @@ import styles from './competitors.module.css';
 
 const FORMAT = { video: 'Video', image: 'Image', carousel: 'Carousel', document: 'Document', text: 'Text' } as const;
 
-/** A competitor's ad, drawn in a neutral tone so it is never mistaken for one of ours. */
+/** A competitor's ad, drawn in a neutral tone so it is never mistaken for one of ours, with a link to it in Meta's Ad Library when Apify read it there. */
 export function AdThumb({ ad }: { ad: AdExample }) {
   return (
     <figure className={styles.thumb}>
@@ -27,6 +27,13 @@ export function AdThumb({ ad }: { ad: AdExample }) {
           <Clock3 size={13} aria-hidden />
           {ad.daysRunning} days
         </span>
+        {ad.url && (
+          <a className="link" href={ad.url} target="_blank" rel="noopener noreferrer">
+            See the ad
+            <ExternalLink size={12} aria-hidden />
+            <span className="sr-only"> in Meta’s Ad Library (opens in a new tab)</span>
+          </a>
+        )}
       </figcaption>
     </figure>
   );

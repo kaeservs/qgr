@@ -124,6 +124,28 @@ describe('the switches', () => {
   });
 });
 
+describe('where the tracker reads ads', () => {
+  it('reads sample ads until the team switches to Apify, and tells the tracker alone', async () => {
+    const competitorRun = () => t.asUser(member, () => t.value<string>(`select public.create_run('competitor', 'website', 'horizonvisa.example', array['meta'], 'consultations', p_url => 'https://horizonvisa.example/')`));
+    const first = await competitorRun();
+    expect(await service<{ ads_source: string }>(`select public.agent_begin($1, 'tracker')`, [first])).toMatchObject({ ads_source: 'sample' });
+
+    await t.asUser(member, () => t.db.query(`select public.set_ads_source('apify')`));
+    const second = await competitorRun();
+    expect(await service<{ ads_source: string }>(`select public.agent_begin($1, 'tracker')`, [second])).toMatchObject({ ads_source: 'apify' });
+    // Only the tracker reads ads: the other agents are not told.
+    const custom = await customRun();
+    expect(await service<Record<string, unknown>>(`select public.agent_begin($1, 'strategist')`, [custom])).toMatchObject({ ads_source: null });
+
+    await expect(t.asUser(member, () => t.db.query(`select public.set_ads_source('scraped')`))).rejects.toThrow(/sample ads or Apify's/);
+    await t.asUser(outsider, async () => {
+      await expect(t.db.query(`select public.set_ads_source('sample')`)).rejects.toThrow(/Only the QGR team/);
+    });
+    await t.asUser(member, () => t.db.query(`select public.set_ads_source('sample')`));
+    expect(await t.value<string>(`select ads_source from public.team_settings where id = 1`)).toBe('sample');
+  });
+});
+
 describe('the scan schedule', () => {
   const slot = (every: string, at: string, day = 1, hour = 9, zone = 'America/New_York') =>
     t.value<string>(`select to_char(public.scan_slot($1, $2, $3, $4, $5::timestamptz) at time zone 'UTC', 'YYYY-MM-DD HH24:MI')`, [every, day, hour, zone, at]);

@@ -3,9 +3,9 @@ import type { PostgrestError } from '@supabase/supabase-js';
 import { cache } from 'react';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import { STAGE_ORDER } from '../pipeline';
-import { pingPublisher, startPipeline } from '../pipeline-start';
+import { pingQueue, startPipeline } from '../pipeline-start';
 import { getViewer } from '../session';
-import { pipelineConfig, publisherConfig } from '../supabase/config';
+import { picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
@@ -27,17 +27,21 @@ const RUN =
   'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
-  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running))';
+  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const AD_SET =
-  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_url, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
+  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
 const POST =
-  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error), ad_variants!posts_variant_id_fkey(label, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
+  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
 const MEDIA_BUCKET = 'run-media';
 /** The files posts go out with, made in the browser. Removed once every place has its post. */
 const POST_BUCKET = 'post-media';
+/** The pictures an image model made for ads, uploaded by n8n. */
+const PICTURE_BUCKET = 'ad-pictures';
+/** Long enough to read a page and post from it. */
+const PICTURE_SECONDS = 60 * 60;
 /** Long enough for Deepgram to fetch a clip, no longer. */
 const TRANSCRIBE_SECONDS = 15 * 60;
 /** Long enough for a working session in the studio; a reload signs a fresh one. */
@@ -95,9 +99,18 @@ const strategies = cache(async () => {
 });
 
 const adSets = cache(async () => {
-  const { data, error } = await (await db()).from('ad_sets').select(AD_SET).order('created_at', { ascending: false });
+  const supabase = await db();
+  const { data, error } = await supabase.from('ad_sets').select(AD_SET).order('created_at', { ascending: false });
   if (error) readFailed('ad sets', error);
-  return data.map(toAdSet);
+  // Pictures are private: each is shown through a link signed as the viewer, all in one call.
+  const paths = data.flatMap((set) => set.ad_variants.flatMap((v) => (v.picture_path ? [v.picture_path] : [])));
+  const links = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data: signed, error: signError } = await supabase.storage.from(PICTURE_BUCKET).createSignedUrls(paths, PICTURE_SECONDS);
+    if (signError) console.error('Signing ad pictures failed', signError);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+  }
+  return data.map((row) => toAdSet(row, (path) => links.get(path)));
 });
 
 // A page and its title both ask for the run; one query serves them.
@@ -247,7 +260,9 @@ export const liveData: DataSource = {
   getTeamSettings: () => teamSettings(),
 
   saveAgentSettings: async (settings) => {
-    const { error } = await (await db()).rpc('update_agent_settings', {
+    const supabase = await db();
+    // The call that checks the schedule goes first, so a schedule it refuses saves nothing.
+    const { error } = await supabase.rpc('update_agent_settings', {
       p_strategist_auto: settings.strategistAuto,
       p_content_auto: settings.contentAuto,
       p_scan_every: settings.scanEvery,
@@ -256,6 +271,10 @@ export const liveData: DataSource = {
       p_time_zone: settings.timeZone,
     });
     if (error) return refused(error, 'The agents’ settings could not be saved.');
+    const { error: picturesError } = await supabase.rpc('set_pictures_auto', { p_on: settings.picturesAuto });
+    if (picturesError) return refused(picturesError, 'The pictures switch could not be saved. The rest was.');
+    const { error: adsError } = await supabase.rpc('set_ads_source', { p_source: settings.adsSource });
+    if (adsError) return refused(adsError, 'Where the tracker reads ads could not be saved. The rest was.');
     return { ok: true, value: null, sample: false };
   },
 
@@ -308,7 +327,7 @@ export const liveData: DataSource = {
     if (error) return refused(error, 'The post could not be saved.');
     // A post for now goes at once; a scheduled one waits for the publisher's minute.
     const publisher = publisherConfig();
-    if (!post.at && publisher) await pingPublisher(publisher);
+    if (!post.at && publisher) await pingQueue(publisher);
     return { ok: true, value: { id }, sample: false };
   },
 
@@ -323,11 +342,38 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
+  requestPicture: async (variantId) => {
+    const { error } = await (await db()).rpc('request_picture', { p_variant_id: variantId });
+    if (error) return refused(error, 'The picture could not be asked for.');
+    const pictures = picturesConfig();
+    if (pictures) await pingQueue(pictures);
+    return { ok: true, value: null, sample: false };
+  },
+
+  removePicture: async (variantId) => {
+    const supabase = await db();
+    const { data: path, error } = await supabase.rpc('remove_picture', { p_variant_id: variantId });
+    if (error) return refused(error, 'The picture could not be taken away.');
+    if (path) {
+      const { error: removeError } = await supabase.storage.from(PICTURE_BUCKET).remove([path]);
+      if (removeError) console.error('Removing a picture taken away failed', removeError);
+    }
+    return { ok: true, value: null, sample: false };
+  },
+
+  reschedulePost: async (postId, at) => {
+    const { data, error } = await (await db()).rpc('reschedule_post', { p_post_id: postId, ...(at ? { p_local_time: at } : {}) });
+    if (error) return refused(error, 'The post could not be moved.');
+    const publisher = publisherConfig();
+    if (!at && publisher) await pingQueue(publisher);
+    return { ok: true, value: { at: data }, sample: false };
+  },
+
   retryPost: async (postId, place) => {
     const { error } = await (await db()).rpc('retry_post', { p_post_id: postId, p_place: place });
     if (error) return refused(error, 'The post could not be tried again.');
     const publisher = publisherConfig();
-    if (publisher) await pingPublisher(publisher);
+    if (publisher) await pingQueue(publisher);
     return { ok: true, value: null, sample: false };
   },
 

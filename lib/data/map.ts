@@ -14,6 +14,7 @@ import type {
   AdFormat,
   AdSet,
   AdSource,
+  AdsSetting,
   Agent,
   AgentSettings,
   AngleShare,
@@ -42,6 +43,7 @@ import type {
   TranscriptLine,
   User,
   Variant,
+  VariantPicture,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
 import { scanLabel } from '../schedule';
@@ -108,7 +110,7 @@ export interface CompetitorRow {
     angles: Json;
     created_at: string;
     hooks: { id: string; rank: number; text: string; platform: string; format: string; days_running: number; variations: number }[];
-    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number }[];
+    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number; ad_url: string | null }[];
   }[];
 }
 
@@ -141,7 +143,11 @@ export interface AdSetRow {
     angle: string;
     creative_text: string;
     creative_style: string;
-    image_url: string | null;
+    image_prompt: string | null;
+    picture_path: string | null;
+    picture_status: string;
+    picture_error: string | null;
+    picture_requested_at: string | null;
     copy: Json;
     warnings: string[];
     approved_at: string | null;
@@ -168,8 +174,16 @@ export interface PostRow {
     remote_url: string | null;
     stand_in: boolean;
     error: string | null;
+    reach: number | null;
+    views: number | null;
+    reactions: number | null;
+    comments: number | null;
+    shares: number | null;
+    clicks: number | null;
+    results_at: string | null;
+    results_error: string | null;
   }[];
-  ad_variants: One<{ label: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
+  ad_variants: One<{ label: string; angle: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
 }
 
 // ---------------------------------------------------------------- values
@@ -183,6 +197,9 @@ const POST_STATUSES: readonly PostStatus[] = ['scheduled', 'posting', 'posted', 
 const STYLES: readonly CreativeStyle[] = ['arcs', 'split', 'spotlight'];
 const SOURCES: readonly AdSource[] = ['apify', 'placeholder', 'upload'];
 const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
+/** An ad's own page in Meta's Ad Library, the only link a competitor's ad is shown with. */
+const LIBRARY_AD = /^https:\/\/www\.facebook\.com\/ads\/library\/\?id=\d{1,25}$/;
+const ADS_SETTINGS: readonly AdsSetting[] = ['sample', 'apify'];
 
 const platformsOf = (list: readonly string[] | null): Platform[] => PLATFORMS.filter((p) => (list ?? []).includes(p));
 const goalOf = (value: string): Goal => (isOneOf(GOALS, value) ? value : 'consultations');
@@ -351,7 +368,17 @@ export function toCompetitor(row: CompetitorRow): Competitor | null {
     .sort((a, b) => b.days_running - a.days_running)
     .flatMap((a, i): AdExample[] =>
       isOneOf(PLATFORMS, a.platform)
-        ? [{ id: a.id, platform: a.platform, format: formatOf(a.format), text: a.text, daysRunning: a.days_running, tone: TONES[i % TONES.length] ?? 'slate' }]
+        ? [
+            {
+              id: a.id,
+              platform: a.platform,
+              format: formatOf(a.format),
+              text: a.text,
+              daysRunning: a.days_running,
+              tone: TONES[i % TONES.length] ?? 'slate',
+              ...(a.ad_url && LIBRARY_AD.test(a.ad_url) ? { url: a.ad_url } : {}),
+            },
+          ]
         : [],
     );
   return {
@@ -398,7 +425,18 @@ export function toStrategy(row: StrategyRow): Strategy {
   };
 }
 
-export function toAdSet(row: AdSetRow): AdSet {
+/** A variant's picture progress: absent when nothing is pending and nothing needs saying. */
+function pictureOf(v: AdSetRow['ad_variants'][number]): VariantPicture | null {
+  const status = v.picture_status === 'making' || v.picture_status === 'failed' ? v.picture_status : 'none';
+  if (status === 'none' && !v.picture_error) return null;
+  return { status, ...(v.picture_error ? { note: v.picture_error } : {}), ...(status === 'making' && v.picture_requested_at ? { askedAt: v.picture_requested_at } : {}) };
+}
+
+/**
+ * An ad set as the studio shows it. `pictureUrl` turns a picture's path in
+ * Storage into a link the viewer may open; the bucket is private.
+ */
+export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | undefined = () => undefined): AdSet {
   const run = one(row.runs);
   const clip = run ? clipOf(run.media_path, run.media) : null;
   const variants = [...row.ad_variants]
@@ -407,6 +445,8 @@ export function toAdSet(row: AdSetRow): AdSet {
       if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
       // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
       const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
+      const picture = pictureOf(v);
       return [
         {
           id: v.id,
@@ -416,7 +456,9 @@ export function toAdSet(row: AdSetRow): AdSet {
           copy: copyOf(v.copy),
           ...(v.approved_at ? { approved: true } : {}),
           warnings: v.warnings,
-          ...(v.image_url ? { imageUrl: v.image_url } : {}),
+          ...(imageUrl ? { imageUrl } : {}),
+          ...(v.image_prompt?.trim() ? { picturePrompt: v.image_prompt.trim() } : {}),
+          ...(picture ? { picture } : {}),
           ...(edit?.ok ? { videoEdit: edit.value } : {}),
         },
       ];
@@ -506,6 +548,8 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
     timeZone: row.time_zone,
     strategistAuto: row.strategist_auto,
     contentAuto: row.content_auto,
+    picturesAuto: row.pictures_auto,
+    adsSource: isOneOf(ADS_SETTINGS, row.ads_source) ? row.ads_source : 'sample',
     scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
     scanDay: row.scan_day,
     scanHour: row.scan_hour,
@@ -535,6 +579,10 @@ export function toPost(row: PostRow): Post | null {
               ...(t.remote_url ? { url: t.remote_url } : {}),
               standIn: t.stand_in,
               ...(t.error ? { error: t.error } : {}),
+              ...(t.results_at && [t.reach, t.views, t.reactions, t.comments, t.shares, t.clicks].some((n) => n !== null)
+                ? { results: { reach: t.reach, views: t.views, reactions: t.reactions, comments: t.comments, shares: t.shares, clicks: t.clicks, at: t.results_at } }
+                : {}),
+              ...(t.results_error ? { resultsError: t.results_error } : {}),
             },
           ]
         : [],
@@ -545,6 +593,7 @@ export function toPost(row: PostRow): Post | null {
     variantLabel: variant.label,
     adSetId: variant.ad_set_id,
     adSetTitle: one(variant.ad_sets)?.title ?? 'Ads',
+    angle: variant.angle,
     scheduledFor: row.scheduled_for,
     createdAt: row.created_at,
     ...(row.thumbnail ? { thumbnail: row.thumbnail } : {}),

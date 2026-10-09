@@ -1,9 +1,10 @@
 'use server';
 
-import { cancelPost, retryPost, schedulePost } from '@/lib/data';
+import { cancelPost, reschedulePost, retryPost, schedulePost } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { isRecordId } from '@/lib/edit-input';
 import { parseNewPost } from '@/lib/post-input';
+import { localTime } from '@/lib/schedule';
 import { checkTeam } from '@/lib/session';
 import { PLACES } from '@/lib/types';
 import type { Place } from '@/lib/types';
@@ -22,6 +23,20 @@ export async function cancelPostAction(postId: unknown): Promise<Saved> {
   if (!team.ok) return team;
   if (!isRecordId(postId)) return { ok: false, status: 404, error: 'That post no longer exists.' };
   return cancelPost(postId);
+}
+
+/** Gives a waiting post another time (a wall time in the team's zone), or sends it now (null). */
+export async function reschedulePostAction(postId: unknown, at: unknown): Promise<Saved<{ at: string }>> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(postId)) return { ok: false, status: 404, error: 'That post no longer exists.' };
+  let local: string | null = null;
+  if (at !== null) {
+    const [date = '', time = ''] = typeof at === 'string' ? at.split(' ') : [];
+    local = localTime(date, time);
+    if (!local) return { ok: false, status: 400, error: 'Pick a date and a time.' };
+  }
+  return reschedulePost(postId, local);
 }
 
 export async function retryPostAction(postId: unknown, place: unknown): Promise<Saved> {

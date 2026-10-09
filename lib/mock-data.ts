@@ -166,6 +166,8 @@ export const SAMPLE_CLIP: Clip = {
   size: 671397,
 };
 export const SAMPLE_CLIP_URL = '/sample/eb5-explainer.mp4';
+/** A picture standing in for one an image model made, marked "Sample picture" in the image. */
+export const SAMPLE_PICTURE_URL = '/sample/picture-q4.jpg';
 
 const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
   keep: [{ start: 0, end: SAMPLE_CLIP.duration }],
@@ -455,6 +457,9 @@ export const adSets: AdSet[] = [
         label: 'A',
         angle: 'Clarity over hype',
         creative: { text: 'Your Green Card path, mapped out.', style: 'arcs' },
+        picturePrompt: 'A city skyline at sunset across still water, the sun low and gold between the towers, the sky deep indigo above. No words, no people, no flags.',
+        // Drawn for the sample data and marked so: there is no image model to ask.
+        imageUrl: SAMPLE_PICTURE_URL,
         copy: {
           meta: {
             text: "EB-5 shouldn't feel like a maze. See the six steps to a U.S. Green Card, with independent due diligence at each one.",
@@ -478,6 +483,7 @@ export const adSets: AdSet[] = [
         label: 'B',
         angle: 'Family first',
         creative: { text: 'Move together. Plan early.', style: 'split' },
+        picturePrompt: 'A quiet suburban street at golden hour, a porch light glowing and long soft shadows under an indigo evening sky. No words, no people, no flags.',
         copy: {
           meta: {
             text: "Your children's ages can shape your EB-5 options. Plan early and keep the whole family on one path.",
@@ -501,6 +507,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Diligence you can verify',
         creative: { text: "Ask for the file. We'll send ours.", style: 'spotlight' },
+        picturePrompt: 'A neat stack of bound reports on a wooden desk under a warm gold desk lamp, a deep indigo wall behind. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Every EB-5 project we suggest comes with an independent due-diligence file. Ask any advisor for theirs, then compare.',
@@ -544,6 +551,7 @@ export const adSets: AdSet[] = [
         angle: 'Off the treadmill',
         approved: true,
         creative: { text: 'Your green card, not your employer’s.', style: 'arcs' },
+        picturePrompt: 'An open road leading out of a city toward a gold horizon at dawn, the sky indigo overhead. No words, no people, no flags.',
         copy: {
           meta: {
             text: "Layoffs shouldn't decide where your family lives. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.",
@@ -567,6 +575,7 @@ export const adSets: AdSet[] = [
         label: 'B',
         angle: 'The 60-day question',
         creative: { text: '60 days is not a plan.', style: 'split' },
+        picturePrompt: 'An hourglass on a desk by a window at dusk, its gold sand catching the light, indigo shadows around it. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Lose an H-1B job and the clock starts. Hear how families plan ahead with EB-5 instead of racing it.',
@@ -590,6 +599,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Straight answers',
         creative: { text: 'Straight answers on EB-5.', style: 'spotlight' },
+        picturePrompt: 'A studio microphone on a desk, lit warm gold against a deep indigo backdrop. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'What does EB-5 really involve for an H-1B holder? Our advisors answer the five questions we hear most.',
@@ -624,6 +634,7 @@ export const adSets: AdSet[] = [
         angle: 'Live Q&A',
         approved: true,
         creative: { text: 'EB-5, live. Ask us anything.', style: 'arcs' },
+        picturePrompt: 'An empty seminar room with rows of chairs facing a softly lit stage, gold stage light and indigo walls. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.',
@@ -646,7 +657,9 @@ export const adSets: AdSet[] = [
         id: 'v-ns-b',
         label: 'B',
         angle: 'Costs, plainly',
+        approved: true,
         creative: { text: 'What EB-5 really costs.', style: 'split' },
+        picturePrompt: 'A calculator and a fountain pen on a blank ledger page in warm gold light, a deep indigo background. No words or figures, no people, no flags.',
         copy: {
           meta: {
             text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
@@ -670,6 +683,7 @@ export const adSets: AdSet[] = [
         label: 'C',
         angle: 'Judge a project',
         creative: { text: 'How to judge an EB-5 project.', style: 'spotlight' },
+        picturePrompt: 'A mid-rise building under construction at dusk, a crane against an indigo sky and the site lights glowing gold. No words, no people, no flags.',
         copy: {
           meta: {
             text: 'Not every EB-5 project is equal. Learn the checks we run on every one, live and free.',
@@ -888,6 +902,8 @@ export const settings: TeamSettings = {
   timeZone: 'America/New_York',
   strategistAuto: false,
   contentAuto: true,
+  picturesAuto: false,
+  adsSource: 'sample',
   scanEvery: 'week',
   scanDay: 1,
   scanHour: 9,
@@ -898,7 +914,13 @@ export const settings: TeamSettings = {
   },
 };
 
-/** Posts of approved variants: one went out through the stand-ins, one waits for Thursday morning. */
+const NS_A_META = 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.';
+
+/**
+ * Posts of approved variants: three went out in the past fortnight and have
+ * their numbers back, one went through the stand-in, one waits for Thursday
+ * morning.
+ */
 export const posts: Post[] = [
   {
     id: 'p-2',
@@ -906,11 +928,12 @@ export const posts: Post[] = [
     variantLabel: 'A',
     adSetId: 'a-northstar',
     adSetTitle: 'Webinar season',
+    angle: 'Live Q&A',
     scheduledFor: '2026-10-08T13:00:00Z',
     createdAt: '2026-10-07T08:15:00Z',
     targets: [
-      { place: 'facebook', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
-      { place: 'instagram', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
+      { place: 'facebook', text: NS_A_META, media: 'image', status: 'scheduled', standIn: false },
+      { place: 'instagram', text: NS_A_META, media: 'image', status: 'scheduled', standIn: false },
     ],
   },
   {
@@ -919,6 +942,7 @@ export const posts: Post[] = [
     variantLabel: 'A',
     adSetId: 'a-podcast',
     adSetTitle: 'From H-1B to EB-5',
+    angle: 'Off the treadmill',
     scheduledFor: '2026-10-06T14:00:00Z',
     createdAt: '2026-10-06T11:20:00Z',
     targets: [
@@ -929,6 +953,89 @@ export const posts: Post[] = [
         status: 'posted',
         postedAt: '2026-10-06T14:00:20Z',
         standIn: true,
+      },
+    ],
+  },
+  {
+    id: 'p-5',
+    variantId: 'v-pod-a',
+    variantLabel: 'A',
+    adSetId: 'a-podcast',
+    adSetTitle: 'From H-1B to EB-5',
+    angle: 'Off the treadmill',
+    scheduledFor: '2026-10-05T13:30:00Z',
+    createdAt: '2026-10-05T16:20:00Z',
+    targets: [
+      {
+        place: 'linkedin',
+        text: 'In episode 12, our advisors explain how H-1B professionals use EB-5 to stop tying their future to one employer.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-10-05T13:30:15Z',
+        standIn: false,
+        results: { reach: 1510, views: 2380, reactions: 64, comments: 12, shares: 9, clicks: 57, at: '2026-10-07T06:00:00Z' },
+      },
+    ],
+  },
+  {
+    id: 'p-4',
+    variantId: 'v-ns-b',
+    variantLabel: 'B',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    angle: 'Costs, plainly',
+    scheduledFor: '2026-09-30T14:00:00Z',
+    createdAt: '2026-09-29T10:05:00Z',
+    targets: [
+      {
+        place: 'facebook',
+        text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-30T14:00:12Z',
+        standIn: false,
+        results: { reach: 2240, views: 3010, reactions: 58, comments: 21, shares: 11, clicks: 66, at: '2026-10-07T06:00:00Z' },
+      },
+      {
+        place: 'instagram',
+        text: 'Investment, fees, timelines: we lay out what EB-5 really costs in a free live session.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-30T14:00:31Z',
+        standIn: false,
+        // Instagram gives no clicks for a feed post.
+        results: { reach: 3120, views: 4050, reactions: 140, comments: 18, shares: 25, clicks: null, at: '2026-10-07T06:00:00Z' },
+      },
+    ],
+  },
+  {
+    id: 'p-3',
+    variantId: 'v-ns-a',
+    variantLabel: 'A',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    angle: 'Live Q&A',
+    scheduledFor: '2026-09-28T15:00:00Z',
+    createdAt: '2026-09-27T08:40:00Z',
+    targets: [
+      {
+        place: 'facebook',
+        text: NS_A_META,
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-28T15:00:09Z',
+        standIn: false,
+        results: { reach: 1860, views: 2410, reactions: 71, comments: 9, shares: 6, clicks: 48, at: '2026-10-07T06:00:00Z' },
+      },
+      {
+        place: 'linkedin',
+        text: 'A free live session on EB-5 for Indian professionals and families: the process, the costs, and how to judge a project.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-09-28T15:00:24Z',
+        standIn: false,
+        results: { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29, at: '2026-10-07T06:00:00Z' },
+        resultsError: 'LinkedIn did not answer (timeout).',
       },
     ],
   },

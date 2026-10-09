@@ -35,6 +35,7 @@ function weeksOf(month: Date): Date[][] {
 
 export function RunCalendar({
   runDates,
+  postDays,
   today,
   selected,
   onSelect,
@@ -43,6 +44,8 @@ export function RunCalendar({
   timeZone,
 }: {
   runDates: string[];
+  /** One `YYYY-MM-DD` per post that is not cancelled: the day it goes out in the team's zone. */
+  postDays: string[];
   today: string;
   selected: string | null;
   onSelect: (day: string | null) => void;
@@ -59,6 +62,11 @@ export function RunCalendar({
     for (const iso of runDates) m.set(dayKey(iso), (m.get(dayKey(iso)) ?? 0) + 1);
     return m;
   }, [runDates]);
+  const postsPerDay = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const day of postDays) m.set(day, (m.get(day) ?? 0) + 1);
+    return m;
+  }, [postDays]);
   const todayKey = dayKey(today);
 
   const shift = (by: number) => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + by, 1)));
@@ -93,19 +101,25 @@ export function RunCalendar({
               {week.map((day) => {
                 const key = day.toISOString().slice(0, 10);
                 const runs = perDay.get(key) ?? 0;
+                const posts = postsPerDay.get(key) ?? 0;
                 const outside = day.getUTCMonth() !== month.getUTCMonth();
                 const className = cx(styles.day, outside && styles.dayOutside, key === todayKey && styles.dayToday, key === selected && styles.daySelected);
+                const what = [runs > 0 && `${runs} run${runs === 1 ? '' : 's'}`, posts > 0 && `${posts} post${posts === 1 ? '' : 's'}`].filter(Boolean).join(', ');
                 return (
                   <td key={key}>
-                    {runs > 0 ? (
+                    {runs + posts > 0 ? (
                       <button
                         type="button"
                         className={cx(className, styles.dayHasRuns)}
                         aria-pressed={key === selected}
-                        aria-label={`${DAY_LABEL.format(day)}: ${runs} run${runs === 1 ? '' : 's'}`}
+                        aria-label={`${DAY_LABEL.format(day)}: ${what}`}
                         onClick={() => onSelect(key === selected ? null : key)}
                       >
                         {day.getUTCDate()}
+                        <span className={styles.marks} aria-hidden>
+                          {runs > 0 && <i className={styles.markRun} />}
+                          {posts > 0 && <i className={styles.markPost} />}
+                        </span>
                       </button>
                     ) : (
                       <span className={className} aria-current={key === todayKey ? 'date' : undefined}>
@@ -119,6 +133,10 @@ export function RunCalendar({
           ))}
         </tbody>
       </table>
+      <p className={styles.calKey}>
+        <i className={styles.markRun} aria-hidden /> Runs
+        <i className={styles.markPost} aria-hidden /> Posts
+      </p>
 
       {nextScan && (
         <p className={styles.nextScan}>

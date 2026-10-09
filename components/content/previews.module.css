@@ -395,6 +395,26 @@
   filter: brightness(0.62);
 }
 
+/* With a picture, every style's words are gold on it, and the mark sits on
+   white: the spotlight's light ground and indigo words are the design's. The
+   post's picture is drawn the same way (lib/creative/draw.ts). */
+.withImage .creativeText,
+.withImage.creative-spotlight .creativeText {
+  padding-bottom: 0;
+  background: none;
+  color: var(--gold);
+}
+
+.withImage.creative-spotlight .creativeBrand {
+  background: rgb(255 255 255 / 0.95);
+  color: var(--indigo-ink);
+}
+
+.withImage.creative-spotlight .creativeField {
+  outline-color: rgb(255 255 255 / 0.55);
+  background-color: rgb(255 255 255 / 0.06);
+}
+
 .creativeInner {
   position: relative;
   height: 100%;

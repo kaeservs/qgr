@@ -319,3 +319,492 @@ legend.sectionTitle {
     justify-content: flex-start;
   }
 }
+
+/* ---------- Views, and the post dialog ---------- */
+
+.views {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.views a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.views a:hover {
+  color: var(--indigo);
+}
+
+.views a[aria-current='page'] {
+  background: var(--indigo);
+  color: #fff;
+  font-weight: 500;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: 88px 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.detailText {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- The month ---------- */
+
+.calendar {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+}
+
+.calHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.calNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.calEmpty {
+  margin: 0;
+}
+
+.calWeekdays,
+.calMonth {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.calWeekdays span {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.calMonth {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.calDay {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 112px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.calDayOutside {
+  background: var(--surface-2);
+}
+
+.calDayOutside .calDate {
+  color: #a3a4b8;
+}
+
+.calDayToday {
+  border-color: var(--indigo);
+  box-shadow: inset 0 0 0 1px var(--indigo);
+}
+
+.calDayToday .calDateShort {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--indigo);
+  color: #fff;
+}
+
+.calDate {
+  padding: 0 2px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.calDateLong {
+  display: none;
+}
+
+.chip {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  padding: 5px 7px;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chip:hover {
+  filter: brightness(0.97);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.chipTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chipPlaces {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.chipTitle {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-waiting {
+  border-color: var(--gold-strong);
+  background: var(--gold-50);
+}
+
+.chip-sent {
+  border-color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.chip-look {
+  border-color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.calKey {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.keyDot {
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  border: 0;
+  border-left: 3px solid;
+  border-radius: 3px;
+}
+
+.keyDot:first-child {
+  margin-left: 0;
+}
+
+/* A phone reads the month as a list of the days that have posts. */
+@media (max-width: 760px) {
+  .calendar {
+    padding: 16px;
+  }
+
+  .calWeekdays {
+    display: none;
+  }
+
+  .calMonth {
+    grid-template-columns: 1fr;
+  }
+
+  .calDay {
+    min-height: 0;
+  }
+
+  .calDayEmpty,
+  .calDayOutside {
+    display: none;
+  }
+
+  .calDateLong {
+    display: inline;
+  }
+
+  .calDateShort {
+    display: none;
+  }
+
+  .calDayToday .calDateShort {
+    display: none;
+  }
+
+  .detail {
+    grid-template-columns: 64px 1fr;
+  }
+}
+
+/* ---------- Posts in a few words, on Home ---------- */
+
+.rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+.row:hover {
+  border-color: var(--indigo-200);
+}
+
+.rowThumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--indigo);
+}
+
+.rowMain {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.rowMain strong {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rowWhen {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dialogWhen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+}
+
+/* ---------- Results ---------- */
+
+.results {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.results strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.resultsAt {
+  color: var(--muted);
+}
+
+.resultsError {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.resultsError svg {
+  flex: none;
+  color: var(--gold-ink);
+}
+
+.resultsView {
+  display: grid;
+  /* A column no wider than the page: the wide table scrolls inside its card. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.kpi {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+}
+
+.kpiLabel {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* A standalone number: the interface's sans, proportional figures. */
+.kpiValue {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.kpiNote {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.angleBars {
+  margin: 16px 0 0;
+  padding-top: 20px;
+}
+
+.tableTitle {
+  padding: 18px 20px 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  margin-top: 12px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table thead th {
+  border-top: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.table tbody th {
+  font-weight: 500;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 20px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 20px;
+}
+
+.table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.rate {
+  font-weight: 600;
+}
+
+.tableAngle {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.tablePlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tableNote {
+  margin: 0;
+  padding: 12px 20px 16px;
+}
+
+@media (max-width: 640px) {
+  .kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

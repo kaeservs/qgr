@@ -1,9 +1,8 @@
-// PLACEHOLDER for Apify. Returns sample ads in the shape the Apify step will
-// produce, flagged 'placeholder' so the report says its ads were samples.
-// To connect Apify: replace this node with an HTTP Request to the actor's
-// run-sync-get-dataset-items endpoint, then a Code node that maps each item to
-// { id, platform, format, startDate, isActive, pageName, text, headline, cta,
-//   adUrl, mediaUrl } and sets dataSource: 'apify'.
+// SAMPLE ADS, read while the team's competitor ads are set to sample (Settings,
+// Agents), as they are until Apify's token is in n8n. They come in the shape
+// "Read Apify's ads" gives ({ id, platform, format, startDate, isActive,
+// pageName, text, headline, cta, adUrl, mediaUrl }), flagged 'placeholder' so
+// the report says its ads were samples, not this competitor's.
 const plan = $input.first().json;
 const hint = plan.competitorHint || 'competitor';
 const pageName = hint.charAt(0).toUpperCase() + hint.slice(1);

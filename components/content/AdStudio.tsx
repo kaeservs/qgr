@@ -1,10 +1,10 @@
 'use client';
 
-import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, Lock, MousePointerClick, Pencil, RotateCcw, Send, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, ImageOff, ImagePlus, LoaderCircle, Lock, MousePointerClick, Pencil, RefreshCw, RotateCcw, Send, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { approveVariantAction, saveVariantAction } from '@/app/(app)/content/actions';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { approveVariantAction, removePictureAction, requestPictureAction, saveVariantAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import { PLATFORM_LABEL } from '@/lib/platforms';
@@ -37,6 +37,25 @@ function postState(posts: readonly Post[], variantId: string): { waiting: Post |
     .filter((p) => p.targets.some((t) => t.status === 'scheduled' || t.status === 'posting'))
     .sort((a, b) => a.scheduledFor.localeCompare(b.scheduledFor))[0];
   return { waiting: waiting ?? null, posted: mine.some((p) => p.targets.some((t) => t.status === 'posted')) };
+}
+
+/** An ask for a picture that has waited this long was lost: the database lets it be asked again. */
+const PICTURE_RETRY_MS = 10 * 60_000;
+
+/** What a fresh read can move on: the picture, an ask's progress, and the approval a new picture takes back. */
+const serverPart = (v: Variant): string => JSON.stringify([v.imageUrl ?? null, v.picture ?? null, !!v.approved]);
+
+/** The server's word on a variant's picture, and on its approval, which a new picture takes back. */
+function withServerPicture(v: Variant, server: Variant | undefined): Variant {
+  if (!server) return v;
+  const { imageUrl: _image, picture: _picture, picturePrompt: _prompt, approved: _approved, ...rest } = v;
+  return {
+    ...rest,
+    ...(server.imageUrl ? { imageUrl: server.imageUrl } : {}),
+    ...(server.picture ? { picture: server.picture } : {}),
+    ...(server.picturePrompt ? { picturePrompt: server.picturePrompt } : {}),
+    ...(server.approved ? { approved: true } : {}),
+  };
 }
 
 function asText(copy: PlatformCopy): string {
@@ -82,7 +101,7 @@ export function AdStudio({
   // The last version the server holds, for Reset and for knowing what changed.
   const [saved, setSaved] = useState(() => new Map(adSet.variants.map((v) => [v.id, v])));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'saving' | 'approving' | null>(null);
+  const [busy, setBusy] = useState<'saving' | 'approving' | 'picture' | null>(null);
   const [videoOf, setVideoOf] = useState<string | null>(null);
   const selected = variants.find((v) => v.id === selectedId);
   const editingVideo = variants.find((v) => v.id === videoOf);
@@ -110,6 +129,48 @@ export function AdStudio({
   const anyDirty = variants.some(isDirty);
 
   const update = (id: string, change: (v: Variant) => Variant) => setVariants((list) => list.map((v) => (v.id === id ? change(v) : v)));
+
+  // A fresh read moves on the variants whose picture changed on the server (and their approvals with them); words
+  // being typed here stay as they are. Only what changed: the sample data keeps no changes, so a session's own stay.
+  const lastRead = useRef(new Map(adSet.variants.map((v) => [v.id, serverPart(v)])));
+  useEffect(() => {
+    const server = new Map(adSet.variants.map((v) => [v.id, v]));
+    const moved = new Set(adSet.variants.filter((v) => lastRead.current.get(v.id) !== serverPart(v)).map((v) => v.id));
+    lastRead.current = new Map(adSet.variants.map((v) => [v.id, serverPart(v)]));
+    if (moved.size === 0) return;
+    const take = (v: Variant) => (moved.has(v.id) ? withServerPicture(v, server.get(v.id)) : v);
+    setVariants((list) => list.map(take));
+    setSaved((map) => new Map([...map].map(([id, v]) => [id, take(v)])));
+  }, [adSet]);
+
+  async function askPicture(v: Variant) {
+    setBusy('picture');
+    const result = await requestPictureAction(v.id);
+    setBusy(null);
+    if (!result.ok) return toast(result.error, 'info');
+    update(v.id, (x) => ({ ...x, picture: { status: 'making', askedAt: new Date().toISOString() } }));
+    toast(`Making a picture for variant ${v.label}`);
+    router.refresh();
+  }
+
+  async function dropPicture(v: Variant) {
+    setBusy('picture');
+    const result = await removePictureAction(v.id);
+    setBusy(null);
+    if (!result.ok) return toast(result.error, 'info');
+    // A picture taken away takes the approval back: the ad has changed.
+    const apply = (x: Variant): Variant => {
+      const { imageUrl: _image, picture: _picture, ...rest } = x;
+      return x.imageUrl ? unapproved(rest) : rest;
+    };
+    update(v.id, apply);
+    setSaved((map) => {
+      const was = map.get(v.id);
+      return was ? new Map(map).set(v.id, apply(was)) : map;
+    });
+    toast(result.sample ? 'Back to the design, for this session' : `Variant ${v.label} is back to the drawn design`);
+    router.refresh();
+  }
 
   /** Saves a variant's words if they changed. False when the save failed, so the edit stays open. */
   async function persist(v: Variant): Promise<boolean> {
@@ -284,6 +345,9 @@ export function AdStudio({
                   Edit video
                 </button>
               )}
+              {!clip && selected.picturePrompt && (
+                <PictureButtons variant={selected} disabled={busy !== null || locked !== null} onAsk={() => void askPicture(selected)} onDrop={() => void dropPicture(selected)} />
+              )}
               <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => void leave()}>
                 Done
               </button>
@@ -342,7 +406,20 @@ export function AdStudio({
                   )
                 )}
                 {isSelected && !v.approved && !state.waiting && <span className={cx('pill pill-sm', styles.editingPill)}>Editing</span>}
+                {v.picture?.status === 'making' && (
+                  <span className={cx('pill pill-sm', styles.picturePill)}>
+                    <LoaderCircle size={13} className="spin" aria-hidden />
+                    Making a picture
+                  </span>
+                )}
               </div>
+              {v.picture?.status === 'failed' && (
+                <div className={styles.flags} role="note">
+                  <TriangleAlert size={15} aria-hidden />
+                  <p>The picture could not be made: {v.picture.note ?? 'the image model did not answer.'}</p>
+                </div>
+              )}
+              {v.picture?.status === 'none' && v.picture.note && !v.imageUrl && <p className={cx('muted small', styles.pictureNote)}>{v.picture.note}</p>}
               {flags.length > 0 && (
                 <div className={styles.flags} role="note">
                   <TriangleAlert size={15} aria-hidden />
@@ -417,5 +494,32 @@ export function AdStudio({
         />
       )}
     </div>
+  );
+}
+
+/** Ask for a picture, another one, or go back to the drawn design. While one is being made, say so; after ten minutes it may be asked for again. */
+function PictureButtons({ variant, disabled, onAsk, onDrop }: { variant: Variant; disabled: boolean; onAsk: () => void; onDrop: () => void }) {
+  const making = variant.picture?.status === 'making';
+  const stale = making && !!variant.picture?.askedAt && Date.now() - Date.parse(variant.picture.askedAt) > PICTURE_RETRY_MS;
+  return (
+    <>
+      {making && !stale ? (
+        <button type="button" className="btn btn-ghost btn-sm" disabled>
+          <LoaderCircle size={15} className="spin" aria-hidden />
+          Making a picture…
+        </button>
+      ) : (
+        <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} onClick={onAsk} title={`From the prompt: ${variant.picturePrompt ?? ''}`}>
+          {variant.imageUrl || stale ? <RefreshCw size={15} aria-hidden /> : <ImagePlus size={15} aria-hidden />}
+          {stale ? 'Ask again' : variant.imageUrl ? 'Try another picture' : 'Make a picture'}
+        </button>
+      )}
+      {(variant.imageUrl || making) && (
+        <button type="button" className="btn btn-quiet btn-sm" disabled={disabled} onClick={onDrop}>
+          <ImageOff size={15} aria-hidden />
+          {variant.imageUrl ? 'Use the design' : 'Stop'}
+        </button>
+      )}
+    </>
   );
 }

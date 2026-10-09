@@ -135,10 +135,15 @@ export interface AdExample {
   text: string;
   daysRunning: number;
   tone: 'slate' | 'teal' | 'plum' | 'sand';
+  /** The ad in Meta's Ad Library, when Apify read it there. Sample ads have none. */
+  url?: string;
 }
 
-/** Where a report's ads came from. 'placeholder' means sample ads: Apify is not connected yet. */
+/** Where a report's ads came from. 'placeholder' means sample ads, read while the team's ads source is 'sample'. */
 export type AdSource = 'apify' | 'placeholder' | 'upload';
+
+/** Where the Competitor Tracker reads a competitor's ads: sample ads, or their real ones in Meta's Ad Library through Apify. */
+export type AdsSetting = 'sample' | 'apify';
 
 export interface Competitor {
   id: string;
@@ -210,10 +215,22 @@ export interface Variant {
   approved?: boolean;
   /** Phrases flagged against the guardrails, for a person to judge before approving. */
   warnings?: string[];
-  /** The generated image, once an image model is connected. Until then the branded design is drawn. */
+  /** The picture an image model made for it, shown under its words. Without one the branded design is drawn. */
   imageUrl?: string;
+  /** What the image model is asked to draw. A video ad has none: its clip is the picture. */
+  picturePrompt?: string;
+  /** A picture asked for and not made yet, or the last ask that failed; and why, or that nothing was made. */
+  picture?: VariantPicture;
   /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
   videoEdit?: VideoEdit;
+}
+
+export interface VariantPicture {
+  /** making: asked for, waiting for the image model; failed: the last ask failed; none: nothing pending. */
+  status: 'none' | 'making' | 'failed';
+  /** Why it failed, or that nothing was made (the image model is not connected yet). */
+  note?: string;
+  askedAt?: string;
 }
 
 export interface AdSet {
@@ -287,6 +304,18 @@ export type Place = (typeof PLACES)[number];
  */
 export type PostStatus = 'scheduled' | 'posting' | 'posted' | 'failed' | 'unknown' | 'cancelled';
 
+/** How a post did on one platform, as the platform counts it. Null: the platform does not report that number for this post. */
+export interface PostResults {
+  reach: number | null;
+  views: number | null;
+  reactions: number | null;
+  comments: number | null;
+  shares: number | null;
+  clicks: number | null;
+  /** When the numbers were read. */
+  at: string;
+}
+
 export interface PostTarget {
   place: Place;
   /** Exactly what goes out: the approved copy, copied when the post was made. */
@@ -299,6 +328,10 @@ export interface PostTarget {
   /** Went through a stand-in for the platform: nothing was really posted. */
   standIn: boolean;
   error?: string;
+  /** Read from the platform after it went out; only real posts have them. */
+  results?: PostResults;
+  /** Why the last read of the results failed; the numbers before it stay. */
+  resultsError?: string;
 }
 
 export interface Post {
@@ -307,6 +340,8 @@ export interface Post {
   variantLabel: Variant['label'];
   adSetId: string;
   adSetTitle: string;
+  /** The angle the variant was written to, which results are added up by. */
+  angle: string;
   scheduledFor: string;
   createdAt: string;
   /** A small JPEG of what goes out, as a data URL. */
@@ -321,6 +356,10 @@ export interface AgentSettings {
   timeZone: string;
   strategistAuto: boolean;
   contentAuto: boolean;
+  /** Every new ad asks the image model for a picture as it is written. */
+  picturesAuto: boolean;
+  /** Where the Competitor Tracker reads competitors' ads. */
+  adsSource: AdsSetting;
   scanEvery: ScanEvery;
   /** ISO weekday, Monday = 1. */
   scanDay: number;

@@ -211,3 +211,78 @@
 .emptyText {
   max-width: 44ch;
 }
+
+/* Bars for one series: one hue, value at the tip, a tip on hover. */
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.barRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+}
+
+.barLabel {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.barTrack {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.bar {
+  height: 14px;
+  min-width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--indigo);
+  transition: background-color 0.15s ease;
+}
+
+.barValue {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.barTip {
+  position: absolute;
+  right: 0;
+  top: -30px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--text);
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.barRow:hover .bar {
+  background: var(--indigo-500);
+}
+
+.barRow:hover .barTip {
+  opacity: 1;
+}
+
+@media (max-width: 520px) {
+  .barRow {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+}

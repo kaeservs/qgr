@@ -6,7 +6,7 @@ import { saveAgentSettingsAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
 import { hourLabel, SCAN_EVERY_LABEL, TIME_ZONES, WEEKDAYS, zoneLabel } from '@/lib/schedule';
-import type { AgentSettings, ScanEvery } from '@/lib/types';
+import type { AdsSetting, AgentSettings, ScanEvery } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
@@ -83,6 +83,19 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         </p>
       </fieldset>
 
+      <label className="field">
+        <span className="label">{STAGE_INFO.tracker.name}: competitors’ ads</span>
+        <select className="input" value={form.adsSource} onChange={(e) => set('adsSource', e.target.value as AdsSetting)}>
+          <option value="sample">Sample ads</option>
+          <option value="apify">Their real ads, from Meta’s Ad Library (Apify)</option>
+        </select>
+        <span className="muted small">
+          {form.adsSource === 'apify'
+            ? 'Apify reads each competitor’s active ads in Meta’s Ad Library: at a link to their ads there, or by looking their name up. It needs the Apify token in n8n; without it, a scan stops and says why.'
+            : 'The same example ads for every competitor, so runs work before Apify is connected. Their reports say so.'}
+        </span>
+      </label>
+
       <div className={styles.switchRow}>
         <span>
           <strong>{STAGE_INFO.strategist.name}</strong>
@@ -98,6 +111,15 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         <Toggle checked={form.contentAuto} label={`Run the ${STAGE_INFO.content.name} after every strategy`} onChange={(on) => set('contentAuto', on)} />
       </div>
       <p className="muted small">Off: the run waits on its page until someone gives the go-ahead. A run someone starts by hand always starts.</p>
+
+      <div className={styles.switchRow}>
+        <span>
+          <strong>Pictures</strong>
+          <span className="muted small"> an image model makes one for every new ad</span>
+        </span>
+        <Toggle checked={form.picturesAuto} label="Make a picture for every new ad" onChange={(on) => set('picturesAuto', on)} />
+      </div>
+      <p className="muted small">Off: a picture is made only when someone asks for one in the studio. Either way, until the image model’s key is in n8n, none is made and the design is drawn.</p>
 
       <label className="field">
         <span className="label">Time zone</span>

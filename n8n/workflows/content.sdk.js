@@ -97,16 +97,6 @@ const answerOk = ifElse({
   },
 });
 
-const images = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: "Images (placeholder)",
-    parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: "// PLACEHOLDER for image generation (ChatGPT or Higgsfield). Every variant\n// already carries an image_prompt. To connect: send each prompt to the image\n// model, upload the result to Supabase Storage, and set image_url to its\n// address. Until then image_url stays empty and the dashboard draws the\n// branded text-on-indigo design instead.\nconst item = $input.first().json;\nconst variants = item.p_ad_set.variants.map(function (v) {\n  return Object.assign({}, v, { image_url: null });\n});\nreturn [{ json: Object.assign({}, item, { p_ad_set: Object.assign({}, item.p_ad_set, { variants: variants }) }) }];\n" },
-  },
-  output: [{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-opus-5-5' } }],
-});
-
 const save = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -219,7 +209,7 @@ const done = node({
   output: [{ ok: true, runId: 'run-id' }],
 });
 
-const noteImages = sticky('## Images go here (ChatGPT or Higgsfield)\nEvery variant already has an **image_prompt**. To connect: send each prompt to the image model, upload the result to Supabase Storage and set **image_url**. Until then the dashboard draws the branded text-on-indigo design.', [images], { color: 3 });
+const notePictures = sticky('## Pictures\nEvery ad but a clip\'s carries an **image_prompt**. Pictures are made from it by **QGR · Pictures**, not here: when someone asks in the studio, or for every ad saved here once the team turns that on (Settings, Agents). Without one the dashboard draws the branded design.', [save], { color: 3 });
 const noteGuardrails = sticky('## Guardrails\nThe prompt carries the brand rules. This step also flags, never silently fixes, any "guarantee", "risk-free", promised timeline or X post over 280 characters, so a person sees it before approving.', [readAnswer], { color: 5 });
 
 export default workflow('qgr-content-agent', 'QGR · Content Agent')
@@ -228,9 +218,9 @@ export default workflow('qgr-content-agent', 'QGR · Content Agent')
   .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
   .to(readAnswer.onError(whyFailed))
-  .to(answerOk.onTrue(images.to(save.onError(whyFailed).to(done))).onFalse(whyFailed))
+  .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))
   .add(whyFailed)
   .to(markFailed)
   .to(failed)
-  .add(noteImages)
+  .add(notePictures)
   .add(noteGuardrails);

@@ -5,9 +5,10 @@ import { AutoTextarea } from './AutoTextarea';
 import styles from './previews.module.css';
 
 /**
- * The ad's image, drawn in Quantum Global's brand: the site's indigo, its
- * hero arcs and its gold headline type. A stand-in until the Content Agent
- * produces real images; the words on it are editable like the rest of the ad.
+ * The ad's image: the picture an image model made for it, darkened under the
+ * words, or without one the design drawn in Quantum Global's brand (the
+ * site's indigo, its hero arcs and its gold headline type). The words on it
+ * are editable like the rest of the ad.
  */
 export function Creative({
   text,

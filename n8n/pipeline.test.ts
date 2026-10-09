@@ -46,6 +46,21 @@ function step(file: string, input: Json, nodes: Record<string, Json> = {}, swap:
   return items[0]!.json;
 }
 
+/** A Code node fed many items, as an HTTP node hands on an array answer: one item each. */
+function stepAll(file: string, inputs: Json[], nodes: Record<string, Json> = {}): Json {
+  const code = readFileSync(join(here, 'code', file), 'utf8');
+  const all = inputs.map((json) => ({ json }));
+  const $input = { first: () => all[0], all: () => all };
+  const $ = (name: string) => {
+    const json = nodes[name];
+    if (!json) throw new Error(`Node "${name}" has not run`);
+    return { first: () => ({ json }) };
+  };
+  const items = inN8n(code, $input, $) as { json: Json }[];
+  expect(items, file).toHaveLength(1);
+  return items[0]!.json;
+}
+
 // ---------------------------------------------------------------- Claude, played from the request
 
 /** Checks a value against the subset of JSON Schema the agents' requests use. */
@@ -175,10 +190,13 @@ async function fail(item: Json, beginJson: Json, stage: string) {
   return why;
 }
 
-async function runTracker(runId: string) {
+/** The tracker, in the workflow's order: sample ads, or with the team's ads on Apify, what Apify answered (`apify`). */
+async function runTracker(runId: string, apify: (url: string) => Json[] = () => []) {
   const beginJson = await begin(runId, 'tracker');
   const plan = step('tracker-plan.js', beginJson);
-  const raw = step('tracker-placeholder-ads.js', plan);
+  const library = plan.library as { url: string } | null;
+  // "Real ads?": Apify reads the library page the plan names; otherwise the sample ads.
+  const raw = plan.adsSource === 'apify' ? stepAll('tracker-apify-ads.js', apify(library!.url), { 'Plan the scan': plan }) : step('tracker-placeholder-ads.js', plan);
   const prepared = step('tracker-prepare-ads.js', raw);
   const { body } = step('tracker-build-request.js', prepared) as { body: Json };
   const answer = step('tracker-read-answer.js', claude(body, trackerAnswer), { 'Prepare the ads': prepared });
@@ -202,8 +220,7 @@ async function runContent(runId: string) {
   const { body } = step('content-build-request.js', beginJson) as { body: Json };
   const answer = step('content-read-answer.js', claude(body, contentAnswer), { 'Begin: load the run': beginJson });
   expect(answer.ok, String(answer.p_error)).toBe(true);
-  const imaged = step('content-images-placeholder.js', answer);
-  await rpc('agent_finish_content', { p_run_id: imaged.p_run_id, p_ad_set: imaged.p_ad_set, p_usage: imaged.p_usage });
+  await rpc('agent_finish_content', { p_run_id: answer.p_run_id, p_ad_set: answer.p_ad_set, p_usage: answer.p_usage });
   return { body };
 }
 
@@ -247,7 +264,7 @@ async function dashboardCompetitor(competitorId: string): Promise<CompetitorRow>
         select json_agg(json_build_object(
           'id', cr.id, 'data_source', cr.data_source, 'active_ads', cr.active_ads, 'platforms', cr.platforms, 'insights', cr.insights, 'angles', cr.angles, 'created_at', cr.created_at,
           'hooks', coalesce((select json_agg(json_build_object('id', h.id, 'rank', h.rank, 'text', h.text, 'platform', h.platform, 'format', h.format, 'days_running', h.days_running, 'variations', h.variations)) from public.hooks h where h.report_id = cr.id), '[]'),
-          'competitor_ads', coalesce((select json_agg(json_build_object('id', a.id, 'platform', a.platform, 'format', a.format, 'text', a.text, 'days_running', a.days_running)) from public.competitor_ads a where a.report_id = cr.id), '[]')
+          'competitor_ads', coalesce((select json_agg(json_build_object('id', a.id, 'platform', a.platform, 'format', a.format, 'text', a.text, 'days_running', a.days_running, 'ad_url', a.ad_url)) from public.competitor_ads a where a.report_id = cr.id), '[]')
         )) from public.competitor_reports cr where cr.competitor_id = c.id), '[]')) from public.competitors c where c.id = $1`,
       [competitorId],
     ),
@@ -352,6 +369,67 @@ describe('a competitor run, from their website to three ads', () => {
     expect(adSet.variants.map((v) => [v.label, v.angle])).toEqual([['A', 'Clarity over hype'], ['B', 'Family first'], ['C', 'Diligence you can check']]);
     expect(Object.keys(adSet.variants[0]!.copy)).toEqual(['meta', 'linkedin', 'x']);
     expect(await t.value<number>('select count(*)::int from public.agent_usage where run_id = $1', [runId])).toBe(3);
+  });
+
+  it('reads their real ads through Apify once the team switches, and links each to the library', async () => {
+    const page = await readPage(`${siteUrl}/`, { policy: local });
+    const runId = await startRun({ source: { kind: 'competitor', input: 'website', url: 'horizonvisa.example' }, platforms: ['meta'], goal: 'consultations' }, page);
+    await t.asUser(teammate, () => t.db.query(`select public.set_ads_source('apify')`));
+    try {
+      const day = 86_400;
+      const now = Math.round(Date.now() / 1000);
+      // Apify's answer, as the Facebook Ads Library Scraper gives it: theirs, and one from another firm that matched the search.
+      const answer = (url: string): Json[] => {
+        expect(url).toBe('https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&media_type=all&search_type=keyword_unordered&q=Horizon%20Visa%20Partners');
+        return [
+          ...[90, 63, 41, 20, 7].map((days, i) => ({
+            adArchiveID: String(5550001 + i),
+            pageName: 'Horizon Visa Partners',
+            isActive: true,
+            startDate: now - days * day,
+            snapshot: { body: { text: `Their ad number ${i + 1}. Plan ahead with them.` }, title: 'Free consultation', ctaText: 'Book now', linkUrl: 'https://horizonvisa.example/', displayFormat: i % 2 ? 'IMAGE' : 'VIDEO' },
+          })),
+          { adArchiveID: '5559999', pageName: 'Atlas Residency', isActive: true, startDate: now - 30 * day, snapshot: { body: { text: 'Not theirs.' }, linkUrl: 'https://atlas.example/' } },
+        ];
+      };
+      await runTracker(runId, answer);
+    } finally {
+      await t.asUser(teammate, () => t.db.query(`select public.set_ads_source('sample')`));
+    }
+
+    const run = toRun(await dashboardRun(runId));
+    expect(run.stages.tracker).toMatchObject({ status: 'done', summary: 'Scanned 5 active ads and found 3 winning hooks.' });
+    expect(run.activity.map((e) => e.text)).not.toContain('Used sample ads: Apify is not connected yet');
+    const competitor = toCompetitor(await dashboardCompetitor(run.output.competitorId!));
+    expect(competitor).toMatchObject({ name: 'Horizon Visa Partners', dataSource: 'apify', activeAds: 5 });
+    expect(competitor!.hooks[0]).toMatchObject({ daysRunning: 90, variations: 2 });
+    expect(competitor!.examples.map((a) => [a.daysRunning, a.url])).toEqual([
+      [90, 'https://www.facebook.com/ads/library/?id=5550001'],
+      [63, 'https://www.facebook.com/ads/library/?id=5550002'],
+      [41, 'https://www.facebook.com/ads/library/?id=5550003'],
+      [20, 'https://www.facebook.com/ads/library/?id=5550004'],
+    ]);
+  });
+
+  it('stops a scan Apify cannot read, and says why', async () => {
+    const runId = await startRun({ source: { kind: 'competitor', input: 'ad_link', url: 'https://www.linkedin.com/ad-library/search?companyIds=1' }, platforms: ['linkedin'], goal: 'consultations' });
+    await t.asUser(teammate, () => t.db.query(`select public.set_ads_source('apify')`));
+    try {
+      const beginJson = await begin(runId, 'tracker');
+      expect(beginJson.ads_source).toBe('apify');
+      // "Plan the scan" throws; its error output goes to "Why it failed".
+      let message = '';
+      try {
+        step('tracker-plan.js', beginJson);
+      } catch (err) {
+        message = (err as Error).message;
+      }
+      await fail({ error: message }, beginJson, 'tracker');
+    } finally {
+      await t.asUser(teammate, () => t.db.query(`select public.set_ads_source('sample')`));
+    }
+    const run = toRun(await dashboardRun(runId));
+    expect(run.stages.tracker).toMatchObject({ status: 'failed', error: expect.stringMatching(/^Apify reads Meta's Ad Library, and this link is to another one/) });
   });
 
   it('works from the ads alone when their website turns the reader away', async () => {

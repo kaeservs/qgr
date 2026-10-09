@@ -61,11 +61,24 @@ function formatter(zone: string, options: Intl.DateTimeFormatOptions): Intl.Date
   return f;
 }
 
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * `Thu 8 Oct` for a wall date `YYYY-MM-DD`. Spelled out here rather than by
+ * Intl: browsers and Node disagree on the short forms (`Mon, 28 Sept` against
+ * `Mon 28 Sep`), and a client component must render the same text as the
+ * server.
+ */
+export function dayLabel(date: string): string {
+  const [y = 1970, m = 1, d = 1] = date.split('-').map(Number);
+  return `${DAYS_SHORT[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS_SHORT[m - 1]}`;
+}
+
 /** `Tue 13 Oct, 09:00` in the zone. */
 export function formatInZone(iso: string, zone: string): string {
-  const date = formatter(zone, { weekday: 'short', day: 'numeric', month: 'short' }).format(new Date(iso)).replace(',', '');
-  const time = formatter(zone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
-  return `${date}, ${time}`;
+  const { date, time } = wallTime(iso, zone);
+  return `${dayLabel(date)}, ${time}`;
 }
 
 /** The wall date and time of an instant in a zone, as a date and a time input hold them. */

@@ -69,6 +69,12 @@ export type Database = {
           image_prompt: string | null
           image_url: string | null
           label: string
+          picture_attempts: number
+          picture_claimed_at: string | null
+          picture_error: string | null
+          picture_path: string | null
+          picture_requested_at: string | null
+          picture_status: string
           updated_at: string
           updated_by: string | null
           video_edit: Json | null
@@ -86,6 +92,12 @@ export type Database = {
           image_prompt?: string | null
           image_url?: string | null
           label: string
+          picture_attempts?: number
+          picture_claimed_at?: string | null
+          picture_error?: string | null
+          picture_path?: string | null
+          picture_requested_at?: string | null
+          picture_status?: string
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
@@ -103,6 +115,12 @@ export type Database = {
           image_prompt?: string | null
           image_url?: string | null
           label?: string
+          picture_attempts?: number
+          picture_claimed_at?: string | null
+          picture_error?: string | null
+          picture_path?: string | null
+          picture_requested_at?: string | null
+          picture_status?: string
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
@@ -368,50 +386,74 @@ export type Database = {
         Row: {
           attempts: number
           claimed_at: string | null
+          clicks: number | null
+          comments: number | null
           error: string | null
           media_kind: string | null
           media_path: string | null
           place: string
           post_id: string
           posted_at: string | null
+          reach: number | null
+          reactions: number | null
           remote_id: string | null
           remote_url: string | null
+          results_at: string | null
+          results_error: string | null
+          shares: number | null
           stand_in: boolean
           status: string
           text: string
           updated_at: string
+          views: number | null
         }
         Insert: {
           attempts?: number
           claimed_at?: string | null
+          clicks?: number | null
+          comments?: number | null
           error?: string | null
           media_kind?: string | null
           media_path?: string | null
           place: string
           post_id: string
           posted_at?: string | null
+          reach?: number | null
+          reactions?: number | null
           remote_id?: string | null
           remote_url?: string | null
+          results_at?: string | null
+          results_error?: string | null
+          shares?: number | null
           stand_in?: boolean
           status?: string
           text: string
           updated_at?: string
+          views?: number | null
         }
         Update: {
           attempts?: number
           claimed_at?: string | null
+          clicks?: number | null
+          comments?: number | null
           error?: string | null
           media_kind?: string | null
           media_path?: string | null
           place?: string
           post_id?: string
           posted_at?: string | null
+          reach?: number | null
+          reactions?: number | null
           remote_id?: string | null
           remote_url?: string | null
+          results_at?: string | null
+          results_error?: string | null
+          shares?: number | null
           stand_in?: boolean
           status?: string
           text?: string
           updated_at?: string
+          views?: number | null
         }
         Relationships: [
           {
@@ -717,6 +759,7 @@ export type Database = {
       }
       team_settings: {
         Row: {
+          ads_source: string
           content_auto: boolean
           facebook_page_id: string | null
           facebook_page_name: string | null
@@ -726,6 +769,7 @@ export type Database = {
           last_scan_at: string | null
           linkedin_org_id: string | null
           linkedin_page_name: string | null
+          pictures_auto: boolean
           scan_changed_at: string
           scan_day: number
           scan_every: string
@@ -736,6 +780,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ads_source?: string
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -745,6 +790,7 @@ export type Database = {
           last_scan_at?: string | null
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
+          pictures_auto?: boolean
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -755,6 +801,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ads_source?: string
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -764,6 +811,7 @@ export type Database = {
           last_scan_at?: string | null
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
+          pictures_auto?: boolean
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -835,6 +883,15 @@ export type Database = {
         Returns: undefined
       }
       next_scan_at: { Args: never; Returns: string }
+      picture_fail: {
+        Args: { p_error: string; p_variant_id: string }
+        Returns: undefined
+      }
+      picture_finish: {
+        Args: { p_path?: string; p_stand_in?: boolean; p_variant_id: string }
+        Returns: Json
+      }
+      picture_take_due: { Args: { p_limit?: number }; Returns: Json }
       pipeline_next: {
         Args: { p_run_id: string; p_stage: string }
         Returns: boolean
@@ -872,6 +929,21 @@ export type Database = {
         Args: { p_error: string; p_run_id: string }
         Returns: undefined
       }
+      remove_picture: { Args: { p_variant_id: string }; Returns: string }
+      request_picture: { Args: { p_variant_id: string }; Returns: undefined }
+      reschedule_post: {
+        Args: { p_local_time?: string; p_post_id: string }
+        Returns: string
+      }
+      results_fail: {
+        Args: { p_error: string; p_place: string; p_post_id: string }
+        Returns: undefined
+      }
+      results_record: {
+        Args: { p_place: string; p_post_id: string; p_results: Json }
+        Returns: undefined
+      }
+      results_take_due: { Args: { p_limit?: number }; Returns: Json }
       retry_post: {
         Args: { p_place: string; p_post_id: string }
         Returns: undefined
@@ -909,10 +981,12 @@ export type Database = {
         }
         Returns: string
       }
+      set_ads_source: { Args: { p_source: string }; Returns: undefined }
       set_competitor_tracked: {
         Args: { p_competitor_id: string; p_tracked: boolean }
         Returns: undefined
       }
+      set_pictures_auto: { Args: { p_on: boolean }; Returns: undefined }
       start_due_scans: { Args: { p_max?: number }; Returns: Json }
       start_run: {
         Args: {

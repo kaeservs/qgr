@@ -136,8 +136,9 @@ describe('toCompetitor', () => {
           { id: 'h3', rank: 3, text: 'Elsewhere', platform: 'tiktok', format: 'video', days_running: 9, variations: 1 },
         ],
         competitor_ads: [
-          { id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5 },
-          { id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40 },
+          { id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5, ad_url: 'https://www.facebook.com/ads/library/?id=1111111111' },
+          { id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40, ad_url: null },
+          { id: 'a3', platform: 'meta', format: 'video', text: 'Odd link', days_running: 2, ad_url: 'https://scam.example/ads/library/?id=1' },
         ],
       },
     ],
@@ -151,7 +152,10 @@ describe('toCompetitor', () => {
     expect(c?.examples.map((a) => [a.text, a.tone])).toEqual([
       ['Long', 'slate'],
       ['Short', 'teal'],
+      ['Odd link', 'plum'],
     ]);
+    // An ad is linked to its page in Meta's Ad Library, and to nothing else.
+    expect(c?.examples.map((a) => a.url ?? null)).toEqual([null, 'https://www.facebook.com/ads/library/?id=1111111111', null]);
   });
 
   it('leaves out a competitor with no report, and a domain it does not have', () => {
@@ -199,7 +203,11 @@ describe('toAdSet', () => {
     angle: `Angle ${label}`,
     creative_text: 'Plan with care',
     creative_style: 'arcs',
-    image_url: null,
+    image_prompt: 'A calm skyline at dusk, no words',
+    picture_path: null,
+    picture_status: 'none',
+    picture_error: null,
+    picture_requested_at: null,
     copy: { meta: { text: 't', headline: 'h', description: 'd', cta: 'Book now' }, x: { text: 't', headline: 'h' } },
     warnings: [],
     approved_at: null,
@@ -214,10 +222,39 @@ describe('toAdSet', () => {
     expect(set.variants[0]?.warnings).toEqual(['meta text says "guarantee"']);
     expect(set.variants[0]?.copy).toEqual({ meta: { text: 't', headline: 'h', description: 'd', cta: 'Book now' }, x: { text: 't', headline: 'h' } });
 
-    const approved = toAdSet({ id: 'set-1', run_id: 'run-1', strategy_id: 'strat-1', title: 'Q4', created_at: '2026-10-07T10:00:00Z', ad_variants: [variant('A'), variant('B', { approved_at: '2026-10-07T11:00:00Z', image_url: 'https://cdn.example/b.png' })], runs: null });
+    const approved = toAdSet({ id: 'set-1', run_id: 'run-1', strategy_id: 'strat-1', title: 'Q4', created_at: '2026-10-07T10:00:00Z', ad_variants: [variant('A'), variant('B', { approved_at: '2026-10-07T11:00:00Z' })], runs: null });
     expect(approved.status).toBe('approved');
-    expect(approved.variants[1]).toMatchObject({ approved: true, imageUrl: 'https://cdn.example/b.png' });
+    expect(approved.variants[1]).toMatchObject({ approved: true });
     expect(approved).not.toHaveProperty('clip');
+  });
+
+  it('shows a picture through the link it is given, and what is pending', () => {
+    const path = 'pictures/0d6c5a1e-9b8f-4c3d-a2e1-f0e9d8c7b6a5/7c2b9e4d-1a3f-4b5c-8d6e-9f0a1b2c3d4e.png';
+    const signed = (p: string) => (p === path ? 'https://storage.example/signed/b.png?token=t' : undefined);
+    const set = toAdSet(
+      {
+        id: 'set-1',
+        run_id: 'run-1',
+        strategy_id: 'strat-1',
+        title: 'Q4',
+        created_at: '2026-10-07T10:00:00Z',
+        ad_variants: [
+          variant('A', { picture_status: 'making', picture_requested_at: '2026-10-07T11:00:00Z' }),
+          variant('B', { picture_path: path }),
+          variant('C', { image_prompt: '', picture_status: 'failed', picture_error: 'The image model refused the prompt (400).' }),
+        ],
+        runs: null,
+      },
+      signed,
+    );
+    expect(set.variants[0]).toMatchObject({ picturePrompt: 'A calm skyline at dusk, no words', picture: { status: 'making', askedAt: '2026-10-07T11:00:00Z' } });
+    expect(set.variants[0]).not.toHaveProperty('imageUrl');
+    expect(set.variants[1]).toMatchObject({ imageUrl: 'https://storage.example/signed/b.png?token=t' });
+    expect(set.variants[1]).not.toHaveProperty('picture');
+    expect(set.variants[2]).toMatchObject({ picture: { status: 'failed', note: 'The image model refused the prompt (400).' } });
+    expect(set.variants[2]).not.toHaveProperty('picturePrompt');
+    // Without a link, the picture is not shown: the design is drawn.
+    expect(toAdSet({ id: 's', run_id: 'r', strategy_id: 't', title: 'T', created_at: '2026-10-07T10:00:00Z', ad_variants: [variant('B', { picture_path: path })], runs: null }).variants[0]).not.toHaveProperty('imageUrl');
   });
 
   it('reads the run’s clip and each variant’s edit of it, dropping an edit that no longer fits', () => {
@@ -262,7 +299,7 @@ describe('copyOf', () => {
 });
 
 describe('toAgents and toUser', () => {
-  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
+  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
 
   it('counts from the data, and shows each agent’s switch as the team set it', () => {
     const agents = toAgents(settings, { competitors: 1, strategies: 2 }, []);

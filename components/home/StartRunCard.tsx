@@ -10,7 +10,7 @@ import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
 import { transcriptText } from '@/lib/transcribe';
 import { GOALS, PLATFORMS } from '@/lib/types';
-import type { CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
+import type { AdsSetting, CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { ClipField } from '../video/ClipField';
 import type { ClipStatus } from '../video/ClipField';
@@ -36,7 +36,7 @@ const SOURCES = [
 
 const MAX_FILE_MB = 50;
 
-export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { initialTab?: StartTab; initialUrl?: string }) {
+export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSource = 'sample' }: { initialTab?: StartTab; initialUrl?: string; adsSource?: AdsSetting }) {
   const router = useRouter();
   const toast = useToast();
   const id = useId();
@@ -298,6 +298,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
           <LinkStatus
             check={linkCheck}
             needsText={tab === 'custom'}
+            adsSource={adsSource}
             onPasteText={() => {
               setSourceType('text');
               setError(null);
