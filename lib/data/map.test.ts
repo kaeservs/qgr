@@ -136,8 +136,9 @@ describe('toCompetitor', () => {
           { id: 'h3', rank: 3, text: 'Elsewhere', platform: 'tiktok', format: 'video', days_running: 9, variations: 1 },
         ],
         competitor_ads: [
-          { id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5 },
-          { id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40 },
+          { id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5, ad_url: 'https://www.facebook.com/ads/library/?id=1111111111' },
+          { id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40, ad_url: null },
+          { id: 'a3', platform: 'meta', format: 'video', text: 'Odd link', days_running: 2, ad_url: 'https://scam.example/ads/library/?id=1' },
         ],
       },
     ],
@@ -151,7 +152,10 @@ describe('toCompetitor', () => {
     expect(c?.examples.map((a) => [a.text, a.tone])).toEqual([
       ['Long', 'slate'],
       ['Short', 'teal'],
+      ['Odd link', 'plum'],
     ]);
+    // An ad is linked to its page in Meta's Ad Library, and to nothing else.
+    expect(c?.examples.map((a) => a.url ?? null)).toEqual([null, 'https://www.facebook.com/ads/library/?id=1111111111', null]);
   });
 
   it('leaves out a competitor with no report, and a domain it does not have', () => {
@@ -295,7 +299,7 @@ describe('copyOf', () => {
 });
 
 describe('toAgents and toUser', () => {
-  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
+  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
 
   it('counts from the data, and shows each agent’s switch as the team set it', () => {
     const agents = toAgents(settings, { competitors: 1, strategies: 2 }, []);

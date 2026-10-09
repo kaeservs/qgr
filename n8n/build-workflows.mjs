@@ -21,6 +21,8 @@ const ids = Object.fromEntries(idsArg.split(',').filter(Boolean).map((p) => p.sp
 
 const SUPABASE_RPC = 'https://tcinsdexwvzpznqlcpww.supabase.co/rest/v1/rpc';
 const SUPABASE_STORAGE = 'https://tcinsdexwvzpznqlcpww.supabase.co/storage/v1';
+/** Apify's Facebook Ads Library Scraper, run and answered in one call. */
+const APIFY_ACTOR = 'https://api.apify.com/v2/acts/apify~facebook-ads-scraper';
 const IMPORTS = "import { workflow, node, trigger, sticky, newCredential, ifElse, switchCase, expr } from '@n8n/workflow-sdk';";
 
 // ---------------------------------------------------------------- shared pieces
@@ -199,8 +201,35 @@ const sampleRun = `{ id: 'run-id', kind: 'competitor', input: 'website', url: 'h
 const tracker = `${IMPORTS}
 ${subTrigger}
 ${beginNode('tracker')}
-${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'] }`, "\n    onError: 'continueErrorOutput',")}
-${codeNode('placeholderAds', 'Apify: competitor ads (placeholder)', code('tracker-placeholder-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [] }`)}
+${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'], adsSource: 'sample', library: null }`, "\n    onError: 'continueErrorOutput',")}
+${ifTrue('realAds', 'Real ads?', '{{ $json.adsSource === "apify" }}')}
+
+const apify = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Apify: their Meta ads',
+    onError: 'continueErrorOutput',
+    alwaysOutputData: true,
+    parameters: {
+      method: 'POST',
+      url: '${APIFY_ACTOR}/run-sync-get-dataset-items',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpTemplatedCustomAuth',
+      sendQuery: true,
+      queryParameters: { parameters: [{ name: 'timeout', value: '240' }, { name: 'maxItems', value: '60' }] },
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $json.library.url }], resultsLimit: 60, activeStatus: "active" }) }}'),
+      options: { timeout: 300000 },
+    },
+    credentials: { httpTemplatedCustomAuth: newCredential('Apify token') },
+  },
+  output: [{ adArchiveID: '1234567890', pageName: 'Example Visa Partners', isActive: true, startDate: 1754000000, snapshot: { body: { text: 'Hook' }, ctaText: 'Book now', displayFormat: 'VIDEO' } }],
+});
+${codeNode('apifyAds', "Read Apify's ads", code('tracker-apify-ads.js'), `{ runId: 'run-id', dataSource: 'apify', ads: [] }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('sampleAds', 'Sample ads', code('tracker-placeholder-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [] }`)}
 ${codeNode('prepareAds', 'Prepare the ads', code('tracker-prepare-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [{ id: 'a1', platform: 'meta', format: 'video', days_running: 63, text: 'Hook', hook_line: 'Hook' }] }`, "\n    onError: 'continueErrorOutput',")}
 ${codeNode('buildRequest', 'Build the Claude request', code('tracker-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
 ${claudeNode('claude', 'Claude: read the ads')}
@@ -209,8 +238,8 @@ ${isOk('answerOk', 'Report ready?')}
 ${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_report: $json.p_report, p_usage: $json.p_usage }) }}', `{ data: 'report-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('tracker')}
 
-const noteWebsite = sticky('## Their website\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
-const noteApify = sticky('## Apify goes here\\nThis node returns **sample ads** so the run works end to end, and the report is marked as sample data.\\n\\nTo connect Apify: replace it with an HTTP Request to your actor\\'s **run-sync-get-dataset-items** endpoint (an Apify token credential), then a Code node mapping each item to { id, platform, format, startDate, isActive, pageName, text, headline, cta, adUrl, mediaUrl } with dataSource \\'apify\\'.', [placeholderAds], { color: 3 });
+const noteWebsite = sticky('## Their website\\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
+const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Templated Custom Auth, the header Authorization: Bearer {{api_key}}, with the token as api_key); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\\nClaude groups ads into hooks by id and names each ad\\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
 const noteModel = sticky('## Claude\\nOpus 5.5, medium effort, JSON constrained by a schema, server-side fallback on a refusal. No temperature: Opus 5.5 rejects it. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
 
@@ -218,12 +247,16 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(placeholderAds)
+  .to(realAds.onTrue(apify.onError(whyFailed)).onFalse(sampleAds))
+  .add(apify)
+  .to(apifyAds.onError(whyFailed))
   .to(prepareAds.onError(whyFailed))
   .to(buildRequest.onError(whyFailed))
   .to(claude.onError(whyFailed))
   .to(readAnswer.onError(whyFailed))
   .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))
+  .add(sampleAds)
+  .to(prepareAds)
   .add(whyFailed)
   .to(markFailed)
   .to(failed)

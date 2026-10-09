@@ -4,6 +4,7 @@ import { CircleCheck, Info, LoaderCircle, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { cx } from '@/lib/cx';
 import { hostOf } from '@/lib/format';
+import type { AdsSetting } from '@/lib/types';
 import styles from './home.module.css';
 
 export type LinkCheck =
@@ -18,7 +19,7 @@ type Answer = { ok: true; title: string | null; words: number } | { ok: false; e
 /**
  * Reads a pasted link shortly after typing stops, the same way the run will,
  * so a link the agents cannot read shows up before the run starts. Ad library
- * links are not read: that is Apify's job, once it is connected.
+ * links are not read here: Apify reads them, when the team has switched it on.
  */
 export function useLinkCheck(url: string | null, adLibrary: boolean): LinkCheck {
   const [check, setCheck] = useState<LinkCheck>({ state: 'idle' });
@@ -58,11 +59,21 @@ export function useLinkCheck(url: string | null, adLibrary: boolean): LinkCheck 
   return check;
 }
 
-/** One line under the link field. `needsText` is a custom run, which has nothing to go on without the page. */
-export function LinkStatus({ check, needsText, onPasteText }: { check: LinkCheck; needsText: boolean; onPasteText?: () => void }) {
+/** Meta's Ad Library, the one Apify reads. */
+const META_LIBRARY = /^https?:\/\/(www\.|m\.)?facebook\.com\/ads\/library\b/i;
+
+/**
+ * One line under the link field. `needsText` is a custom run, which has nothing
+ * to go on without the page; `adsSource` is where the tracker reads ads from.
+ */
+export function LinkStatus({ check, needsText, adsSource, onPasteText }: { check: LinkCheck; needsText: boolean; adsSource: AdsSetting; onPasteText?: () => void }) {
   if (check.state === 'idle') return null;
+  const otherLibrary = check.state === 'ad-library' && adsSource === 'apify' && !META_LIBRARY.test(check.url);
   return (
-    <p className={cx(styles.linkStatus, check.state === 'failed' && (needsText ? styles.linkBad : styles.linkWarn), check.state === 'ok' && styles.linkOk)} aria-live="polite">
+    <p
+      className={cx(styles.linkStatus, check.state === 'failed' && (needsText ? styles.linkBad : styles.linkWarn), check.state === 'ok' && styles.linkOk, otherLibrary && styles.linkWarn)}
+      aria-live="polite"
+    >
       {check.state === 'checking' && (
         <>
           <LoaderCircle size={15} className="spin" aria-hidden />
@@ -95,12 +106,23 @@ export function LinkStatus({ check, needsText, onPasteText }: { check: LinkCheck
           </span>
         </>
       )}
-      {check.state === 'ad-library' && (
-        <>
-          <Info size={15} aria-hidden />
-          <span>Ad library links need Apify, which isn’t connected yet. This run will use sample ads.</span>
-        </>
-      )}
+      {check.state === 'ad-library' &&
+        (adsSource === 'sample' ? (
+          <>
+            <Info size={15} aria-hidden />
+            <span>The tracker reads sample ads until Apify is switched on in Settings, so this run will use them.</span>
+          </>
+        ) : otherLibrary ? (
+          <>
+            <TriangleAlert size={15} aria-hidden />
+            <span>Apify reads Meta’s Ad Library only. Paste their website, or a link to their ads in Meta’s Ad Library.</span>
+          </>
+        ) : (
+          <>
+            <CircleCheck size={15} aria-hidden />
+            <span>Apify will read the active ads at this link in Meta’s Ad Library.</span>
+          </>
+        ))}
     </p>
   );
 }

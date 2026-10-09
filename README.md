@@ -39,8 +39,9 @@ reads a run's link itself when the run starts (a competitor's site, or a
 podcast, blog or video page) and the agents work from what it read.
 
 Placeholders for now, each to be swapped for the real thing with the same
-output: competitor ads (Apify), ad pictures (an image model, ChatGPT's or
-Higgsfield's), and the posting itself. Until the Meta and LinkedIn keys are in
+output: competitor ads (sample ads until the tracker is switched to Apify),
+ad pictures (an image model, ChatGPT's or Higgsfield's), and the posting
+itself. Until the Meta and LinkedIn keys are in
 n8n, a post goes all the way through the publisher to a stand-in that posts
 nothing, and the Posts page says so; a picture asked for goes through "QGR ·
 Pictures" to a stand-in that makes none, and the studio says so and keeps the
@@ -75,7 +76,10 @@ the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" and "QGR ·
 Post results" with the steps its note lists, and put the Pages' IDs in
 Settings, Where posts go. To make pictures for real, add the image model's key
 to n8n as a credential and replace the stand-in in "QGR · Pictures" the same
-way.
+way. To read competitors' real ads, add an Apify token to n8n as the "Apify
+token" credential (Templated Custom Auth, `Authorization: Bearer {{api_key}}`),
+attach it to "Apify: their Meta ads" in the tracker, and switch Settings,
+Agents, Competitor ads to Apify.
 
 The database is `supabase/migrations/`. Apply a new migration to the project
 before deploying the code that needs it.

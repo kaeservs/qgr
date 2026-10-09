@@ -80,7 +80,7 @@ export default async function CompetitorPage({ params }: Props) {
         <p className={styles.sampleNote}>
           <FlaskConical size={17} aria-hidden />
           <span>
-            <strong>Sample ads.</strong> Apify isn’t connected yet, so this report reads example ads, not this competitor’s.
+            <strong>Sample ads.</strong> This report read example ads, not this competitor’s: the tracker reads sample ads until Apify is switched on in Settings.
           </span>
         </p>
       )}
@@ -170,9 +170,12 @@ export default async function CompetitorPage({ params }: Props) {
       </section>
 
       <section className="section" aria-labelledby="their-ads">
-        <h2 id="their-ads" className="display h2">
-          Their ads
-        </h2>
+        <div className="section-head">
+          <h2 id="their-ads" className="display h2">
+            Their ads
+          </h2>
+          {c.dataSource === 'apify' && <span className="muted small">Active in Meta’s Ad Library, read through Apify</span>}
+        </div>
         <div className={styles.gallery}>
           {c.examples.map((ad) => (
             <AdThumb key={ad.id} ad={ad} />

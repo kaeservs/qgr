@@ -135,10 +135,15 @@ export interface AdExample {
   text: string;
   daysRunning: number;
   tone: 'slate' | 'teal' | 'plum' | 'sand';
+  /** The ad in Meta's Ad Library, when Apify read it there. Sample ads have none. */
+  url?: string;
 }
 
-/** Where a report's ads came from. 'placeholder' means sample ads: Apify is not connected yet. */
+/** Where a report's ads came from. 'placeholder' means sample ads, read while the team's ads source is 'sample'. */
 export type AdSource = 'apify' | 'placeholder' | 'upload';
+
+/** Where the Competitor Tracker reads a competitor's ads: sample ads, or their real ones in Meta's Ad Library through Apify. */
+export type AdsSetting = 'sample' | 'apify';
 
 export interface Competitor {
   id: string;
@@ -353,6 +358,8 @@ export interface AgentSettings {
   contentAuto: boolean;
   /** Every new ad asks the image model for a picture as it is written. */
   picturesAuto: boolean;
+  /** Where the Competitor Tracker reads competitors' ads. */
+  adsSource: AdsSetting;
   scanEvery: ScanEvery;
   /** ISO weekday, Monday = 1. */
   scanDay: number;

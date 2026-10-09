@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
 import { dayKey, formatShortDate } from '@/lib/format';
 import { postsByDay, postState } from '@/lib/posts';
-import type { Agent, Post, User } from '@/lib/types';
+import type { AdsSetting, Agent, Post, User } from '@/lib/types';
 import { PostRows } from '../posts/PostRows';
 import { EmptyState } from '../ui/EmptyState';
 import { AgentPanel } from './AgentPanel';
@@ -24,6 +24,7 @@ export function HomeDashboard({
   nextScan,
   nextPost,
   timeZone,
+  adsSource,
 }: {
   user: User;
   runs: RunWithStatus[];
@@ -33,6 +34,7 @@ export function HomeDashboard({
   nextScan: string | null;
   nextPost: string | null;
   timeZone: string;
+  adsSource: AdsSetting;
 }) {
   const [day, setDay] = useState<string | null>(null);
   const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
@@ -48,7 +50,7 @@ export function HomeDashboard({
           <p className="lead">Your AI marketing team is ready.</p>
         </header>
 
-        <StartRunCard />
+        <StartRunCard adsSource={adsSource} />
 
         <section className="section" aria-labelledby="recent-runs">
           <div className="section-head">

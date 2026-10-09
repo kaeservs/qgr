@@ -759,6 +759,7 @@ export type Database = {
       }
       team_settings: {
         Row: {
+          ads_source: string
           content_auto: boolean
           facebook_page_id: string | null
           facebook_page_name: string | null
@@ -779,6 +780,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          ads_source?: string
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -799,6 +801,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          ads_source?: string
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -978,6 +981,7 @@ export type Database = {
         }
         Returns: string
       }
+      set_ads_source: { Args: { p_source: string }; Returns: undefined }
       set_competitor_tracked: {
         Args: { p_competitor_id: string; p_tracked: boolean }
         Returns: undefined

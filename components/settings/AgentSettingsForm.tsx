@@ -6,7 +6,7 @@ import { saveAgentSettingsAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
 import { hourLabel, SCAN_EVERY_LABEL, TIME_ZONES, WEEKDAYS, zoneLabel } from '@/lib/schedule';
-import type { AgentSettings, ScanEvery } from '@/lib/types';
+import type { AdsSetting, AgentSettings, ScanEvery } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
@@ -82,6 +82,19 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
           Each scan reads a tracked competitor’s ads again, with their website as it was last read. Stop scanning one from its page under Competitors.
         </p>
       </fieldset>
+
+      <label className="field">
+        <span className="label">{STAGE_INFO.tracker.name}: competitors’ ads</span>
+        <select className="input" value={form.adsSource} onChange={(e) => set('adsSource', e.target.value as AdsSetting)}>
+          <option value="sample">Sample ads</option>
+          <option value="apify">Their real ads, from Meta’s Ad Library (Apify)</option>
+        </select>
+        <span className="muted small">
+          {form.adsSource === 'apify'
+            ? 'Apify reads each competitor’s active ads in Meta’s Ad Library: at a link to their ads there, or by looking their name up. It needs the Apify token in n8n; without it, a scan stops and says why.'
+            : 'The same example ads for every competitor, so runs work before Apify is connected. Their reports say so.'}
+        </span>
+      </label>
 
       <div className={styles.switchRow}>
         <span>

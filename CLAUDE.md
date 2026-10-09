@@ -18,7 +18,9 @@ sign in and shows what is in Supabase; without them it runs on the sample data
 only once the n8n webhook settings are set too.
 
 Placeholders until their keys are in: Apify, image generation and posting.
-An approved variant is posted now or at a time to the Facebook Page,
+The tracker reads sample ads until the team switches it to Apify in Settings,
+once Apify's token is in n8n; then it reads each competitor's real ads in
+Meta's Ad Library (Competitor ads below). An approved variant is posted now or at a time to the Facebook Page,
 Instagram and the LinkedIn Page, and the whole path runs (the file made in the
 browser, the queue in Supabase, n8n's publisher), but n8n's three posting
 steps are stand-ins that post nothing and say so (Posting below). An ad's
@@ -51,7 +53,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
                save_variant(), approve_variant(), save_video_edit(), update_brand_profile(),
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                request_picture(), remove_picture(), update_agent_settings(),
-               set_pictures_auto(), update_publishing_settings(), set_competitor_tracked()
+               set_pictures_auto(), set_ads_source(), update_publishing_settings(),
+               set_competitor_tracked()
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
         asking pipeline_next() before each of the last two
     n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
@@ -103,7 +106,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   `continue_run` and `report_continue_failure`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
   `remove_picture`, `update_agent_settings`, `set_pictures_auto`,
-  `update_publishing_settings`, `set_competitor_tracked`. The advisor warns
+  `set_ads_source`, `update_publishing_settings`, `set_competitor_tracked`.
+  The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`) is granted to
@@ -178,12 +182,18 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Credentials, created in n8n and attached by hand: `Anthropic` (Anthropic
   API), `Supabase QGR` (Supabase API: project URL and service role key, on
   every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's,
-  the publisher's and the pictures' webhooks). The Meta and LinkedIn tokens
-  and the image model's key will be n8n credentials too; nothing that posts or
-  draws is kept in Supabase or the app.
-- Placeholders. "Apify: competitor ads (placeholder)" returns sample ads in
-  the shape Apify will, and the report is marked `data_source: placeholder`.
-  "Image model (stand-in)" in Pictures makes nothing and answers
+  the publisher's and the pictures' webhooks), `Apify token` (Templated
+  Custom Auth: the header `Authorization: Bearer {{api_key}}`, the token as
+  `api_key`; this n8n refuses a new plain Header Auth credential on the HTTP
+  node). The Meta and LinkedIn tokens and the image model's key will be n8n
+  credentials too; nothing that posts or draws is kept in Supabase or the app.
+- A node names its credential only once that credential exists in n8n: a
+  reference to a missing one fails every run before it starts, even a test
+  with pinned data ("uses invalid credential").
+- Placeholders. The tracker's "Sample ads" returns the same example ads for
+  every competitor, in the shape "Read Apify's ads" gives, and the report is
+  marked `data_source: placeholder`; it runs while the team's ads source is
+  sample. "Image model (stand-in)" in Pictures makes nothing and answers
   `stand_in: true`, so the studio says no picture was made and draws the
   branded design. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
   (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
@@ -195,9 +205,10 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 
 - `team_settings` is one row: the team's time zone, the two switches
   (`strategist_auto`, `content_auto`), whether every new ad asks for a picture
-  (`pictures_auto`), the scan schedule (`scan_every` off, day or week, with
-  `scan_day` and `scan_hour`) and the Pages posts go to. Settings changes it
-  through `update_agent_settings`, `set_pictures_auto` and
+  (`pictures_auto`), where the tracker reads ads (`ads_source`), the scan
+  schedule (`scan_every` off, day or week, with `scan_day` and `scan_hour`)
+  and the Pages posts go to. Settings changes it through
+  `update_agent_settings`, `set_pictures_auto`, `set_ads_source` and
   `update_publishing_settings`; Home's agent cards flip the same switches.
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
@@ -220,6 +231,29 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Times are the team's. A scan or a scheduled post is a wall time in
   `team_settings.time_zone`, converted by the database; the app shows times
   in that zone (`lib/schedule.ts`, tested across the clock changes).
+
+### Competitor ads (`team_settings.ads_source`, the tracker)
+
+- The tracker reads sample ads until the team switches it to Apify (Settings,
+  Agents; `set_ads_source`). `agent_begin` hands the choice to the tracker
+  alone, and "Real ads?" follows it, so a switch takes effect at the next scan.
+- With Apify, "Plan the scan" names the page of Meta's Ad Library to read: a
+  pasted link to the library as it is; for a website or uploaded ads, a
+  keyword search for the competitor's name. A link to another library
+  (LinkedIn's, X's, Google's) stops the scan and says why: the actor reads
+  Meta's only. "Apify: their Meta ads" runs Apify's Facebook Ads Library
+  Scraper and waits for it (`run-sync-get-dataset-items`, 60 ads and 240 s at
+  most).
+- "Read Apify's ads" keeps a search to the competitor's own ads (from a Page
+  with their name, or linking to their website), skips catalogue ads whose
+  words are a template, and reads every field whichever way the actor's
+  version names it (`adArchiveID` or `ad_archive_id`, a start date in seconds
+  or as a date). Days running are still worked out from start dates in code.
+  Its fixtures follow the field names the actor's listings show, not a real
+  run: check the first real scan's items against `tracker-apify-ads.js`.
+- Each ad keeps its page in Meta's Ad Library (`competitor_ads.ad_url`), shown
+  as "See the ad" on the competitor page, the only link a competitor's ad is
+  shown with. Nothing from Apify is stored but the report.
 
 ### Posting (`posts`, `post_targets`, "QGR · Publisher")
 
@@ -360,13 +394,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
    rules as the Content Agent's, kept in step by `n8n/code.test.ts`) flag a
    phrase for a person to judge before approving. Nothing edits words silently.
 7. **The sample data says it is sample data.** The top bar says so, saves say
-   "Saved for this session", and a report built from Apify's placeholder says
-   its ads are examples.
+   "Saved for this session", and a report built from sample ads says its ads
+   are examples.
 8. **The agents never fetch.** A link is read by the app when its run starts
    and stored with it (`runs.page`); a clip is described in words
    (`runs.excerpt`: its transcript, read over by the team, or what they type),
    because the agents cannot watch it. A scheduled scan reuses the website as
-   it was last read.
+   it was last read. Apify reads Meta's Ad Library for the tracker and nothing
+   else: a pasted ad link is handed to it only when it is the library's own.
 9. **A clip is never changed.** Every edit is instructions on a variant; the
    clip in Storage stays as it was uploaded, and the captions and end card are
    flagged against the guardrails like any other words on an ad.

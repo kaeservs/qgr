@@ -14,6 +14,7 @@ import type {
   AdFormat,
   AdSet,
   AdSource,
+  AdsSetting,
   Agent,
   AgentSettings,
   AngleShare,
@@ -109,7 +110,7 @@ export interface CompetitorRow {
     angles: Json;
     created_at: string;
     hooks: { id: string; rank: number; text: string; platform: string; format: string; days_running: number; variations: number }[];
-    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number }[];
+    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number; ad_url: string | null }[];
   }[];
 }
 
@@ -196,6 +197,9 @@ const POST_STATUSES: readonly PostStatus[] = ['scheduled', 'posting', 'posted', 
 const STYLES: readonly CreativeStyle[] = ['arcs', 'split', 'spotlight'];
 const SOURCES: readonly AdSource[] = ['apify', 'placeholder', 'upload'];
 const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
+/** An ad's own page in Meta's Ad Library, the only link a competitor's ad is shown with. */
+const LIBRARY_AD = /^https:\/\/www\.facebook\.com\/ads\/library\/\?id=\d{1,25}$/;
+const ADS_SETTINGS: readonly AdsSetting[] = ['sample', 'apify'];
 
 const platformsOf = (list: readonly string[] | null): Platform[] => PLATFORMS.filter((p) => (list ?? []).includes(p));
 const goalOf = (value: string): Goal => (isOneOf(GOALS, value) ? value : 'consultations');
@@ -364,7 +368,17 @@ export function toCompetitor(row: CompetitorRow): Competitor | null {
     .sort((a, b) => b.days_running - a.days_running)
     .flatMap((a, i): AdExample[] =>
       isOneOf(PLATFORMS, a.platform)
-        ? [{ id: a.id, platform: a.platform, format: formatOf(a.format), text: a.text, daysRunning: a.days_running, tone: TONES[i % TONES.length] ?? 'slate' }]
+        ? [
+            {
+              id: a.id,
+              platform: a.platform,
+              format: formatOf(a.format),
+              text: a.text,
+              daysRunning: a.days_running,
+              tone: TONES[i % TONES.length] ?? 'slate',
+              ...(a.ad_url && LIBRARY_AD.test(a.ad_url) ? { url: a.ad_url } : {}),
+            },
+          ]
         : [],
     );
   return {
@@ -535,6 +549,7 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
     strategistAuto: row.strategist_auto,
     contentAuto: row.content_auto,
     picturesAuto: row.pictures_auto,
+    adsSource: isOneOf(ADS_SETTINGS, row.ads_source) ? row.ads_source : 'sample',
     scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
     scanDay: row.scan_day,
     scanHour: row.scan_hour,

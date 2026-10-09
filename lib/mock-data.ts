@@ -903,6 +903,7 @@ export const settings: TeamSettings = {
   strategistAuto: false,
   contentAuto: true,
   picturesAuto: false,
+  adsSource: 'sample',
   scanEvery: 'week',
   scanDay: 1,
   scanHour: 9,

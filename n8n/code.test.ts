@@ -1,7 +1,7 @@
 // Runs each n8n Code-node script the way n8n does: as a function body with
 // $input (the node's input items) and $('Node name') (another node's output).
 // This file plays n8n's part so the agents' logic is tested before it ships.
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -161,6 +161,154 @@ describe('Competitor Tracker', () => {
 
   it('refuses to report when there are no active ads', () => {
     expect(() => run('tracker-prepare-ads.js', { ...raw, ads: [] })).toThrow('No active ads');
+  });
+});
+
+describe('Competitor Tracker, reading real ads through Apify', () => {
+  const page = { ok: true, url: 'https://www.horizonvisa.com/', title: 'Horizon Visa Partners', siteName: 'Horizon Visa', description: 'EB-5 advisors.', type: 'website', text: 'Families first.', words: 2, readAt: '2026-10-08T09:00:00Z' };
+  const website = { id: 'run-1', kind: 'competitor', input: 'website', url: 'https://www.horizonvisa.com/', platforms: ['meta'], goal: 'consultations', title: 'horizonvisa.com', page };
+  const apify = (runRow: Json) => run('tracker-plan.js', { run: runRow, brand, ads_source: 'apify' });
+
+  /** Apify's dataset items, one n8n item each, as the HTTP node hands them on. */
+  function read(items: Json[], plan: Json): Json {
+    const code = readFileSync(join(here, 'code', 'tracker-apify-ads.js'), 'utf8');
+    const all = items.map((json) => ({ json }));
+    const $input = { first: () => all[0], all: () => all };
+    const out = inN8n(code, $input, (name: string) => {
+      if (name !== 'Plan the scan') throw new Error(`Node "${name}" has not run`);
+      return { first: () => ({ json: plan }) };
+    }) as Items;
+    expect(out).toHaveLength(1);
+    return out[0]!.json;
+  }
+
+  const day = 86_400;
+  const now = Math.round(Date.now() / 1000);
+  // The actor's camelCase items (current versions)...
+  const camel = (id: string, pageName: string, body: string, extra: Json = {}): Json => ({
+    adArchiveID: id,
+    pageName,
+    pageID: '1029384756',
+    isActive: true,
+    startDate: now - 63 * day,
+    publisherPlatform: ['FACEBOOK', 'INSTAGRAM'],
+    snapshot: {
+      body: { text: body },
+      title: 'Plan your EB-5 timeline',
+      ctaText: 'Book now',
+      linkUrl: 'https://l.facebook.com/l.php?u=https%3A%2F%2Fwww.horizonvisa.com%2Ffamilies&h=AT0',
+      displayFormat: 'VIDEO',
+      videos: [{ videoHdUrl: 'https://video.example/hd.mp4', videoPreviewImageUrl: 'https://scontent.example/preview.jpg' }],
+      images: [],
+      cards: [],
+    },
+    ...extra,
+  });
+  // ...and the snake_case ones Meta's own answer uses, which some versions pass on.
+  const snake = (id: string, pageName: string, body: string, extra: Json = {}): Json => ({
+    ad_archive_id: id,
+    page_name: pageName,
+    is_active: true,
+    start_date: new Date((now - 12 * day) * 1000).toISOString(),
+    publisher_platform: ['FACEBOOK'],
+    snapshot: {
+      body: { markup: { __html: body.replace('. ', '.<br />') } },
+      title: null,
+      cta_text: 'Learn more',
+      link_url: 'https://horizonvisa.com/guide',
+      display_format: 'IMAGE',
+      images: [{ original_image_url: 'https://scontent.example/original.jpg', resized_image_url: 'https://scontent.example/small.jpg' }],
+      cards: [],
+    },
+    ...extra,
+  });
+
+  it('reads a pasted Meta Ad Library link as it is, and refuses another library', () => {
+    const link = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=1029384756';
+    expect(apify({ ...website, input: 'ad_link', url: link, page: null })).toMatchObject({ adsSource: 'apify', library: { url: link, keep: null } });
+    expect(() => apify({ ...website, input: 'ad_link', url: 'https://www.linkedin.com/ad-library/search?companyIds=1', page: null })).toThrow("Apify reads Meta's Ad Library, and this link is to another one");
+  });
+
+  it('looks a website or an upload up by the competitor’s name, kept to their ads', () => {
+    const plan = apify(website);
+    expect(plan.library).toEqual({
+      url: 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&media_type=all&search_type=keyword_unordered&q=Horizon%20Visa',
+      query: 'Horizon Visa',
+      keep: { name: 'Horizon Visa', domain: 'horizonvisa.com' },
+    });
+    const upload = apify({ id: 'run-2', kind: 'competitor', input: 'upload', competitor_name: 'Atlas Residency Group', files: ['ad1.png'], platforms: ['meta'], goal: 'consultations', title: 'Atlas' });
+    expect(upload.library).toMatchObject({ query: 'Atlas Residency Group', keep: { name: 'Atlas Residency Group', domain: null } });
+    // Sample ads, as before, unless the team switched to Apify.
+    expect(run('tracker-plan.js', { run: website, brand })).toMatchObject({ adsSource: 'sample', library: null });
+    expect(run('tracker-plan.js', { run: website, brand, ads_source: 'sample' })).toMatchObject({ adsSource: 'sample', library: null });
+  });
+
+  it('turns either shape of Apify’s items into the ads the tracker reads', () => {
+    const plan = apify(website);
+    const out = read(
+      [
+        camel('1111111111', 'Horizon Visa Partners', "Your kids shouldn't age out while you wait. Here's how families plan ahead."),
+        snake('2222222222', 'Horizon Visa', 'The H-1B lottery is not a plan. This is.'),
+      ],
+      plan,
+    );
+    expect(out).toMatchObject({ runId: 'run-1', dataSource: 'apify', domain: 'horizonvisa.com', websiteText: plan.websiteText });
+    const ads = out.ads as Json[];
+    expect(ads[0]).toEqual({
+      id: '1111111111',
+      platform: 'meta',
+      format: 'video',
+      startDate: new Date((now - 63 * day) * 1000).toISOString(),
+      isActive: true,
+      pageName: 'Horizon Visa Partners',
+      text: "Your kids shouldn't age out while you wait. Here's how families plan ahead.",
+      headline: 'Plan your EB-5 timeline',
+      cta: 'Book now',
+      adUrl: 'https://www.facebook.com/ads/library/?id=1111111111',
+      mediaUrl: 'https://scontent.example/preview.jpg',
+    });
+    expect(ads[1]).toMatchObject({ id: '2222222222', format: 'image', text: 'The H-1B lottery is not a plan. This is.', headline: null, cta: 'Learn more', mediaUrl: 'https://scontent.example/original.jpg' });
+
+    // Days running are worked out from the start date, as for the sample ads.
+    const prepared = run('tracker-prepare-ads.js', out);
+    expect((prepared.ads as Json[]).map((a) => [a.days_running, a.hook_line])).toEqual([
+      [63, "Your kids shouldn't age out while you wait."],
+      [12, 'The H-1B lottery is not a plan.'],
+    ]);
+  });
+
+  it('keeps a search to the competitor’s own ads, once each, and skips template words', () => {
+    const plan = apify(website);
+    const out = read(
+      [
+        camel('1', 'Horizon Visa Partners', 'Ours, by Page name.'),
+        camel('1', 'Horizon Visa Partners', 'The same ad twice.'),
+        snake('2', 'EB-5 Daily News', 'Theirs, by the link to their site.'),
+        camel('3', 'Atlas Residency', 'Another firm that named them.', { snapshot: { body: { text: 'Another firm that named them.' }, linkUrl: 'https://atlas.example/' } }),
+        camel('4', 'Horizon Visa Partners', '{{product.brand}}', { snapshot: { body: { text: '{{product.brand}}' }, displayFormat: 'DCO', cards: [{ body: 'A catalogue card with words.', title: 'Card' }, { body: '{{product.name}}' }] } }),
+        camel('5', 'Horizon Visa Partners', '{{product.brand}}', { snapshot: { body: { text: '{{product.brand}}' }, cards: [] } }),
+        {},
+      ],
+      plan,
+    );
+    expect((out.ads as Json[]).map((a) => [a.id, a.text, a.format])).toEqual([
+      ['1', 'Ours, by Page name.', 'video'],
+      ['2', 'Theirs, by the link to their site.', 'image'],
+      ['4', 'A catalogue card with words.', 'carousel'],
+    ]);
+  });
+
+  it('says plainly when there is nothing to read', () => {
+    const plan = apify(website);
+    // An empty answer reaches the step as one empty item.
+    expect(() => read([{}], plan)).toThrow(`Meta's Ad Library has no active ads for "Horizon Visa".`);
+    expect(() => read([camel('9', 'Atlas Residency', 'Not theirs.', { snapshot: { body: { text: 'Not theirs.' }, linkUrl: 'https://atlas.example/' } })], plan)).toThrow(
+      `Meta's Ad Library has ads for "Horizon Visa", but none from Horizon Visa's Page or linking to their website.`,
+    );
+    const link = apify({ ...website, input: 'ad_link', url: 'https://www.facebook.com/ads/library/?id=123', page: null });
+    expect(() => read([{}], link)).toThrow("Meta's Ad Library has no active ads at that link.");
+    // A pasted link is the team's choice: every ad it shows is read.
+    expect((read([camel('7', 'Anyone at all', 'Read as it is.')], link).ads as Json[]).map((a) => a.id)).toEqual(['7']);
   });
 });
 
@@ -360,5 +508,17 @@ describe('Failure reason', () => {
   it('reads a node error output, string or object', () => {
     expect(run('shared-fail-reason.js', { error: 'timeout' }, { 'Begin: load the run': ctx }, swap).p_error).toBe('timeout');
     expect(run('shared-fail-reason.js', { error: { message: 'Bad request', description: 'temperature is not supported' } }, { 'Begin: load the run': ctx }, swap).p_error).toBe('temperature is not supported');
+  });
+});
+
+describe('the workflow sources', () => {
+  it('are JavaScript that n8n can read', () => {
+    const sdk = ['workflow', 'node', 'trigger', 'sticky', 'newCredential', 'ifElse', 'switchCase', 'expr'];
+    const files = readdirSync(join(here, 'workflows')).filter((f) => f.endsWith('.sdk.js'));
+    expect(files.length).toBeGreaterThanOrEqual(8);
+    for (const file of files) {
+      const src = readFileSync(join(here, 'workflows', file), 'utf8').replace(/^import .*$/m, '').replace('export default ', 'return ');
+      expect(() => new Function(...sdk, src), file).not.toThrow();
+    }
   });
 });
