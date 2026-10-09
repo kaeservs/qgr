@@ -146,6 +146,8 @@ export interface RenderJob {
   signal?: AbortSignal;
   /** The clip's own rate up to this; 30 is what the platforms show. */
   maxFrameRate?: number;
+  /** Refuse to make WebM: a post to Instagram or Facebook must be an MP4. */
+  requireMp4?: boolean;
 }
 
 const FADE = 0.008;
@@ -201,6 +203,7 @@ export async function render(job: RenderJob): Promise<{ blob: Blob; target: Targ
     const frameRate = clamp(Math.round(stats.averagePacketRate) || 30, 10, job.maxFrameRate ?? 30);
     const target = await chooseTarget(job.size, job.bitrate, audio !== null);
     if (!target) throw new RenderError('This browser can’t make video files. Use Chrome, Edge or Safari.');
+    if (job.requireMp4 && target.container !== 'mp4') throw new RenderError('This browser can only make WebM, and posts go out as MP4. Post it from Chrome, Edge or Safari.');
     if (job.signal?.aborted) throw aborted();
 
     // Frames are decoded no larger than 1080p: enough for any frame this makes.

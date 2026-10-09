@@ -2,7 +2,9 @@
 
 import { Activity, Clock, Compass, Radar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { switchAgentAction } from '@/app/(app)/settings/actions';
 import { STAGE_INFO } from '@/lib/pipeline';
 import type { Agent } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
@@ -13,9 +15,26 @@ const ICON = { tracker: Radar, strategist: Compass, content: Sparkles } as const
 
 export function AgentPanel({ agents }: { agents: Agent[] }) {
   const toast = useToast();
-  // Switchable only on the sample data, where it is kept in the page. The live
-  // pipeline runs every agent in turn, so its cards show no switch.
+  const router = useRouter();
+  // Shown switched at once; put back if the save fails. The schedule and the
+  // switches are the team's (Settings → Agents), saved for everyone.
   const [auto, setAuto] = useState(() => Object.fromEntries(agents.map((a) => [a.key, a.auto])) as Record<Agent['key'], boolean>);
+  const [busy, setBusy] = useState<Agent['key'] | null>(null);
+
+  async function flip(agent: Agent, next: boolean) {
+    const name = STAGE_INFO[agent.key].name;
+    setAuto((a) => ({ ...a, [agent.key]: next }));
+    setBusy(agent.key);
+    const saved = await switchAgentAction(agent.key, next);
+    setBusy(null);
+    if (!saved.ok) {
+      setAuto((a) => ({ ...a, [agent.key]: !next }));
+      return toast(saved.error, 'info');
+    }
+    const what = agent.key === 'tracker' ? (next ? 'Scans run on schedule' : 'Scans run when you ask') : next ? `${name} runs automatically` : `${name} waits for you`;
+    toast(saved.sample ? `${what}, for this session` : what, 'info');
+    router.refresh();
+  }
 
   return (
     <div className={styles.agents}>
@@ -45,10 +64,9 @@ export function AgentPanel({ agents }: { agents: Agent[] }) {
                 {agent.switchable && (
                   <Toggle
                     checked={on}
-                    label={`Run the ${name} automatically`}
+                    label={agent.key === 'tracker' ? 'Scan tracked competitors on schedule' : `Run the ${name} automatically`}
                     onChange={(next) => {
-                      setAuto((a) => ({ ...a, [agent.key]: next }));
-                      toast(next ? `${name} runs automatically` : `${name} waits for you`, 'info');
+                      if (busy === null) void flip(agent, next);
                     }}
                   />
                 )}

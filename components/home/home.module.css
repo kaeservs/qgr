@@ -609,6 +609,14 @@
   color: var(--text);
 }
 
+a.nextScan {
+  text-decoration: none;
+}
+
+a.nextScan:hover {
+  background: var(--gold-100);
+}
+
 .agents {
   display: flex;
   flex-direction: column;
@@ -786,4 +794,20 @@
   .runMeta {
     gap: 6px 14px;
   }
+}
+
+.heard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.heard button {
+  padding: 0;
+  border: 0;
+  background: none;
 }

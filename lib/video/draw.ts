@@ -45,7 +45,7 @@ export interface Scene {
   clipTime: number | null;
 }
 
-type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 function roundedRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -53,7 +53,7 @@ function roundedRect(ctx: Ctx, x: number, y: number, w: number, h: number, r: nu
 }
 
 /** Lines of `text` no wider than `width`, at most `max` of them; the last is cut with an ellipsis. */
-function wrap(ctx: Ctx, text: string, width: number, max: number): string[] {
+export function wrap(ctx: Ctx, text: string, width: number, max: number): string[] {
   const fit = (line: string) => {
     if (ctx.measureText(line).width <= width) return line;
     let cut = line;

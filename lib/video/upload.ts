@@ -3,8 +3,8 @@
 // reports how much of an upload has gone. The request is the one supabase-js's
 // uploadToSignedUrl sends, so Storage reads it the same way.
 
-import { CLIP_TYPES } from '../data/source';
-import type { ClipExtension } from '../data/source';
+import { CLIP_TYPES, POST_MEDIA_TYPES } from '../data/source';
+import type { ClipExtension, PostMediaExtension } from '../data/source';
 
 /** A failure in words a person can act on. */
 export class UploadError extends Error {}
@@ -17,14 +17,14 @@ export interface Uploaded {
 
 export const extensionFor = (type: string): ClipExtension | null => (Object.keys(CLIP_TYPES) as ClipExtension[]).find((ext) => CLIP_TYPES[ext] === type) ?? null;
 
-function refusal(xhr: XMLHttpRequest): string {
-  if (xhr.status === 413) return 'The clip is over 50 MB. Cut it shorter.';
-  if (/mime|type/i.test(xhr.responseText)) return 'Storage takes MP4, MOV or WebM videos only.';
+function refusal(xhr: XMLHttpRequest, what: 'clip' | 'file'): string {
+  if (xhr.status === 413) return what === 'clip' ? 'The clip is over 50 MB. Cut it shorter.' : 'The file is over 50 MB.';
+  if (/mime|type/i.test(xhr.responseText)) return what === 'clip' ? 'Storage takes MP4, MOV or WebM videos only.' : 'Storage takes a JPEG or an MP4 for a post.';
   if (xhr.status === 400 && /expired|signature|token/i.test(xhr.responseText)) return 'The upload link expired. Try again.';
-  return `Storage refused the clip (${xhr.status}). Try again.`;
+  return `Storage refused the ${what} (${xhr.status}). Try again.`;
 }
 
-function put(url: string, file: Blob, extension: ClipExtension, onProgress: (share: number) => void, signal?: AbortSignal): Promise<void> {
+function put(url: string, file: Blob, name: string, what: 'clip' | 'file', onProgress: (share: number) => void, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
@@ -32,14 +32,14 @@ function put(url: string, file: Blob, extension: ClipExtension, onProgress: (sha
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(e.loaded / e.total);
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new UploadError(refusal(xhr))));
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new UploadError(refusal(xhr, what))));
     xhr.onerror = () => reject(new UploadError('The upload stopped. Check the connection and try again.'));
     xhr.onabort = () => reject(new DOMException('The upload was cancelled.', 'AbortError'));
     if (signal?.aborted) return xhr.abort();
     signal?.addEventListener('abort', () => xhr.abort(), { once: true });
     const form = new FormData();
     form.append('cacheControl', '3600');
-    form.append('', file, `clip.${extension}`);
+    form.append('', file, name);
     xhr.send(form);
   });
 }
@@ -57,9 +57,32 @@ export async function uploadClip(file: Blob, onProgress: (share: number) => void
     onProgress(1);
     return { path: body.path, sample: true };
   }
-  await put(body.url, file, extension, onProgress, signal);
+  await put(body.url, file, `clip.${extension}`, 'clip', onProgress, signal);
   onProgress(1);
   return { path: body.path, sample: false };
+}
+
+/** Uploads the file a post goes out with, a JPEG or an MP4, through a link /api/post-media signs. */
+export async function uploadPostFile(file: Blob, onProgress: (share: number) => void, signal?: AbortSignal): Promise<Uploaded> {
+  const extension = (Object.keys(POST_MEDIA_TYPES) as PostMediaExtension[]).find((ext) => POST_MEDIA_TYPES[ext] === file.type);
+  if (!extension) throw new UploadError('A post goes out with a JPEG or an MP4.');
+  const init: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: file.type, size: file.size }) };
+  if (signal) init.signal = signal;
+  const res = await fetch('/api/post-media', init);
+  const body = (await res.json().catch(() => null)) as { path?: string; url?: string | null; sample?: boolean; error?: string } | null;
+  if (!res.ok || !body?.path) throw new UploadError(body?.error ?? 'The post’s file could not be uploaded.');
+  if (body.sample || !body.url) {
+    onProgress(1);
+    return { path: body.path, sample: true };
+  }
+  await put(body.url, file, `post.${extension}`, 'file', onProgress, signal);
+  onProgress(1);
+  return { path: body.path, sample: false };
+}
+
+/** Removes a post file no post will use. Best effort, like removeUpload. */
+export async function removePostFile(path: string): Promise<void> {
+  await fetch('/api/post-media', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
 }
 
 /**

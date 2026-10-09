@@ -7,6 +7,7 @@ const WORD: Record<Stage['status'], string> = {
   done: 'done',
   running: 'running',
   queued: 'queued',
+  waiting: 'waiting for you',
   skipped: 'skipped',
   failed: 'failed',
 };

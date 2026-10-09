@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdThumb } from '@/components/competitors/AdThumb';
 import { AngleBars } from '@/components/competitors/AngleBars';
+import { TrackedSwitch } from '@/components/competitors/TrackedSwitch';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlatformIcon, PlatformIcons } from '@/components/ui/PlatformIcon';
 import { getCompetitor, getNow, getStrategyForCompetitor } from '@/lib/data';
@@ -56,6 +57,7 @@ export default async function CompetitorPage({ params }: Props) {
           </div>
         </div>
         <div className="page-actions">
+          {c.domain && <TrackedSwitch competitorId={c.id} name={c.name} tracked={c.tracked} />}
           <Link href={rescan} className="btn btn-ghost">
             <Radar size={17} aria-hidden />
             Scan again

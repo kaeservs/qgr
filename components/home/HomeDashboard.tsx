@@ -13,7 +13,23 @@ import { RunCard } from './RunCard';
 import { StartRunCard } from './StartRunCard';
 import styles from './home.module.css';
 
-export function HomeDashboard({ user, runs, agents, now, nextScan }: { user: User; runs: RunWithStatus[]; agents: Agent[]; now: string; nextScan: string | null }) {
+export function HomeDashboard({
+  user,
+  runs,
+  agents,
+  now,
+  nextScan,
+  nextPost,
+  timeZone,
+}: {
+  user: User;
+  runs: RunWithStatus[];
+  agents: Agent[];
+  now: string;
+  nextScan: string | null;
+  nextPost: string | null;
+  timeZone: string;
+}) {
   const [day, setDay] = useState<string | null>(null);
   const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
 
@@ -58,7 +74,7 @@ export function HomeDashboard({ user, runs, agents, now, nextScan }: { user: Use
       </div>
 
       <aside className={`card ${styles.sideCol}`} aria-label="Calendar and agents">
-        <RunCalendar runDates={runs.map((r) => r.createdAt)} today={now} selected={day} onSelect={setDay} nextScan={nextScan} />
+        <RunCalendar runDates={runs.map((r) => r.createdAt)} today={now} selected={day} onSelect={setDay} nextScan={nextScan} nextPost={nextPost} timeZone={timeZone} />
         <AgentPanel agents={agents} />
       </aside>
     </div>

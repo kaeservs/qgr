@@ -262,11 +262,23 @@ describe('copyOf', () => {
 });
 
 describe('toAgents and toUser', () => {
-  it('counts from the data, and offers no switch the pipeline cannot honour', () => {
-    const agents = toAgents(1, 2, []);
+  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
+
+  it('counts from the data, and shows each agent’s switch as the team set it', () => {
+    const agents = toAgents(settings, { competitors: 1, strategies: 2 }, []);
     expect(agents.map((a) => a.stat)).toEqual(['1 competitor tracked', '2 strategies', '0 sets to review']);
-    expect(agents.every((a) => !a.switchable)).toBe(true);
+    expect(agents.map((a) => [a.key, a.auto, a.auto ? a.autoLabel : a.manualLabel])).toEqual([
+      ['tracker', true, 'Scans every Monday, 09:00'],
+      ['strategist', false, 'Waits for you after a scan'],
+      ['content', true, 'Writes ads from every strategy'],
+    ]);
+    expect(agents.every((a) => a.switchable)).toBe(true);
     expect(agents[2]?.action).toEqual({ label: 'View ads', href: '/content' });
+  });
+
+  it('says when the tracker would scan if it were switched on', () => {
+    const [tracker] = toAgents({ ...settings, scanEvery: 'off', scanDay: 3 }, { competitors: 0, strategies: 0 }, []);
+    expect(tracker).toMatchObject({ auto: false, manualLabel: 'Scans when you ask', autoLabel: 'Scans every Wednesday, 09:00' });
   });
 
   it('names the signed-in teammate', () => {

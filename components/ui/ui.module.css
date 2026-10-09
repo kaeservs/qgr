@@ -28,6 +28,11 @@
   color: var(--run);
 }
 
+.status-waiting {
+  background: var(--gold-100);
+  color: var(--gold-ink);
+}
+
 .status-review {
   background: var(--review-bg);
   color: var(--review);
@@ -69,6 +74,10 @@
 
 .seg-queued {
   background: var(--indigo-100);
+}
+
+.seg-waiting {
+  background: var(--gold);
 }
 
 .seg-skipped {

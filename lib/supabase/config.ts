@@ -29,3 +29,16 @@ export function pipelineConfig(): PipelineConfig | null {
   const secret = process.env.N8N_RUN_WEBHOOK_SECRET?.trim();
   return url && secret ? { url, secret } : null;
 }
+
+/**
+ * The "QGR · Publisher" webhook, which sends a post that is due now instead of
+ * waiting for the publisher's next minute. Its own setting, or else the run
+ * webhook's address with /qgr-publish in place of /qgr-run; the same secret.
+ */
+export function publisherConfig(): PipelineConfig | null {
+  const pipeline = pipelineConfig();
+  if (!pipeline) return null;
+  const own = process.env.N8N_PUBLISH_WEBHOOK_URL?.trim();
+  if (own) return { url: own, secret: pipeline.secret };
+  return /\/qgr-run$/.test(pipeline.url) ? { url: pipeline.url.replace(/\/qgr-run$/, '/qgr-publish'), secret: pipeline.secret } : null;
+}

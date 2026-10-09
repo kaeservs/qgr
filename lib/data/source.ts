@@ -4,7 +4,29 @@
 
 import { STAGE_INFO } from '../pipeline';
 import type { NewRunInput } from '../run-input';
-import type { AdSet, Agent, BrandProfile, Competitor, Notice, PageRead, PageSummary, Platform, PlatformCopy, Run, RunStatus, SearchItem, Strategy, User } from '../types';
+import type {
+  AdSet,
+  Agent,
+  AgentSettings,
+  BrandProfile,
+  Competitor,
+  Notice,
+  PageRead,
+  PageSummary,
+  Place,
+  Platform,
+  PlatformCopy,
+  Post,
+  PostPages,
+  Run,
+  RunStatus,
+  SearchItem,
+  StageKey,
+  Strategy,
+  TeamSettings,
+  TranscriptLine,
+  User,
+} from '../types';
 import type { VideoEdit } from '../video/edit';
 
 export type RunWithStatus = Run & { status: RunStatus };
@@ -17,6 +39,25 @@ export interface VariantEdit {
   creativeText: string;
   copy: Partial<Record<Platform, PlatformCopy>>;
 }
+
+/** One place a new post goes, with the file the browser made for it there, if any. */
+export interface NewPostTarget {
+  place: Place;
+  media: { path: string; kind: 'image' | 'video' } | null;
+}
+
+/** An approved variant to post now (`at` null) or at a wall time in the team's zone (`YYYY-MM-DD HH:MM`). */
+export interface NewPost {
+  variantId: string;
+  targets: NewPostTarget[];
+  at: string | null;
+  /** A small JPEG of what goes out, as a data URL. */
+  thumbnail: string | null;
+}
+
+/** The kinds of file a post goes out with (bucket post-media). */
+export const POST_MEDIA_TYPES = { jpg: 'image/jpeg', mp4: 'video/mp4' } as const;
+export type PostMediaExtension = keyof typeof POST_MEDIA_TYPES;
 
 /** The kinds of file Storage keeps clips as (bucket run-media). */
 export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
@@ -61,6 +102,26 @@ export interface DataSource {
   createClipUpload(extension: ClipExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes an uploaded clip that no run uses: one cut again or taken away before the run started. */
   deleteClipUpload(path: string): Promise<Saved>;
+  /** What is said in an uploaded clip, line by line, from a speech-to-text service. */
+  transcribeClip(path: string): Promise<Saved<{ lines: TranscriptLine[] }>>;
+
+  getTeamSettings(): Promise<TeamSettings>;
+  saveAgentSettings(settings: AgentSettings): Promise<Saved>;
+  savePostPages(pages: PostPages): Promise<Saved>;
+  setCompetitorTracked(competitorId: string, tracked: boolean): Promise<Saved>;
+  /** Starts the agent a run waits on (its switch is off) or one that failed, and hands it to n8n. */
+  continueRun(runId: string): Promise<Saved<{ stage: StageKey }>>;
+
+  /** Every post, newest first. */
+  getPosts(): Promise<Post[]>;
+  /** Records a post of an approved variant; one to send now is handed to the publisher at once. */
+  schedulePost(post: NewPost): Promise<Saved<{ id: string }>>;
+  cancelPost(postId: string): Promise<Saved>;
+  retryPost(postId: string, place: Place): Promise<Saved>;
+  /** Where the browser uploads a post's file: a fresh path in the teammate's own folder and a signed link. */
+  createPostUpload(extension: PostMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a post file nothing waits on: one made for a post that was never sent. */
+  deletePostMedia(path: string): Promise<Saved>;
 }
 
 /** The app's own pages, for search. */
@@ -70,7 +131,8 @@ export const PAGES: SearchItem[] = [
   { label: 'Competitors', sub: STAGE_INFO.tracker.name, href: '/competitors', kind: 'page' },
   { label: 'Strategy', sub: STAGE_INFO.strategist.name, href: '/strategy', kind: 'page' },
   { label: 'Content', sub: STAGE_INFO.content.name, href: '/content', kind: 'page' },
-  { label: 'Settings', sub: 'Brand profile and connections', href: '/settings', kind: 'page' },
+  { label: 'Posts', sub: 'Scheduled and sent posts', href: '/posts', kind: 'page' },
+  { label: 'Settings', sub: 'Brand profile, agents and Pages', href: '/settings', kind: 'page' },
 ];
 
 export function searchIndex(competitors: Competitor[], strategies: Strategy[], adSets: AdSet[], runs: Run[]): SearchItem[] {
