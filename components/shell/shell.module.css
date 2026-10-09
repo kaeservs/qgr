@@ -416,6 +416,47 @@
   font-size: 14px;
 }
 
+/* What is at work now: the running colours, a turning ring and a count. */
+.working {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--indigo-200);
+  border-radius: 999px;
+  background: var(--run-bg);
+  color: var(--run);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.working:hover {
+  border-color: var(--indigo-300);
+}
+
+.workingCount {
+  font-variant-numeric: tabular-nums;
+}
+
+.workingIcon {
+  background: var(--run-bg);
+  color: var(--run);
+}
+
+.workingSince {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.noticeText strong {
+  font-weight: 500;
+}
+
 /* ---------- Narrow screens: the sidebar becomes a drawer ---------- */
 
 @media (max-width: 1023px) {
@@ -485,6 +526,19 @@
 
   .newRun span {
     display: none;
+  }
+
+  .workingWord,
+  .sampleWord {
+    display: none;
+  }
+
+  .topActions {
+    gap: 8px;
+  }
+
+  .working {
+    padding: 0 10px;
   }
 
   .popover {

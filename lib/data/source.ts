@@ -5,6 +5,7 @@
 import { STAGE_INFO } from '../pipeline';
 import type { NewRunInput } from '../run-input';
 import type {
+  ActivityItem,
   AdSet,
   Agent,
   AgentSettings,
@@ -80,6 +81,8 @@ export interface DataSource {
   /** The tracker's next scheduled scan; null while nothing is scheduled. */
   getNextScan(): Promise<string | null>;
   getNotices(): Promise<Notice[]>;
+  /** What the agents and n8n are doing right now: runs an agent is on, posts going out, pictures being made. */
+  getActivity(): Promise<ActivityItem[]>;
   getSearchIndex(): Promise<SearchItem[]>;
   getBrandProfile(): Promise<BrandProfile>;
 

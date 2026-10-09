@@ -164,7 +164,7 @@ export function SettingsForm({
                 {error}
               </p>
             )}
-            <button type="submit" className="btn btn-primary" disabled={saving}>
+            <button type="submit" className="btn btn-primary" disabled={saving} aria-busy={saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </div>

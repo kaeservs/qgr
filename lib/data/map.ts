@@ -9,7 +9,9 @@ import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
 import { GOALS, PLACES, PLATFORMS } from '../types';
+import { PLACE_LABEL } from '../post-input';
 import type {
+  ActivityItem,
   AdExample,
   AdFormat,
   AdSet,
@@ -28,6 +30,7 @@ import type {
   Notice,
   PageRead,
   PageSummary,
+  Place,
   Platform,
   PlatformCopy,
   Post,
@@ -616,4 +619,74 @@ export function toCreateRunArgs(input: NewRunInput, page: PageRead | null = null
     return { ...base, p_kind: 'custom', p_input: 'video', p_excerpt: source.notes, p_media_path: path, p_media: media };
   }
   return { ...base, p_kind: 'custom', p_input: source.type, p_url: source.url };
+}
+
+// ---------------------------------------------------------------- what is at work now
+
+/** What the agents and n8n are doing, as read for the top bar's Working list. */
+export interface ActivityRows {
+  /** Stages an agent is running. */
+  stages: { run_id: string; stage: string; started_at: string | null; runs: One<{ title: string }> }[];
+  /** Places being sent, or waiting to be. */
+  places: {
+    post_id: string;
+    place: string;
+    status: string;
+    claimed_at: string | null;
+    posts: One<{ scheduled_for: string; ad_variants: One<{ label: string; ad_sets: One<{ title: string }> }> }>;
+  }[];
+  /** Ads waiting for a picture. */
+  pictures: { id: string; label: string; ad_set_id: string; picture_requested_at: string | null; ad_sets: One<{ title: string }> }[];
+}
+
+/**
+ * How long each kind of work takes at most. Past it, the work is not at work
+ * but stuck, and the page it belongs to says so: the run's stage, a post to
+ * check on the Page, Ask again on a picture.
+ */
+export const WORKING_MINUTES = {
+  /** An agent's turn: its longest call to Claude, or to Apify, with time to spare. */
+  agent: 30,
+  /** A post going out: the publisher marks a place still sending after 15 minutes as unknown. */
+  sending: 15,
+  /** A picture: the studio offers to ask again after 10 minutes. */
+  picture: 10,
+} as const;
+
+/** What is at work now, newest first: one line for each run an agent is on, each post going out and each picture being made. */
+export function toActivity(rows: ActivityRows, now: string): ActivityItem[] {
+  const at = Date.parse(now);
+  const recent = (iso: string | null | undefined, minutes: number): iso is string => !!iso && at - Date.parse(iso) <= minutes * 60_000;
+  const items: ActivityItem[] = [];
+
+  for (const s of rows.stages) {
+    if (!isOneOf(STAGE_ORDER, s.stage) || !recent(s.started_at, WORKING_MINUTES.agent)) continue;
+    items.push({ id: `run-${s.run_id}`, kind: 'run', label: STAGE_INFO[s.stage].name, subject: one(s.runs)?.title ?? 'A run', href: `/runs/${s.run_id}`, since: s.started_at, stage: s.stage });
+  }
+
+  // A post's places go out together: one line for the post, naming them all.
+  const sending = new Map<string, { places: Place[]; since: string; subject: string }>();
+  for (const t of rows.places) {
+    const post = one(t.posts);
+    if (!post || !isOneOf(PLACES, t.place)) continue;
+    // Claimed by the publisher, or due and about to be.
+    const since = t.status === 'posting' ? (t.claimed_at ?? post.scheduled_for) : t.status === 'scheduled' && Date.parse(post.scheduled_for) <= at ? post.scheduled_for : null;
+    if (!recent(since, WORKING_MINUTES.sending)) continue;
+    const variant = one(post.ad_variants);
+    const entry = sending.get(t.post_id) ?? { places: [], since, subject: `${one(variant?.ad_sets)?.title ?? 'An ad'}, variant ${variant?.label ?? '?'}` };
+    entry.places.push(t.place);
+    if (since < entry.since) entry.since = since;
+    sending.set(t.post_id, entry);
+  }
+  for (const [postId, post] of sending) {
+    const places = PLACES.filter((p) => post.places.includes(p)).map((p) => PLACE_LABEL[p]);
+    items.push({ id: `post-${postId}`, kind: 'post', label: `Sending to ${places.join(', ')}`, subject: post.subject, href: `/posts#post-${postId}`, since: post.since });
+  }
+
+  for (const v of rows.pictures) {
+    if (!recent(v.picture_requested_at, WORKING_MINUTES.picture)) continue;
+    items.push({ id: `picture-${v.id}`, kind: 'picture', label: 'Making a picture', subject: `${one(v.ad_sets)?.title ?? 'An ad'}, variant ${v.label}`, href: `/content/${v.ad_set_id}`, since: v.picture_requested_at });
+  }
+
+  return items.sort((a, b) => b.since.localeCompare(a.since));
 }

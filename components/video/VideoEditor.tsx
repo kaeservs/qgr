@@ -772,7 +772,7 @@ export function VideoEditor({
             Export video
           </button>
         )}
-        <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy !== null || !changed}>
+        <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy !== null || !changed} aria-busy={busy === 'saving'}>
           {busy === 'saving' ? 'Saving…' : 'Save'}
         </button>
           </>

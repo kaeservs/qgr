@@ -712,6 +712,18 @@ a.nextScan:hover {
   flex: none;
 }
 
+/* While the agent is at work: the running colour, and what on. */
+.agentWorking {
+  color: var(--run);
+}
+
+.agentWorking :global(.link) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .agentActions {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import type { ReactNode } from 'react';
 import { AppShell } from '@/components/shell/AppShell';
-import { getCurrentUser, getNotices, getNow, getSearchIndex, usingSampleData } from '@/lib/data';
+import { getActivity, getCurrentUser, getNotices, getNow, getSearchIndex, usingSampleData } from '@/lib/data';
 import { getViewer } from '@/lib/session';
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
@@ -13,9 +13,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     if (!viewer) redirect('/sign-in');
     if (!viewer.role) redirect('/no-access');
   }
-  const [user, searchIndex, notices, now] = await Promise.all([getCurrentUser(), getSearchIndex(), getNotices(), getNow()]);
+  const [user, searchIndex, notices, activity, now] = await Promise.all([getCurrentUser(), getSearchIndex(), getNotices(), getActivity(), getNow()]);
   return (
-    <AppShell user={user} searchIndex={searchIndex} notices={notices} now={now} sample={sample}>
+    <AppShell user={user} searchIndex={searchIndex} notices={notices} activity={activity} now={now} sample={sample}>
       {children}
     </AppShell>
   );

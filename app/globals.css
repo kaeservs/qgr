@@ -415,12 +415,34 @@ button:disabled {
   color: var(--indigo);
 }
 
-.btn:disabled,
+/* A button waiting on something it sent keeps its colour: it is at work, not unavailable. */
+.btn:disabled:not([aria-busy='true']),
 .btn[aria-disabled='true'] {
   background: var(--idle-bg);
   border-color: transparent;
   color: #8b8ca3;
   box-shadow: none;
+}
+
+/* A button at work: its icon gives way to a turning ring, and the pointer
+   says so. Set aria-busy on the button; nothing else is needed. */
+.btn[aria-busy='true'] {
+  cursor: progress;
+}
+
+.btn[aria-busy='true'] > svg {
+  display: none;
+}
+
+.btn[aria-busy='true']::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 .btn-sm {

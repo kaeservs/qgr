@@ -264,7 +264,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
             )}
             {transcript.state === 'failed' && <p className={cx('muted small', styles.heard)}>{transcript.error}</p>}
             <div className={styles.clipGo}>
-              <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || clipStatus.state === 'working'}>
+              <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || clipStatus.state === 'working'} aria-busy={busy || clipStatus.state === 'working'}>
                 {busy ? 'Starting…' : clipStatus.state === 'working' ? clipStatus.label : 'Start run'}
                 {!busy && clipStatus.state !== 'working' && <ArrowRight size={17} aria-hidden />}
               </button>
@@ -287,7 +287,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
               onChange={(e) => setUrl(e.target.value)}
             />
           )}
-          <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy}>
+          <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy} aria-busy={busy}>
             {busy ? (readsLink && !adLibrary ? 'Reading the page…' : 'Starting…') : 'Start run'}
             {!busy && <ArrowRight size={17} aria-hidden />}
           </button>

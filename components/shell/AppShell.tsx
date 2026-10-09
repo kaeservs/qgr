@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Notice, SearchItem, User } from '@/lib/types';
+import type { ActivityItem, Notice, SearchItem, User } from '@/lib/types';
 import { ToastProvider } from '../ui/Toast';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
@@ -12,6 +12,7 @@ export function AppShell({
   user,
   searchIndex,
   notices,
+  activity,
   now,
   sample,
   children,
@@ -19,6 +20,8 @@ export function AppShell({
   user: User;
   searchIndex: SearchItem[];
   notices: Notice[];
+  /** What the agents and n8n are doing as the page was read; the top bar keeps it fresh. */
+  activity: ActivityItem[];
   now: string;
   /** True when Supabase is not configured and the pages show sample data. */
   sample: boolean;
@@ -33,7 +36,7 @@ export function AppShell({
       <div className={styles.shell}>
         <Sidebar user={user} open={navOpen} onClose={() => setNavOpen(false)} canSignOut={!sample} />
         <div className={styles.main}>
-          <Topbar onMenu={() => setNavOpen(true)} searchIndex={searchIndex} notices={notices} now={now} sample={sample} />
+          <Topbar onMenu={() => setNavOpen(true)} searchIndex={searchIndex} notices={notices} activity={activity} now={now} sample={sample} />
           <main id="main" className={styles.content}>
             {children}
           </main>

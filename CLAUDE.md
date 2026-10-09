@@ -49,6 +49,7 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
             ── POST /api/runs → reads the run's link → create_run() → POST the n8n
                webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
+            ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant(), approve_variant(), save_video_edit(), update_brand_profile(),
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
@@ -432,6 +433,22 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   and post times render the same way in the team's zone (`formatInZone`).
 - Copy limits in `lib/platforms.ts` are the platforms' recommendations (X's
   280 is the hard one); check them against current ad specs.
+- Waiting is always shown, in one of three ways:
+  - A page loading: `app/(app)/loading.tsx` stands in for it, with the
+    sidebar and top bar left in place.
+  - A button sending something: set `aria-busy` on it. `globals.css` turns a
+    ring in place of its icon and keeps its colour, since a button at work is
+    not unavailable. A `Toggle` takes `busy` and turns a ring in its knob.
+  - Work going on: an agent on a run, a post going out or a picture being made
+    is in the top bar's Working list on every page, and on Home the agent's
+    card says what it is working on. Both read `getActivity`, which the
+    layout reads with the page and `/api/activity` serves to the list: every
+    5 s while something works, every 30 s while all is quiet, only in a tab in
+    view. When something finishes, the page re-reads. Past `WORKING_MINUTES`
+    (`lib/data/map.ts`: 30 for an agent, 15 for a post, 10 for a picture) the
+    work is stuck rather than working, and is left to the page it belongs to.
+  The rings keep still for anyone who asks for less motion (the rule at the
+  top of `globals.css`).
 
 ## MCP routing
 

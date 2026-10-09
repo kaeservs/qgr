@@ -390,7 +390,7 @@ export function PublishDialog({
         <button type="button" className="btn btn-quiet" onClick={close}>
           Cancel
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => void post()} disabled={working || places.length === 0 || (when === 'later' && !scheduledAt)}>
+        <button type="button" className="btn btn-primary" onClick={() => void post()} disabled={working || places.length === 0 || (when === 'later' && !scheduledAt)} aria-busy={working}>
           {when === 'now' ? <Send size={16} aria-hidden /> : <CalendarClock size={16} aria-hidden />}
           {when === 'now' ? 'Post now' : scheduledAt ? `Schedule for ${formatInZone(scheduledAt, timeZone)}` : 'Schedule'}
         </button>

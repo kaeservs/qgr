@@ -18,6 +18,7 @@ export function TrackedSwitch({ competitorId, name, tracked }: { competitorId: s
       <Toggle
         checked={on}
         label={`Scan ${name} on schedule`}
+        busy={busy}
         onChange={async (next) => {
           if (busy) return;
           setOn(next);

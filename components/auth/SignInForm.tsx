@@ -27,7 +27,7 @@ export function SignInForm({ next }: { next: string }) {
           {state.error}
         </p>
       )}
-      <button type="submit" className="btn btn-primary" disabled={pending}>
+      <button type="submit" className="btn btn-primary" disabled={pending} aria-busy={pending}>
         {pending ? 'Signing in…' : 'Sign in'}
       </button>
     </form>

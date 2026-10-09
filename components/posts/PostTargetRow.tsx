@@ -1,4 +1,4 @@
-import { ExternalLink, RotateCcw, TriangleAlert } from 'lucide-react';
+import { ExternalLink, LoaderCircle, RotateCcw, TriangleAlert } from 'lucide-react';
 import { cx } from '@/lib/cx';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { audience, engagementRate, engagements, formatCount, formatRate } from '@/lib/results';
@@ -34,7 +34,21 @@ function ResultsLine({ target, timeZone }: { target: PostTarget; timeZone: strin
 }
 
 /** One place a post goes: how it went, its link, its numbers, and Try again when it did not go. */
-export function PostTargetRow({ target, onRetry, busy, timeZone }: { target: PostTarget; onRetry: () => void; busy: boolean; timeZone: string }) {
+export function PostTargetRow({
+  target,
+  onRetry,
+  busy,
+  retrying = false,
+  timeZone,
+}: {
+  target: PostTarget;
+  onRetry: () => void;
+  /** Something is being sent for this post: its buttons wait. */
+  busy: boolean;
+  /** This place is the one being tried again. */
+  retrying?: boolean;
+  timeZone: string;
+}) {
   const { label, tone } = POST_STATUS[target.status];
   return (
     <li className={styles.target}>
@@ -42,7 +56,10 @@ export function PostTargetRow({ target, onRetry, busy, timeZone }: { target: Pos
         <PlaceIcon place={target.place} size={16} decorative />
         {PLACE_LABEL[target.place]}
       </span>
-      <span className={cx(ui.status, ui.statusSmall, ui[tone])}>{label}</span>
+      <span className={cx(ui.status, ui.statusSmall, ui[tone])}>
+        {target.status === 'posting' && <LoaderCircle size={13} strokeWidth={2.2} className="spin" aria-hidden />}
+        {label}
+      </span>
       {target.status === 'posted' && target.standIn && <span className={styles.targetNote}>Through the stand-in: nothing was posted</span>}
       {target.url && (
         <a href={target.url} className="link small" target="_blank" rel="noreferrer noopener">
@@ -51,7 +68,7 @@ export function PostTargetRow({ target, onRetry, busy, timeZone }: { target: Pos
         </a>
       )}
       {(target.status === 'failed' || target.status === 'unknown') && (
-        <button type="button" className="btn btn-quiet btn-sm" onClick={onRetry} disabled={busy}>
+        <button type="button" className="btn btn-quiet btn-sm" onClick={onRetry} disabled={busy} aria-busy={retrying}>
           <RotateCcw size={14} aria-hidden />
           {target.status === 'unknown' ? 'It isn’t there: send again' : 'Try again'}
         </button>

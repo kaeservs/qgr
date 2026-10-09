@@ -12,7 +12,8 @@ import { PLATFORM_LABEL } from '../platforms';
 import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import { nextScanAt, zonedToUtc } from '../schedule';
-import type { BrandProfile, Competitor, Place, Post, Run, TeamSettings } from '../types';
+import { PLACE_LABEL } from '../post-input';
+import type { ActivityItem, BrandProfile, Competitor, Place, Post, Run, TeamSettings } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -76,6 +77,19 @@ export const sampleData: DataSource = {
     toAgents(settings(), { competitors: competitorList().filter((c) => c.tracked).length, strategies: mock.strategies.length }, mock.adSets.filter((a) => a.status === 'review')),
   getNextScan: async () => nextScanAt(settings(), mock.NOW),
   getNotices: async () => mock.notices,
+  // The sample's moment: its runs an agent is on, and any post going out.
+  getActivity: async () => {
+    const items: ActivityItem[] = [];
+    for (const run of runList()) {
+      const stage = STAGE_ORDER.find((key) => run.stages[key].status === 'running');
+      if (stage) items.push({ id: `run-${run.id}`, kind: 'run', label: STAGE_INFO[stage].name, subject: run.title, href: `/runs/${run.id}`, since: run.activity.at(-1)?.at ?? run.createdAt, stage });
+    }
+    for (const post of postList()) {
+      const places = post.targets.filter((t) => t.status === 'posting').map((t) => PLACE_LABEL[t.place]);
+      if (places.length > 0) items.push({ id: `post-${post.id}`, kind: 'post', label: `Sending to ${places.join(', ')}`, subject: `${post.adSetTitle}, variant ${post.variantLabel}`, href: `/posts#post-${post.id}`, since: post.scheduledFor });
+    }
+    return items.sort((a, b) => b.since.localeCompare(a.since));
+  },
   getSearchIndex: async () => searchIndex(mock.competitors, mock.strategies, mock.adSets, runList()),
   getBrandProfile: async () => brand,
 
