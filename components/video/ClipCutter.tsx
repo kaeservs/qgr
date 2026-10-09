@@ -198,7 +198,7 @@ export function ClipCutter({ file, url, initialKeep, onCancel, onDone }: { file:
         <button type="button" className="btn btn-quiet" onClick={onCancel}>
           Cancel
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => void finish()} disabled={!meta || !!error || tooLong || finishing || parts.length === 0}>
+        <button type="button" className="btn btn-primary" onClick={() => void finish()} disabled={!meta || !!error || tooLong || finishing || parts.length === 0} aria-busy={finishing}>
           {finishing ? 'Saving the cut…' : 'Use this clip'}
         </button>
       </footer>

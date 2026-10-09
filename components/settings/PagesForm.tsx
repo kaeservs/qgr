@@ -123,7 +123,7 @@ export function PagesForm({ pages }: { pages: PostPages }) {
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={saving || !changed}>
+        <button type="submit" className="btn btn-primary" disabled={saving || !changed} aria-busy={saving}>
           {saving ? 'Saving…' : 'Save Pages'}
         </button>
       </div>

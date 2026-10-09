@@ -83,7 +83,14 @@ export function PostDialog({ post, timeZone, actions, onClose }: { post: Post; t
         </div>
         <ul className={styles.targets}>
           {post.targets.map((t) => (
-            <PostTargetRow key={t.place} target={t} busy={busy} timeZone={timeZone} onRetry={() => void actions.retry(post, t.place)} />
+            <PostTargetRow
+              key={t.place}
+              target={t}
+              busy={busy}
+              retrying={busy && actions.doing === `retry-${t.place}`}
+              timeZone={timeZone}
+              onRetry={() => void actions.retry(post, t.place)}
+            />
           ))}
         </ul>
 
@@ -110,17 +117,17 @@ export function PostDialog({ post, timeZone, actions, onClose }: { post: Post; t
           <ArrowRight size={14} aria-hidden />
         </Link>
         {cancellable(post) && (
-          <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => void actions.cancel(post).then((ok) => ok && onClose())}>
+          <button type="button" className="btn btn-quiet" disabled={busy} aria-busy={busy && actions.doing === 'cancel'} onClick={() => void actions.cancel(post).then((ok) => ok && onClose())}>
             {postState(post) === 'waiting' ? 'Cancel post' : 'Dismiss'}
           </button>
         )}
         {canMove && (
           <>
-            <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => void move(null)}>
+            <button type="button" className="btn btn-ghost" disabled={busy} aria-busy={busy && actions.doing === 'now'} onClick={() => void move(null)}>
               <Send size={16} aria-hidden />
               Send now
             </button>
-            <button type="button" className="btn btn-primary" disabled={busy || !changed || !local} onClick={() => void move(local)}>
+            <button type="button" className="btn btn-primary" disabled={busy || !changed || !local} aria-busy={busy && actions.doing === 'move'} onClick={() => void move(local)}>
               <CalendarClock size={16} aria-hidden />
               {changed && target ? `Move to ${formatInZone(target, timeZone)}` : 'Move'}
             </button>

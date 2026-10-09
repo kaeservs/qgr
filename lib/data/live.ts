@@ -10,7 +10,7 @@ import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
 import { transcribe, transcriptionKey } from '../transcribe';
-import { toAdSet, toAgents, toBrandProfile, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toTeamSettings, toUser } from './map';
+import { toActivity, toAdSet, toAgents, toBrandProfile, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toTeamSettings, toUser, WORKING_MINUTES } from './map';
 import type { PostRow, RunRow } from './map';
 import { searchIndex } from './source';
 import type { DataSource, Saved } from './source';
@@ -121,6 +121,31 @@ const runById = cache(async (id: string) => {
   return data ? toRun(data) : null;
 });
 
+// What is at work now: three small reads, each kept to what can still count
+// (toActivity has the last word). The top bar asks every few seconds, so a
+// read that fails says nothing rather than failing the page.
+const activity = cache(async () => {
+  const supabase = await db();
+  const now = new Date().toISOString();
+  const since = (minutes: number) => new Date(Date.parse(now) - minutes * 60_000).toISOString();
+  const [stages, places, pictures] = await Promise.all([
+    supabase.from('run_stages').select('run_id, stage, started_at, runs!run_stages_run_id_fkey(title)').eq('status', 'running').gt('started_at', since(WORKING_MINUTES.agent)),
+    supabase
+      .from('post_targets')
+      .select('post_id, place, status, claimed_at, posts!post_targets_post_id_fkey(scheduled_for, ad_variants!posts_variant_id_fkey(label, ad_sets!ad_variants_ad_set_id_fkey(title)))')
+      .in('status', ['posting', 'scheduled']),
+    supabase
+      .from('ad_variants')
+      .select('id, label, ad_set_id, picture_requested_at, ad_sets!ad_variants_ad_set_id_fkey(title)')
+      .eq('picture_status', 'making')
+      .gt('picture_requested_at', since(WORKING_MINUTES.picture)),
+  ]);
+  for (const [what, error] of [['agents at work', stages.error], ['posts going out', places.error], ['pictures being made', pictures.error]] as const) {
+    if (error) console.error(`Reading ${what} failed`, error);
+  }
+  return toActivity({ stages: stages.data ?? [], places: places.data ?? [], pictures: pictures.data ?? [] }, now);
+});
+
 const teamSettings = cache(async () => {
   const { data, error } = await (await db()).from('team_settings').select('*').eq('id', 1).maybeSingle();
   if (error) readFailed('the team settings', error);
@@ -166,6 +191,7 @@ export const liveData: DataSource = {
     return data ?? null;
   },
   getNotices: async () => toNotices(await runRows()),
+  getActivity: () => activity(),
   getSearchIndex: async () => {
     const [c, s, a, r] = await Promise.all([competitors(), strategies(), adSets(), runRows()]);
     return searchIndex(c, s, a, r.map(toRun));

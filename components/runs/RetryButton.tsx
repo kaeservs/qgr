@@ -20,6 +20,7 @@ export function RetryButton({ source, platforms, goal, title }: { source: RunSou
       type="button"
       className="btn btn-quiet btn-sm"
       disabled={busy}
+      aria-busy={busy}
       onClick={async () => {
         setBusy(true);
         const res = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, platforms, goal, title }) });

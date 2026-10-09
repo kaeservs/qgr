@@ -101,7 +101,7 @@ export function AdStudio({
   // The last version the server holds, for Reset and for knowing what changed.
   const [saved, setSaved] = useState(() => new Map(adSet.variants.map((v) => [v.id, v])));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'saving' | 'approving' | 'picture' | null>(null);
+  const [busy, setBusy] = useState<'saving' | 'approving' | 'asking' | 'dropping' | null>(null);
   const [videoOf, setVideoOf] = useState<string | null>(null);
   const selected = variants.find((v) => v.id === selectedId);
   const editingVideo = variants.find((v) => v.id === videoOf);
@@ -144,7 +144,7 @@ export function AdStudio({
   }, [adSet]);
 
   async function askPicture(v: Variant) {
-    setBusy('picture');
+    setBusy('asking');
     const result = await requestPictureAction(v.id);
     setBusy(null);
     if (!result.ok) return toast(result.error, 'info');
@@ -154,7 +154,7 @@ export function AdStudio({
   }
 
   async function dropPicture(v: Variant) {
-    setBusy('picture');
+    setBusy('dropping');
     const result = await removePictureAction(v.id);
     setBusy(null);
     if (!result.ok) return toast(result.error, 'info');
@@ -346,9 +346,15 @@ export function AdStudio({
                 </button>
               )}
               {!clip && selected.picturePrompt && (
-                <PictureButtons variant={selected} disabled={busy !== null || locked !== null} onAsk={() => void askPicture(selected)} onDrop={() => void dropPicture(selected)} />
+                <PictureButtons
+                  variant={selected}
+                  disabled={busy !== null || locked !== null}
+                  busy={busy === 'asking' || busy === 'dropping' ? busy : null}
+                  onAsk={() => void askPicture(selected)}
+                  onDrop={() => void dropPicture(selected)}
+                />
               )}
-              <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => void leave()}>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} aria-busy={busy === 'saving'} onClick={() => void leave()}>
                 Done
               </button>
               {selected.approved && !isDirty(selected) ? (
@@ -364,7 +370,7 @@ export function AdStudio({
                   Post…
                 </button>
               ) : (
-                <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} onClick={() => void approve(selected)}>
+                <button type="button" className="btn btn-primary btn-sm" disabled={busy !== null} aria-busy={busy === 'approving'} onClick={() => void approve(selected)}>
                   <Check size={15} aria-hidden />
                   {busy === 'approving' ? 'Approving…' : 'Approve'}
                 </button>
@@ -498,7 +504,20 @@ export function AdStudio({
 }
 
 /** Ask for a picture, another one, or go back to the drawn design. While one is being made, say so; after ten minutes it may be asked for again. */
-function PictureButtons({ variant, disabled, onAsk, onDrop }: { variant: Variant; disabled: boolean; onAsk: () => void; onDrop: () => void }) {
+function PictureButtons({
+  variant,
+  disabled,
+  busy,
+  onAsk,
+  onDrop,
+}: {
+  variant: Variant;
+  disabled: boolean;
+  /** Which of the two is being sent. */
+  busy: 'asking' | 'dropping' | null;
+  onAsk: () => void;
+  onDrop: () => void;
+}) {
   const making = variant.picture?.status === 'making';
   const stale = making && !!variant.picture?.askedAt && Date.now() - Date.parse(variant.picture.askedAt) > PICTURE_RETRY_MS;
   return (
@@ -509,13 +528,13 @@ function PictureButtons({ variant, disabled, onAsk, onDrop }: { variant: Variant
           Making a picture…
         </button>
       ) : (
-        <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} onClick={onAsk} title={`From the prompt: ${variant.picturePrompt ?? ''}`}>
+        <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-busy={busy === 'asking'} onClick={onAsk} title={`From the prompt: ${variant.picturePrompt ?? ''}`}>
           {variant.imageUrl || stale ? <RefreshCw size={15} aria-hidden /> : <ImagePlus size={15} aria-hidden />}
           {stale ? 'Ask again' : variant.imageUrl ? 'Try another picture' : 'Make a picture'}
         </button>
       )}
       {(variant.imageUrl || making) && (
-        <button type="button" className="btn btn-quiet btn-sm" disabled={disabled} onClick={onDrop}>
+        <button type="button" className="btn btn-quiet btn-sm" disabled={disabled} aria-busy={busy === 'dropping'} onClick={onDrop}>
           <ImageOff size={15} aria-hidden />
           {variant.imageUrl ? 'Use the design' : 'Stop'}
         </button>

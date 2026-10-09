@@ -20,6 +20,7 @@ export function GoAheadButton({ runId, label, again = false }: { runId: string; 
       type="button"
       className="btn btn-primary btn-sm"
       disabled={busy}
+      aria-busy={busy}
       onClick={async () => {
         setBusy(true);
         const result = await continueRunAction(runId);

@@ -139,7 +139,7 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
             {error}
           </p>
         )}
-        <button type="submit" className="btn btn-primary" disabled={saving || !changed}>
+        <button type="submit" className="btn btn-primary" disabled={saving || !changed} aria-busy={saving}>
           {saving ? 'Saving…' : 'Save agents'}
         </button>
       </div>

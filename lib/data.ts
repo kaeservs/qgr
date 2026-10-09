@@ -30,6 +30,7 @@ export const getAdSet: DataSource['getAdSet'] = (id) => source().getAdSet(id);
 export const getAgents: DataSource['getAgents'] = () => source().getAgents();
 export const getNextScan: DataSource['getNextScan'] = () => source().getNextScan();
 export const getNotices: DataSource['getNotices'] = () => source().getNotices();
+export const getActivity: DataSource['getActivity'] = () => source().getActivity();
 export const getSearchIndex: DataSource['getSearchIndex'] = () => source().getSearchIndex();
 export const getBrandProfile: DataSource['getBrandProfile'] = () => source().getBrandProfile();
 

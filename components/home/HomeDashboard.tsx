@@ -6,7 +6,7 @@ import { useMemo, useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
 import { dayKey, formatShortDate } from '@/lib/format';
 import { postsByDay, postState } from '@/lib/posts';
-import type { AdsSetting, Agent, Post, User } from '@/lib/types';
+import type { ActivityItem, AdsSetting, Agent, Post, User } from '@/lib/types';
 import { PostRows } from '../posts/PostRows';
 import { EmptyState } from '../ui/EmptyState';
 import { AgentPanel } from './AgentPanel';
@@ -25,6 +25,7 @@ export function HomeDashboard({
   nextPost,
   timeZone,
   adsSource,
+  activity,
 }: {
   user: User;
   runs: RunWithStatus[];
@@ -35,6 +36,8 @@ export function HomeDashboard({
   nextPost: string | null;
   timeZone: string;
   adsSource: AdsSetting;
+  /** What the agents are doing now, as the top bar reads it. */
+  activity: ActivityItem[];
 }) {
   const [day, setDay] = useState<string | null>(null);
   const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
@@ -111,7 +114,7 @@ export function HomeDashboard({
           nextPost={nextPost}
           timeZone={timeZone}
         />
-        <AgentPanel agents={agents} />
+        <AgentPanel agents={agents} activity={activity} />
       </aside>
     </div>
   );

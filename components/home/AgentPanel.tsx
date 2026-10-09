@@ -1,19 +1,21 @@
 'use client';
 
-import { Activity, Clock, Compass, Radar, Sparkles } from 'lucide-react';
+import { Activity, Clock, Compass, LoaderCircle, Radar, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { switchAgentAction } from '@/app/(app)/settings/actions';
+import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
-import type { Agent } from '@/lib/types';
+import type { ActivityItem, Agent } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
 import styles from './home.module.css';
 
 const ICON = { tracker: Radar, strategist: Compass, content: Sparkles } as const;
 
-export function AgentPanel({ agents }: { agents: Agent[] }) {
+/** The three agents, with their switches and, while one is at work, what on. */
+export function AgentPanel({ agents, activity }: { agents: Agent[]; activity: ActivityItem[] }) {
   const toast = useToast();
   const router = useRouter();
   // Shown switched at once; put back if the save fails. The schedule and the
@@ -44,6 +46,7 @@ export function AgentPanel({ agents }: { agents: Agent[] }) {
           const Icon = ICON[agent.key];
           const name = STAGE_INFO[agent.key].name;
           const on = auto[agent.key];
+          const working = activity.filter((a) => a.kind === 'run' && a.stage === agent.key);
           return (
             <li key={agent.key} className={styles.agent}>
               <div className={styles.agentTop}>
@@ -60,10 +63,25 @@ export function AgentPanel({ agents }: { agents: Agent[] }) {
                     <Activity size={14} aria-hidden />
                     {agent.stat}
                   </p>
+                  {working.length > 0 && (
+                    <p className={cx(styles.agentMeta, styles.agentWorking)}>
+                      <LoaderCircle size={14} className="spin" aria-hidden />
+                      {working.length === 1 ? (
+                        <Link href={working[0]!.href} className="link">
+                          Working on {working[0]!.subject}
+                        </Link>
+                      ) : (
+                        <Link href="/runs" className="link">
+                          Working on {working.length} runs
+                        </Link>
+                      )}
+                    </p>
+                  )}
                 </div>
                 {agent.switchable && (
                   <Toggle
                     checked={on}
+                    busy={busy === agent.key}
                     label={agent.key === 'tracker' ? 'Scan tracked competitors on schedule' : `Run the ${name} automatically`}
                     onChange={(next) => {
                       if (busy === null) void flip(agent, next);

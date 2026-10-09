@@ -278,6 +278,21 @@ export interface BrandProfile {
   xHandle: string;
 }
 
+/** Something the agents or n8n are doing right now, for the Working list in the top bar. */
+export interface ActivityItem {
+  id: string;
+  kind: 'run' | 'post' | 'picture';
+  /** What is happening: "Ad Strategist", "Sending to Facebook, Instagram", "Making a picture". */
+  label: string;
+  /** What it is happening to: a run's title, or an ad set and its variant. */
+  subject: string;
+  href: string;
+  /** When it started. */
+  since: string;
+  /** The agent at work, on a run. */
+  stage?: StageKey;
+}
+
 export interface Notice {
   id: string;
   text: string;

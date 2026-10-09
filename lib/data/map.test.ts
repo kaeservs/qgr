@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, sourceOf, toAdSet, toAgents, toCompetitor, toCreateRunArgs, toNotices, toRun, toStrategy, toUser } from './map';
-import type { AdSetRow, CompetitorRow, RunRow, StageRow, StrategyRow } from './map';
+import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toCompetitor, toCreateRunArgs, toNotices, toRun, toStrategy, toUser } from './map';
+import type { ActivityRows, AdSetRow, CompetitorRow, RunRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
 const CLIP_PATH_OK = 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.mp4';
@@ -361,5 +361,65 @@ describe('toCreateRunArgs', () => {
       p_platforms: ['meta'],
       p_goal: 'consultations',
     });
+  });
+});
+
+describe('toActivity', () => {
+  const now = '2026-10-09T12:00:00Z';
+  const ago = (minutes: number) => new Date(Date.parse(now) - minutes * 60_000).toISOString();
+  const post = (title: string, label: string, scheduledFor: string) => ({ scheduled_for: scheduledFor, ad_variants: { label, ad_sets: { title } } });
+  const rows = (r: Partial<ActivityRows>): ActivityRows => ({ stages: [], places: [], pictures: [], ...r });
+
+  it('lists the agents at work, newest first, and leaves out one past its time', () => {
+    const items = toActivity(
+      rows({
+        stages: [
+          { run_id: 'r1', stage: 'strategist', started_at: ago(2), runs: { title: 'Q4 push' } },
+          { run_id: 'r2', stage: 'tracker', started_at: ago(1), runs: [{ title: 'horizonvisa.example' }] },
+          // Running for hours: stuck, not at work.
+          { run_id: 'r3', stage: 'content', started_at: ago(180), runs: { title: 'Old test' } },
+          { run_id: 'r4', stage: 'unknown', started_at: ago(1), runs: { title: 'Odd' } },
+        ],
+      }),
+      now,
+    );
+    expect(items).toEqual([
+      { id: 'run-r2', kind: 'run', label: 'Competitor Tracker', subject: 'horizonvisa.example', href: '/runs/r2', since: ago(1), stage: 'tracker' },
+      { id: 'run-r1', kind: 'run', label: 'Ad Strategist', subject: 'Q4 push', href: '/runs/r1', since: ago(2), stage: 'strategist' },
+    ]);
+  });
+
+  it('shows a post going out once, naming its places, and only while it is due', () => {
+    const items = toActivity(
+      rows({
+        places: [
+          { post_id: 'p1', place: 'linkedin', status: 'posting', claimed_at: ago(1), posts: post('Q4 push', 'A', ago(2)) },
+          { post_id: 'p1', place: 'facebook', status: 'scheduled', claimed_at: null, posts: post('Q4 push', 'A', ago(2)) },
+          // Due an hour ago and never taken (n8n is off): not at work.
+          { post_id: 'p2', place: 'facebook', status: 'scheduled', claimed_at: null, posts: post('Webinar', 'B', ago(60)) },
+          // Not due yet.
+          { post_id: 'p3', place: 'instagram', status: 'scheduled', claimed_at: null, posts: post('Webinar', 'C', new Date(Date.parse(now) + 3_600_000).toISOString()) },
+        ],
+      }),
+      now,
+    );
+    expect(items).toEqual([{ id: 'post-p1', kind: 'post', label: 'Sending to Facebook, LinkedIn', subject: 'Q4 push, variant A', href: '/posts#post-p1', since: ago(2) }]);
+  });
+
+  it('shows a picture being made for ten minutes at most', () => {
+    const items = toActivity(
+      rows({
+        pictures: [
+          { id: 'v1', label: 'B', ad_set_id: 's1', picture_requested_at: ago(3), ad_sets: { title: 'Q4 push' } },
+          { id: 'v2', label: 'C', ad_set_id: 's1', picture_requested_at: ago(11), ad_sets: { title: 'Q4 push' } },
+        ],
+      }),
+      now,
+    );
+    expect(items).toEqual([{ id: 'picture-v1', kind: 'picture', label: 'Making a picture', subject: 'Q4 push, variant B', href: '/content/s1', since: ago(3) }]);
+  });
+
+  it('says nothing when nothing is at work', () => {
+    expect(toActivity(rows({}), now)).toEqual([]);
   });
 });
