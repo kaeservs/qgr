@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdStudio } from '@/components/content/AdStudio';
-import { getAdSet, getBrandProfile, getClipUrl, getRun, getStrategy } from '@/lib/data';
+import { getAdSet, getBrandProfile, getClipUrl, getPosts, getRun, getStrategy, getTeamSettings } from '@/lib/data';
 import { PLATFORMS } from '@/lib/types';
 import styles from '@/components/content/content.module.css';
 
@@ -17,7 +17,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AdSetPage({ params }: Props) {
   const set = await getAdSet((await params).id);
   if (!set) notFound();
-  const [run, strategy, brand, clipUrl] = await Promise.all([getRun(set.runId), getStrategy(set.strategyId), getBrandProfile(), set.clip ? getClipUrl(set.clip.path) : null]);
+  const [run, strategy, brand, clipUrl, posts, settings] = await Promise.all([
+    getRun(set.runId),
+    getStrategy(set.strategyId),
+    getBrandProfile(),
+    set.clip ? getClipUrl(set.clip.path) : null,
+    getPosts(),
+    getTeamSettings(),
+  ]);
 
   if (set.status === 'generating' || set.variants.length === 0) {
     return (
@@ -50,6 +57,8 @@ export default async function AdSetPage({ params }: Props) {
       platforms={platforms}
       brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }}
       {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
+      posts={posts.filter((p) => p.adSetId === set.id)}
+      publishing={{ timeZone: settings.timeZone, pages: settings.pages }}
     />
   );
 }

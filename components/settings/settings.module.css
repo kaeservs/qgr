@@ -168,3 +168,34 @@
 .serviceText strong {
   font-weight: 500;
 }
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.inline .input {
+  width: auto;
+  min-width: 140px;
+}
+
+.switchRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.legendIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

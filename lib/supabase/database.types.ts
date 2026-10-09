@@ -305,18 +305,21 @@ export type Database = {
           domain: string | null
           id: string
           name: string
+          tracked: boolean
         }
         Insert: {
           created_at?: string
           domain?: string | null
           id?: string
           name: string
+          tracked?: boolean
         }
         Update: {
           created_at?: string
           domain?: string | null
           id?: string
           name?: string
+          tracked?: boolean
         }
         Relationships: []
       }
@@ -361,6 +364,100 @@ export type Database = {
           },
         ]
       }
+      post_targets: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          error: string | null
+          media_kind: string | null
+          media_path: string | null
+          place: string
+          post_id: string
+          posted_at: string | null
+          remote_id: string | null
+          remote_url: string | null
+          stand_in: boolean
+          status: string
+          text: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          error?: string | null
+          media_kind?: string | null
+          media_path?: string | null
+          place: string
+          post_id: string
+          posted_at?: string | null
+          remote_id?: string | null
+          remote_url?: string | null
+          stand_in?: boolean
+          status?: string
+          text: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          error?: string | null
+          media_kind?: string | null
+          media_path?: string | null
+          place?: string
+          post_id?: string
+          posted_at?: string | null
+          remote_id?: string | null
+          remote_url?: string | null
+          stand_in?: boolean
+          status?: string
+          text?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "post_targets_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      posts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          scheduled_for: string
+          thumbnail: string | null
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          scheduled_for: string
+          thumbnail?: string | null
+          variant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          scheduled_for?: string
+          thumbnail?: string | null
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "posts_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "ad_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       run_events: {
         Row: {
           at: string
@@ -399,6 +496,7 @@ export type Database = {
           started_at: string | null
           status: string
           summary: string | null
+          waiting_since: string | null
         }
         Insert: {
           error?: string | null
@@ -408,6 +506,7 @@ export type Database = {
           started_at?: string | null
           status: string
           summary?: string | null
+          waiting_since?: string | null
         }
         Update: {
           error?: string | null
@@ -417,6 +516,7 @@ export type Database = {
           started_at?: string | null
           status?: string
           summary?: string | null
+          waiting_since?: string | null
         }
         Relationships: [
           {
@@ -615,6 +715,66 @@ export type Database = {
         }
         Relationships: []
       }
+      team_settings: {
+        Row: {
+          content_auto: boolean
+          facebook_page_id: string | null
+          facebook_page_name: string | null
+          id: number
+          instagram_account_id: string | null
+          instagram_username: string | null
+          last_scan_at: string | null
+          linkedin_org_id: string | null
+          linkedin_page_name: string | null
+          scan_changed_at: string
+          scan_day: number
+          scan_every: string
+          scan_hour: number
+          strategist_auto: boolean
+          time_zone: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          content_auto?: boolean
+          facebook_page_id?: string | null
+          facebook_page_name?: string | null
+          id?: number
+          instagram_account_id?: string | null
+          instagram_username?: string | null
+          last_scan_at?: string | null
+          linkedin_org_id?: string | null
+          linkedin_page_name?: string | null
+          scan_changed_at?: string
+          scan_day?: number
+          scan_every?: string
+          scan_hour?: number
+          strategist_auto?: boolean
+          time_zone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          content_auto?: boolean
+          facebook_page_id?: string | null
+          facebook_page_name?: string | null
+          id?: number
+          instagram_account_id?: string | null
+          instagram_username?: string | null
+          last_scan_at?: string | null
+          linkedin_org_id?: string | null
+          linkedin_page_name?: string | null
+          scan_changed_at?: string
+          scan_day?: number
+          scan_every?: string
+          scan_hour?: number
+          strategist_auto?: boolean
+          time_zone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -651,6 +811,8 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string }
         Returns: undefined
       }
+      cancel_post: { Args: { p_post_id: string }; Returns: string[] }
+      continue_run: { Args: { p_run_id: string }; Returns: string }
       create_run: {
         Args: {
           p_competitor_name?: string
@@ -672,14 +834,49 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string; p_summary: string }
         Returns: undefined
       }
+      next_scan_at: { Args: never; Returns: string }
+      pipeline_next: {
+        Args: { p_run_id: string; p_stage: string }
+        Returns: boolean
+      }
+      place_name: { Args: { p_place: string }; Returns: string }
+      publisher_fail: {
+        Args: {
+          p_error: string
+          p_place: string
+          p_post_id: string
+          p_unknown?: boolean
+        }
+        Returns: undefined
+      }
+      publisher_finish: {
+        Args: {
+          p_place: string
+          p_post_id: string
+          p_remote_id?: string
+          p_remote_url?: string
+          p_stand_in?: boolean
+        }
+        Returns: Json
+      }
+      publisher_take_due: { Args: { p_limit?: number }; Returns: Json }
       record_usage: {
         Args: { p_run_id: string; p_stage: string; p_usage: Json }
+        Returns: undefined
+      }
+      report_continue_failure: {
+        Args: { p_error: string; p_run_id: string; p_stage: string }
         Returns: undefined
       }
       report_start_failure: {
         Args: { p_error: string; p_run_id: string }
         Returns: undefined
       }
+      retry_post: {
+        Args: { p_place: string; p_post_id: string }
+        Returns: undefined
+      }
+      run_of_variant: { Args: { p_variant_id: string }; Returns: string }
       save_variant: {
         Args: {
           p_copy: Json
@@ -693,6 +890,30 @@ export type Database = {
         Args: { p_edit: Json; p_variant_id: string }
         Returns: undefined
       }
+      scan_slot: {
+        Args: {
+          p_at: string
+          p_day: number
+          p_every: string
+          p_hour: number
+          p_time_zone: string
+        }
+        Returns: string
+      }
+      schedule_post: {
+        Args: {
+          p_local_time?: string
+          p_targets: Json
+          p_thumbnail?: string
+          p_variant_id: string
+        }
+        Returns: string
+      }
+      set_competitor_tracked: {
+        Args: { p_competitor_id: string; p_tracked: boolean }
+        Returns: undefined
+      }
+      start_due_scans: { Args: { p_max?: number }; Returns: Json }
       start_run: {
         Args: {
           p_competitor_name?: string
@@ -710,6 +931,25 @@ export type Database = {
         }
         Returns: string
       }
+      unapproved: {
+        Args: {
+          p_run: string
+          p_was: Database["public"]["Tables"]["ad_variants"]["Row"]
+          p_what: string
+        }
+        Returns: undefined
+      }
+      update_agent_settings: {
+        Args: {
+          p_content_auto: boolean
+          p_scan_day: number
+          p_scan_every: string
+          p_scan_hour: number
+          p_strategist_auto: boolean
+          p_time_zone: string
+        }
+        Returns: undefined
+      }
       update_brand_profile: {
         Args: {
           p_audience: string
@@ -720,6 +960,17 @@ export type Database = {
           p_voice: string[]
           p_website: string
           p_x_handle: string
+        }
+        Returns: undefined
+      }
+      update_publishing_settings: {
+        Args: {
+          p_facebook_page_id: string
+          p_facebook_page_name: string
+          p_instagram_account_id: string
+          p_instagram_username: string
+          p_linkedin_org_id: string
+          p_linkedin_page_name: string
         }
         Returns: undefined
       }

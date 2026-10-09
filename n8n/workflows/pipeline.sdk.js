@@ -151,15 +151,99 @@ const strategistOk = ifElse({
   },
 });
 
-const noteFlow = sticky('## The run\nThe app posts { runId, startAt } with the shared secret header and gets 202 at once. A competitor run starts at the tracker; a custom run (podcast, blog, video, text) starts at the strategist. Each agent records its own success or failure on the run, so this workflow only decides what runs next.', [webhook, readRequest, whereToStart], { color: 4 });
+const askStrategist = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: "Start the strategist now?",
+    parameters: {
+      method: 'POST',
+      url: 'https://tcinsdexwvzpznqlcpww.supabase.co/rest/v1/rpc/pipeline_next',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr("{{ JSON.stringify({ p_run_id: $(\"Read the request\").first().json.runId, p_stage: \"strategist\" }) }}"),
+      options: { timeout: 30000 },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{ data: true }],
+});
+
+const askContent = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: "Write the ads now?",
+    parameters: {
+      method: 'POST',
+      url: 'https://tcinsdexwvzpznqlcpww.supabase.co/rest/v1/rpc/pipeline_next',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr("{{ JSON.stringify({ p_run_id: $(\"Read the request\").first().json.runId, p_stage: \"content\" }) }}"),
+      options: { timeout: 30000 },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{ data: true }],
+});
+
+const strategistOn = ifElse({
+  version: 2.3,
+  config: {
+    name: "Strategist switched on?",
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+
+const contentOn = ifElse({
+  version: 2.3,
+  config: {
+    name: "Content Agent switched on?",
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+
+const fromScan = trigger({
+  type: 'n8n-nodes-base.executeWorkflowTrigger',
+  version: 1.2,
+  config: {
+    name: 'When a scheduled scan starts a run',
+    parameters: { inputSource: 'workflowInputs', workflowInputs: { values: [{ name: 'runId', type: 'string' }, { name: 'startAt', type: 'string' }] } },
+  },
+  output: [{ runId: '00000000-0000-0000-0000-000000000000', startAt: 'tracker' }],
+});
+
+const noteFlow = sticky('## The run\nThe app posts { runId, startAt } with the shared secret header and gets 202 at once; a scheduled scan hands its run in from **QGR · Scheduled scans**. A competitor run starts at the tracker; a custom run (podcast, blog, video, text) starts at the strategist; a go-ahead from the dashboard starts where the run waits. Each agent records its own success or failure on the run, so this workflow only decides what runs next.', [webhook, fromScan, readRequest, whereToStart], { color: 4 });
+const noteSwitches = sticky('## The switches\nBefore the strategist after a scan, and before the Content Agent after a strategy, the database is asked (**pipeline_next**). With that agent\'s switch off on the dashboard, the run waits there for a person, and their go-ahead starts the pipeline again from that agent.', [askStrategist, askContent], { color: 5 });
 
 export default workflow('qgr-run-pipeline', 'QGR · Run pipeline')
   .add(webhook)
   .to(readRequest)
   .to(whereToStart
-    .onCase(0, runTracker.to(trackerOk.onTrue(runStrategist)))
+    .onCase(0, runTracker.to(trackerOk.onTrue(askStrategist.to(strategistOn.onTrue(runStrategist)))))
     .onCase(1, runStrategist)
     .onCase(2, runContent))
+  .add(fromScan)
+  .to(readRequest)
   .add(runStrategist)
-  .to(strategistOk.onTrue(runContent))
-  .add(noteFlow);
+  .to(strategistOk.onTrue(askContent.to(contentOn.onTrue(runContent))))
+  .add(noteFlow)
+  .add(noteSwitches);

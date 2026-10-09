@@ -1,18 +1,20 @@
 'use client';
 
-import { ArrowRight, FileText, Mic, Newspaper, Paperclip, Radar, Upload, Video, WandSparkles, X as Close } from 'lucide-react';
+import { ArrowRight, AudioLines, FileText, LoaderCircle, Mic, Newspaper, Paperclip, Radar, Upload, Video, WandSparkles, X as Close } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
+import { transcriptText } from '@/lib/transcribe';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { ClipField } from '../video/ClipField';
 import type { ClipStatus } from '../video/ClipField';
+import { useClipTranscript } from '../video/useClipTranscript';
 import { LinkStatus, useLinkCheck } from './LinkCheck';
 import { useToast } from '../ui/Toast';
 import styles from './home.module.css';
@@ -57,6 +59,12 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>('link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
   const [notes, setNotes] = useState('');
+  const transcript = useClipTranscript(clipStatus);
+  const heard = transcript.state === 'done' ? transcriptText(transcript.lines) : '';
+  // What was said fills the notes once, if they are empty: the team reads it over before the run starts.
+  useEffect(() => {
+    if (heard) setNotes((n) => (n.trim() ? n : heard));
+  }, [heard]);
 
   const source = SOURCES.find((s) => s.key === sourceType) ?? SOURCES[0];
   const clipMode = tab === 'custom' && sourceType === 'video' && videoFrom === 'upload';
@@ -110,7 +118,8 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
       if (clipStatus.state === 'working') return 'Wait for the clip to finish uploading.';
       if (clipStatus.state === 'failed') return clipStatus.error;
       if (notes.trim().length < MIN_NOTES) return `Say what is said in the clip, in at least ${MIN_NOTES} characters: the agents can’t watch it.`;
-      return { kind: 'custom', type: 'video', clip: clipStatus.clip, notes: notes.trim() };
+      const clip = transcript.state === 'done' ? { ...clipStatus.clip, transcript: transcript.lines } : clipStatus.clip;
+      return { kind: 'custom', type: 'video', clip, notes: notes.trim() };
     }
     const normalized = normalizeUrl(url);
     if (!normalized) return tab === 'competitor' ? 'Paste a full website or ad link, like horizonvisa.com.' : 'Paste the full link.';
@@ -236,6 +245,24 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '' }: { i
               />
               <span className="muted small">{notes.trim().length < MIN_NOTES ? `At least ${MIN_NOTES} characters.` : 'The strategist and the Content Agent work from these notes.'}</span>
             </label>
+            {transcript.state === 'working' && (
+              <p className={styles.heard} aria-live="polite">
+                <LoaderCircle size={14} className="spin" aria-hidden />
+                Listening to the clip…
+              </p>
+            )}
+            {transcript.state === 'done' && (
+              <p className={styles.heard} aria-live="polite">
+                <AudioLines size={14} aria-hidden />
+                {notes.trim() === heard ? 'Filled in from what is said in the clip. Read it over: the agents work from it.' : 'What is said in the clip was heard.'}
+                {notes.trim() !== heard && (
+                  <button type="button" className="link small" onClick={() => setNotes(heard)}>
+                    Use it instead
+                  </button>
+                )}
+              </p>
+            )}
+            {transcript.state === 'failed' && <p className={cx('muted small', styles.heard)}>{transcript.error}</p>}
             <div className={styles.clipGo}>
               <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || clipStatus.state === 'working'}>
                 {busy ? 'Starting…' : clipStatus.state === 'working' ? clipStatus.label : 'Start run'}

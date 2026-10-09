@@ -1,9 +1,11 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Radar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Radar, Send } from 'lucide-react';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { cx } from '@/lib/cx';
-import { dayKey, formatDayShort, formatMonth, formatTime } from '@/lib/format';
+import { dayKey, formatMonth } from '@/lib/format';
+import { formatInZone } from '@/lib/schedule';
 import styles from './home.module.css';
 
 const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -37,6 +39,8 @@ export function RunCalendar({
   selected,
   onSelect,
   nextScan,
+  nextPost,
+  timeZone,
 }: {
   runDates: string[];
   today: string;
@@ -44,6 +48,10 @@ export function RunCalendar({
   onSelect: (day: string | null) => void;
   /** Null while no scan is scheduled. */
   nextScan: string | null;
+  /** The next post waiting to go out, if any. */
+  nextPost: string | null;
+  /** The team's zone: a scan and a post are wall times in it. */
+  timeZone: string;
 }) {
   const [month, setMonth] = useState(() => monthStart(today));
   const perDay = useMemo(() => {
@@ -116,9 +124,17 @@ export function RunCalendar({
         <p className={styles.nextScan}>
           <Radar size={16} aria-hidden />
           <span>
-            Next scan <strong>{formatDayShort(nextScan)}</strong>, {formatTime(nextScan)}
+            Next scan <strong>{formatInZone(nextScan, timeZone)}</strong>
           </span>
         </p>
+      )}
+      {nextPost && (
+        <Link href="/posts" className={styles.nextScan}>
+          <Send size={16} aria-hidden />
+          <span>
+            Next post <strong>{formatInZone(nextPost, timeZone)}</strong>
+          </span>
+        </Link>
       )}
     </div>
   );

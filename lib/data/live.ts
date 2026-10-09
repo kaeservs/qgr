@@ -2,14 +2,16 @@ import 'server-only';
 import type { PostgrestError } from '@supabase/supabase-js';
 import { cache } from 'react';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
-import { startPipeline } from '../pipeline-start';
+import { STAGE_ORDER } from '../pipeline';
+import { pingPublisher, startPipeline } from '../pipeline-start';
 import { getViewer } from '../session';
-import { pipelineConfig } from '../supabase/config';
+import { pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
-import { toAdSet, toAgents, toBrandProfile, toCompetitor, toCreateRunArgs, toNotices, toRun, toStrategy, toUser } from './map';
-import type { RunRow } from './map';
+import { transcribe, transcriptionKey } from '../transcribe';
+import { toAdSet, toAgents, toBrandProfile, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toTeamSettings, toUser } from './map';
+import type { PostRow, RunRow } from './map';
 import { searchIndex } from './source';
 import type { DataSource, Saved } from './source';
 
@@ -22,16 +24,22 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
-  'id, name, domain, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running))';
+  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const AD_SET =
   'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_url, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
+const POST =
+  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error), ad_variants!posts_variant_id_fkey(label, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
 const MEDIA_BUCKET = 'run-media';
+/** The files posts go out with, made in the browser. Removed once every place has its post. */
+const POST_BUCKET = 'post-media';
+/** Long enough for Deepgram to fetch a clip, no longer. */
+const TRANSCRIBE_SECONDS = 15 * 60;
 /** Long enough for a working session in the studio; a reload signs a fresh one. */
 const PLAY_SECONDS = 6 * 60 * 60;
 
@@ -100,6 +108,19 @@ const runById = cache(async (id: string) => {
   return data ? toRun(data) : null;
 });
 
+const teamSettings = cache(async () => {
+  const { data, error } = await (await db()).from('team_settings').select('*').eq('id', 1).maybeSingle();
+  if (error) readFailed('the team settings', error);
+  if (!data) throw new Error('The team settings are missing');
+  return toTeamSettings(data);
+});
+
+const posts = cache(async () => {
+  const { data, error } = await (await db()).from('posts').select(POST).order('scheduled_for', { ascending: false }).limit(RECENT);
+  if (error) readFailed('posts', error);
+  return (data as PostRow[]).map(toPost).filter((p) => p !== null);
+});
+
 const brandProfile = cache(async () => {
   const { data, error } = await (await db()).from('brand_profile').select('*').eq('id', 1).maybeSingle();
   if (error) readFailed('the brand profile', error);
@@ -123,11 +144,14 @@ export const liveData: DataSource = {
   getAdSets: () => adSets(),
   getAdSet: async (id) => (await adSets()).find((a) => a.id === id) ?? null,
   getAgents: async () => {
-    const [c, s, a] = await Promise.all([competitors(), strategies(), adSets()]);
-    return toAgents(c.length, s.length, a.filter((set) => set.status === 'review'));
+    const [settings, c, s, a] = await Promise.all([teamSettings(), competitors(), strategies(), adSets()]);
+    return toAgents(settings, { competitors: c.filter((x) => x.tracked).length, strategies: s.length }, a.filter((set) => set.status === 'review'));
   },
-  // Nothing schedules scans yet: a scan happens when someone starts a run.
-  getNextScan: async () => null,
+  getNextScan: async () => {
+    const { data, error } = await (await db()).rpc('next_scan_at');
+    if (error) readFailed('the next scan', error);
+    return data ?? null;
+  },
   getNotices: async () => toNotices(await runRows()),
   getSearchIndex: async () => {
     const [c, s, a, r] = await Promise.all([competitors(), strategies(), adSets(), runRows()]);
@@ -206,6 +230,127 @@ export const liveData: DataSource = {
       return { ok: false, status: 500, error: 'The clip could not be removed.' };
     }
     return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That clip is in use or already gone.' };
+  },
+
+  transcribeClip: async (path) => {
+    const key = transcriptionKey();
+    if (!key) return { ok: false, status: 503, error: 'Transcripts aren’t connected yet (DEEPGRAM_API_KEY), so type what is said.' };
+    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, TRANSCRIBE_SECONDS);
+    if (error) {
+      console.error('Signing a clip link for its transcript failed', error);
+      return { ok: false, status: 404, error: 'That clip can’t be found.' };
+    }
+    const result = await transcribe(data.signedUrl, key);
+    return result.ok ? { ok: true, value: { lines: result.lines }, sample: false } : result;
+  },
+
+  getTeamSettings: () => teamSettings(),
+
+  saveAgentSettings: async (settings) => {
+    const { error } = await (await db()).rpc('update_agent_settings', {
+      p_strategist_auto: settings.strategistAuto,
+      p_content_auto: settings.contentAuto,
+      p_scan_every: settings.scanEvery,
+      p_scan_day: settings.scanDay,
+      p_scan_hour: settings.scanHour,
+      p_time_zone: settings.timeZone,
+    });
+    if (error) return refused(error, 'The agents’ settings could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  savePostPages: async (pages) => {
+    // An empty value clears a Page: update_publishing_settings takes '' for none.
+    const { error } = await (await db()).rpc('update_publishing_settings', {
+      p_facebook_page_id: pages.facebook?.id ?? '',
+      p_facebook_page_name: pages.facebook?.name ?? '',
+      p_instagram_account_id: pages.instagram?.id ?? '',
+      p_instagram_username: pages.instagram?.username ?? '',
+      p_linkedin_org_id: pages.linkedin?.id ?? '',
+      p_linkedin_page_name: pages.linkedin?.name ?? '',
+    });
+    if (error) return refused(error, 'The Pages could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  setCompetitorTracked: async (competitorId, tracked) => {
+    const { error } = await (await db()).rpc('set_competitor_tracked', { p_competitor_id: competitorId, p_tracked: tracked });
+    if (error) return refused(error, 'The competitor could not be changed.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  continueRun: async (runId) => {
+    const pipeline = pipelineConfig();
+    if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so nothing can start.' };
+    const supabase = await db();
+    const { data, error } = await supabase.rpc('continue_run', { p_run_id: runId });
+    if (error) return refused(error, 'The agent could not be started.');
+    const stage = STAGE_ORDER.find((s) => s === data);
+    if (!stage) return { ok: false, status: 500, error: 'The agent could not be started.' };
+    const started = await startPipeline(pipeline, runId, stage);
+    if (!started.ok) {
+      const { error: reportError } = await supabase.rpc('report_continue_failure', { p_run_id: runId, p_stage: stage, p_error: started.error });
+      if (reportError) console.error('Recording that the agent could not start failed', reportError);
+      return { ok: false, status: 502, error: started.error };
+    }
+    return { ok: true, value: { stage }, sample: false };
+  },
+
+  getPosts: () => posts(),
+
+  schedulePost: async (post) => {
+    const { data: id, error } = await (await db()).rpc('schedule_post', {
+      p_variant_id: post.variantId,
+      p_targets: post.targets.map((t) => ({ place: t.place, ...(t.media ? { media_path: t.media.path, media_kind: t.media.kind } : {}) })),
+      ...(post.at ? { p_local_time: post.at } : {}),
+      ...(post.thumbnail ? { p_thumbnail: post.thumbnail } : {}),
+    });
+    if (error) return refused(error, 'The post could not be saved.');
+    // A post for now goes at once; a scheduled one waits for the publisher's minute.
+    const publisher = publisherConfig();
+    if (!post.at && publisher) await pingPublisher(publisher);
+    return { ok: true, value: { id }, sample: false };
+  },
+
+  cancelPost: async (postId) => {
+    const supabase = await db();
+    const { data: freed, error } = await supabase.rpc('cancel_post', { p_post_id: postId });
+    if (error) return refused(error, 'The post could not be cancelled.');
+    if (freed.length > 0) {
+      const { error: removeError } = await supabase.storage.from(POST_BUCKET).remove(freed);
+      if (removeError) console.error('Removing a cancelled post’s files failed', removeError);
+    }
+    return { ok: true, value: null, sample: false };
+  },
+
+  retryPost: async (postId, place) => {
+    const { error } = await (await db()).rpc('retry_post', { p_post_id: postId, p_place: place });
+    if (error) return refused(error, 'The post could not be tried again.');
+    const publisher = publisherConfig();
+    if (publisher) await pingPublisher(publisher);
+    return { ok: true, value: null, sample: false };
+  },
+
+  createPostUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to post.' };
+    const path = `posts/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    const { data, error } = await (await db()).storage.from(POST_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing a post upload link failed', error);
+      return { ok: false, status: 500, error: 'The post’s file could not be uploaded.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deletePostMedia: async (path) => {
+    // Storage refuses (by its policy) a file a post still waits on.
+    const { data, error } = await (await db()).storage.from(POST_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing a post file failed', error);
+      return { ok: false, status: 500, error: 'The file could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That file is in use or already gone.' };
   },
 
   approveVariant: async (variantId) => {

@@ -15,10 +15,20 @@ Front end, backend and agents are built and joined. With `SUPABASE_URL` and
 `SUPABASE_PUBLISHABLE_KEY` set (`.env.example`), the dashboard asks people to
 sign in and shows what is in Supabase; without them it runs on the sample data
 (`lib/mock-data.ts`) and says so ("Sample data" in the top bar). Runs start
-only once the n8n webhook settings are set too. Apify and image generation are
-placeholders. Not built yet: scheduled scans (the tracker runs when someone
-starts a run), switching agents off, publishing to the ad platforms, a
-transcript of an uploaded clip (the team writes what is said in it).
+only once the n8n webhook settings are set too.
+
+Placeholders until their keys are in: Apify, image generation and posting.
+An approved variant is posted now or at a time to the Facebook Page,
+Instagram and the LinkedIn Page, and the whole path runs (the file made in the
+browser, the queue in Supabase, n8n's publisher), but n8n's three posting
+steps are stand-ins that post nothing and say so (Posting below). A clip's
+transcript needs `DEEPGRAM_API_KEY`; without it the team types what is said.
+Not built: paid ads (Meta Ads Manager, LinkedIn Campaign Manager) and posting
+to X, whose API is paid; X copy is for pasting.
+
+The tracker scans the tracked competitors on the team's schedule, and the
+strategist and the Content Agent can each be switched off, so a run waits for
+a person before them (Switches and scans below).
 
 A video run can start from a link or from a clip uploaded from the computer,
 cut in the browser first; in the studio every variant of such a run is a video
@@ -30,22 +40,31 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
             ── pages read lib/data.ts → Supabase as the signed-in teammate (RLS)
             ── POST /api/link-check → reads a pasted link as it is typed (lib/page)
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
+            ── POST /api/transcribe → Deepgram reads the clip from a link signed for 15 min
             ── POST /api/runs → reads the run's link → create_run() → POST the n8n
                webhook { runId, startAt }
-            ── studio and settings → server actions → save_variant(), approve_variant(),
-               save_video_edit(), update_brand_profile()
-    n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent
+            ── POST /api/post-media → a signed upload link for the file a post goes out with
+            ── studio, posts, runs, competitors, settings → server actions →
+               save_variant(), approve_variant(), save_video_edit(), update_brand_profile(),
+               continue_run(), schedule_post(), cancel_post(), retry_post(),
+               update_agent_settings(), update_publishing_settings(), set_competitor_tracked()
+    n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
+        asking pipeline_next() before each of the last two
+    n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
+    n8n "QGR · Publisher", every minute and on POST /webhook/qgr-publish →
+        publisher_take_due() → each place → publisher_finish() or publisher_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
-    pages that show a moving run re-read it every 5 s (LiveRefresh)
+    pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
-- The browser never calls Supabase or n8n, with one exception: an uploaded clip
-  goes from the browser straight to Storage, through a link the server signs
-  as the teammate for one path in their own folder (`/api/uploads`), because a
-  50 MB file cannot pass through a Vercel function (4.5 MB a request). Clips
-  play and export from links the server signs too (`getClipUrl`). Every other
+- The browser never calls Supabase or n8n, with one exception: a file goes
+  from the browser straight to Storage, through a link the server signs as the
+  teammate for one path in their own folder (a clip through `/api/uploads`,
+  the file a post goes out with through `/api/post-media`), because a 50 MB
+  file cannot pass through a Vercel function (4.5 MB a request). Clips play
+  and export from links the server signs too (`getClipUrl`). Every other
   Supabase call is made by the server with the person's own session and the
-  publishable key; the service role key exists only in n8n. The webhook URL and
-  its secret live only in the server's environment.
+  publishable key; the service role key exists only in n8n. The webhook URLs
+  and their secret live only in the server's environment.
 - The app reads a run's link once, when the run starts (`lib/page/read.ts`):
   addresses that resolve to private networks are refused, redirects are
   checked again, 8 s and 2 MB at most. What it read (title, description, main
@@ -72,20 +91,31 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - People change things through their own functions, each `security definer`
   with a team check first (`private.require_team_member()`): `create_run`,
   `report_start_failure` (n8n could not be reached), `save_variant`,
-  `approve_variant`, `save_video_edit`, `update_brand_profile`. The advisor
-  warns that signed-in users can call them; that is the point, and the check
-  inside is the guard.
+  `approve_variant`, `save_video_edit`, `update_brand_profile`,
+  `continue_run` and `report_continue_failure`, `schedule_post`,
+  `cancel_post`, `retry_post`, `update_agent_settings`,
+  `update_publishing_settings`, `set_competitor_tracked`. The advisor warns
+  that signed-in users can call them; that is the point, and the check inside
+  is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
+  `start_due_scans`, `publisher_*`) is granted to the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
   any clip, uploads only into their own folder, and removes only their own
   clips that no run uses (a clip cut again or taken away). `create_run` checks
   the clip has finished uploading; any teammate's clip may start a run, so
   anyone can retry one. A clip a run uses is never replaced or removed.
+- The file a post goes out with lives in the private bucket `post-media` (50 MB,
+  JPEG or MP4) at `posts/{uploader}/{uuid}.{ext}`. A member uploads only into
+  their own folder and removes a file only while no post waits on it; n8n
+  removes it once the last place has it (`publisher_finish` returns
+  `remove_media`), since each platform keeps its own copy.
 - The tests run every migration in PGlite, with stand-ins for Supabase's
   roles, `auth.uid()` and storage (`test/supabase.ts`):
-  `supabase/access.test.ts` checks who can read and change what, and
-  `n8n/pipeline.test.ts` takes each kind of run through all three agents'
-  scripts against them, with Claude's answers as fixtures.
+  `supabase/access.test.ts` checks who can read and change what,
+  `supabase/posts.test.ts` and `supabase/agents.test.ts` the posts, the
+  switches and the scan schedule, `n8n/pipeline.test.ts` takes each kind of
+  run through all three agents' scripts against them, with Claude's answers as
+  fixtures, and `n8n/publisher.test.ts` a post through the publisher.
 - `team_members` decides who sees anything. Policies let a member read every
   dashboard table; anyone else, signed in or not, reads nothing, and nobody but
   the service role writes a table. Add a person: create the account
@@ -108,12 +138,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - In n8n-tesserafy, folder "QGR marketing agents": Run pipeline
   (`jZPgNf2YZJddmJ7y`, webhook `POST /webhook/qgr-run`), Competitor Tracker
   (`j94ykovP9OH96SxF`), Ad Strategist (`8YaVuKkKlok2rX4K`), Content Agent
-  (`iSwaVrynhCGWkqOg`).
-- The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts`.
-  `node n8n/build-workflows.mjs --ids=tracker=…,strategist=…,content=…` embeds
-  it into SDK source in `n8n/workflows/`, which is what gets validated and
-  saved through the n8n MCP. Change the script, test, rebuild, then update the
-  workflow; an edit made only in n8n drifts from the repo.
+  (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
+  `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly).
+- The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
+  `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
+  --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
+  in `n8n/workflows/`, which is what gets validated and saved through the n8n
+  MCP. Change the script, test, rebuild, then update the workflow; an edit made
+  only in n8n drifts from the repo.
 - n8n runs Code nodes in a sandbox with the standard built-ins only: no `URL`,
   `Buffer`, `fetch` or `setTimeout`. The tests run every script the same way
   (`test/n8n.ts`), so a script that reaches for one fails here first. (The
@@ -127,13 +159,72 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   versions, counts and budget shares are computed in code from the data,
   never taken from the model.
 - Credentials, created in n8n and attached by hand: `Anthropic` (Anthropic
-  API), `Supabase QGR` (Supabase API: project URL and service role key),
-  `QGR webhook secret` (Header Auth, on the pipeline's webhook).
+  API), `Supabase QGR` (Supabase API: project URL and service role key, on
+  every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's
+  and the publisher's webhooks). The Meta and LinkedIn tokens will be n8n
+  credentials too; nothing that posts is kept in Supabase or the app.
 - Placeholders. "Apify: competitor ads (placeholder)" returns sample ads in
   the shape Apify will, and the report is marked `data_source: placeholder`.
   "Images (placeholder)" leaves `image_url` empty, so the studio draws the
-  branded design. Each is replaced by a real step with the same output; the
-  node's comment says what that is.
+  branded design. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
+  (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
+  the dashboard says nothing went out. Each is replaced by real steps with the
+  same output; the node's comment and the sticky beside it say what they are.
+
+### Switches and scans (`team_settings`)
+
+- `team_settings` is one row: the team's time zone, the two switches
+  (`strategist_auto`, `content_auto`), the scan schedule (`scan_every` off,
+  day or week, with `scan_day` and `scan_hour`) and the Pages posts go to.
+  Settings changes it through `update_agent_settings` and
+  `update_publishing_settings`; Home's agent cards flip the same switches.
+- A switch holds what follows, never the agent a run starts at. With the
+  strategist's off, every finished scan waits before the strategy; with the
+  Content Agent's off, every strategy waits before the ads. The pipeline asks
+  `pipeline_next(run, stage)`, which with the switch off marks the stage
+  waiting (`run_stages.waiting_since`: its status stays `queued`, and
+  `agent_begin` refuses it) and says so on the run. The go-ahead on the run
+  page is `continue_run`, which clears it and returns the stage, and the app
+  starts the pipeline from there. The same call runs a failed agent again
+  where it stopped. "Waiting" is derived in `lib/data/map.ts`, like every
+  status (rule 1).
+- Every hour n8n asks `start_due_scans` for the scans that are due: the last
+  slot of the schedule in the team's zone (`scan_slot`, daylight saving
+  included), if no scan has run for it and the schedule was not changed after
+  it (`scan_changed_at`, so saving Settings never starts one). It starts a run
+  for each tracked competitor with a website (`competitors.tracked`, switched
+  on the competitor's page; at most ten, the most recently reported first),
+  with the platforms and goal of their last run and their website as the app
+  last read it: a scheduled scan fetches nothing.
+- Times are the team's. A scan or a scheduled post is a wall time in
+  `team_settings.time_zone`, converted by the database; the app shows times
+  in that zone (`lib/schedule.ts`, tested across the clock changes).
+
+### Posting (`posts`, `post_targets`, "QGR · Publisher")
+
+- A post is one approved variant going to one or more places (Facebook,
+  Instagram, LinkedIn), now or at a time up to 90 days ahead, made with
+  `schedule_post`. Each place is a `post_targets` row holding its own copy of
+  the approved words (Meta's for Facebook and Instagram, LinkedIn's for
+  LinkedIn) and the file it goes with: a picture drawn in the browser by
+  `lib/creative/draw.ts` (1080×1080 for Meta, 1200×628 for LinkedIn, the same
+  design the studio shows) or, for a run from a clip, the variant's video made
+  by `components/video/makeVideo.ts` as MP4 only. The dialog shows the files
+  before they go.
+- A place goes scheduled → posting → posted, or failed (nothing went out; Try
+  again) or unknown (it may have gone out; a person checks the Page first), or
+  cancelled. `publisher_take_due` claims what is due with `skip locked`, so a
+  place is never handed out twice; a place still `posting` after 15 minutes
+  becomes unknown and is never sent again by itself.
+- Post now pings the publisher's webhook (`N8N_PUBLISH_WEBHOOK_URL`, or the
+  run webhook's address with `qgr-publish`), so it goes within seconds rather
+  than at the next minute.
+- An approved variant that is edited loses its approval (`save_variant`,
+  `save_video_edit`), and one waiting to post cannot be edited until its post
+  is cancelled. Saving the same words again changes nothing.
+- The Posts page lists what needs a look, what is scheduled, what went out
+  and what was cancelled, in the team's time; a stand-in result says nothing
+  was posted.
 
 ### Video (`lib/video/`, `components/video/`)
 
@@ -158,6 +249,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   removed again (`DELETE /api/uploads`), so Free's 1 GB of storage holds
   clips that runs use. The export downloads the clip once, renders it and
   hands the file to the person; it is never stored.
+- A clip's transcript (`lib/transcribe.ts`, `/api/transcribe`): once a clip
+  has uploaded, Deepgram fetches it from a link signed for 15 minutes
+  (`nova-3`, `mip_opt_out` so the clip is not theirs to learn from) and the
+  words come back as caption-sized lines in the clip's seconds. They fill the
+  run's notes when those are empty (the team reads them over before the run
+  starts), are stored with the clip in `runs.media.transcript`, and the editor
+  turns the ones in the kept parts into captions ("From the clip's speech").
+  Nothing else is kept. Without `DEEPGRAM_API_KEY` the team types what is said.
 - The sample data has a 15-second branded clip (`public/sample`, marked
   "Sample clip" in the picture, MP4 and a WebM for browsers that can't play
   H.264) and a video ad set made from it. A clip uploaded on sample data is
@@ -187,11 +286,20 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
    "Saved for this session", and a report built from Apify's placeholder says
    its ads are examples.
 8. **The agents never fetch.** A link is read by the app when its run starts
-   and stored with it (`runs.page`); a clip is described by the team
-   (`runs.excerpt`), because the agents cannot watch it.
+   and stored with it (`runs.page`); a clip is described in words
+   (`runs.excerpt`: its transcript, read over by the team, or what they type),
+   because the agents cannot watch it. A scheduled scan reuses the website as
+   it was last read.
 9. **A clip is never changed.** Every edit is instructions on a variant; the
    clip in Storage stays as it was uploaded, and the captions and end card are
    flagged against the guardrails like any other words on an ad.
+10. **What was approved is what goes out.** A post copies the approved words
+    and goes with a file made from the approved variant, shown before it is
+    sent. Editing an approved variant takes its approval away; one waiting to
+    post cannot be edited until its post is cancelled.
+11. **Never post twice by accident.** A place that may have gone out
+    (`unknown`) is never sent again by itself: a person checks the Page, then
+    sends it again or dismisses it.
 
 ## Design
 
@@ -201,12 +309,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Lexend for the interface, Oswald (the site's condensed headline face) for
   titles and ad images. Both self-hosted with @fontsource.
 - Plain CSS Modules on the tokens, no UI library. lucide-react for icons; Meta
-  and X marks from simple-icons (CC0), LinkedIn drawn in `PlatformIcon.tsx`.
+  and X marks from simple-icons (CC0); LinkedIn, Facebook and Instagram drawn
+  in `PlatformIcon.tsx`.
 - Ad previews use the system font, as the platforms do; only the image wears
   the brand's type.
 - Layout after the "glide" reference: white icon sidebar, greeting, a tabbed
   start card, recent runs, and a right panel with a calendar and agent cards.
-- Dates render in UTC with a fixed locale so server and browser agree.
+- Dates render in UTC with a fixed locale so server and browser agree; scan
+  and post times render the same way in the team's zone (`formatInZone`).
 - Copy limits in `lib/platforms.ts` are the platforms' recommendations (X's
   280 is the hard one); check them against current ad specs.
 
@@ -223,4 +333,4 @@ Supabase connector points at different infrastructure: do not use it here.
     pnpm test         # vitest, no network (includes the n8n agents' code)
     pnpm typecheck    # next typegen + tsc (TypeScript 7)
     pnpm build
-    node n8n/build-workflows.mjs --ids=tracker=…,strategist=…,content=…
+    node n8n/build-workflows.mjs --ids=tracker=…,strategist=…,content=…,pipeline=…

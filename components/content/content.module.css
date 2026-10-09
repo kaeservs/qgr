@@ -157,6 +157,15 @@
   color: #fff;
 }
 
+.postPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--gold-100);
+  color: var(--gold-ink);
+  text-decoration: none;
+}
+
 .frame {
   position: relative;
   border-radius: var(--radius-lg);

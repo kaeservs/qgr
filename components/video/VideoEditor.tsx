@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Trash2, TriangleAlert, Undo2, Upload, X as Close } from 'lucide-react';
+import { AudioLines, Download, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Trash2, TriangleAlert, Undo2, Upload, X as Close } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { saveVariantAction, saveVideoEditAction } from '@/app/(app)/content/actions';
@@ -8,9 +8,9 @@ import { cx } from '@/lib/cx';
 import { LIMITS } from '@/lib/edit-input';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import type { Clip, Platform, Variant } from '@/lib/types';
-import { drawFrame } from '@/lib/video/draw';
 import {
   addCaption,
+  captionsFromTranscript,
   ASPECT_INFO,
   ASPECTS,
   clock,
@@ -36,6 +36,7 @@ import type { Caption, Corner, VideoEdit } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
 import { useToast } from '../ui/Toast';
 import { editedAt, useMoment, useUndoable } from './player';
+import { downloadClip, makeVariantVideo } from './makeVideo';
 import { coverMoment, useEditedVideo } from './useEditedVideo';
 import { useFilmstrip } from './useFilmstrip';
 import { Timeline } from './Timeline';
@@ -186,38 +187,20 @@ export function VideoEditor({
     const controller = new AbortController();
     exporting.current = controller;
     try {
-      // The whole clip, once: reading a signed link in ranges needs headers Storage may not show the page.
-      clipFile.current ??= fetch(src ?? url).then((r) => {
-        if (!r.ok) throw new RenderError('The clip could not be downloaded. Reload the page to try again.');
-        return r.blob();
-      });
+      clipFile.current ??= downloadClip(src ?? url);
       const file = await clipFile.current.catch((err: unknown) => {
         clipFile.current = null;
-        throw err instanceof RenderError ? err : new RenderError('The clip could not be downloaded. Check the connection and try again.');
+        throw err;
       });
       if (controller.signal.aborted) return;
       setProgress(0);
-      let shown = 0;
-      const mark = new Image();
-      mark.src = '/brand/qgr-mark.png';
-      await mark.decode().catch(() => undefined);
-      const frame = { name: brand.name, website: brand.website, mark: mark.complete && mark.naturalWidth > 0 ? mark : null };
-      const { render, videoBitrate } = await import('@/lib/video/render');
-      const { blob, target } = await render({
-        source: file,
-        keep: edit.keep,
-        tail: edit.endCard?.seconds ?? 0,
+      const { blob, target } = await makeVariantVideo({
+        clip: file,
+        edit,
+        words: words.trim(),
+        brand: { name: brand.name, website: brand.website },
         size,
-        bitrate: videoBitrate(size, 30),
-        volume: edit.volume,
-        draw: (ctx, picture, time, clipTime) => drawFrame(ctx, size, picture, { edit, words: words.trim(), brand: frame, time, clipTime }),
-        // Every frame reports; the editor redraws only for a new whole percent.
-        onProgress: (share) => {
-          const pct = Math.floor(share * 100);
-          if (pct === shown) return;
-          shown = pct;
-          setProgress(share);
-        },
+        onProgress: setProgress,
         signal: controller.signal,
       });
       const name = `qgr-${slug(setTitle)}-${variant.label.toLowerCase()}-${edit.aspect === 'original' ? 'original' : edit.aspect.replace(':', 'x')}.${target.extension}`;
@@ -540,6 +523,23 @@ export function VideoEditor({
                       <Plus size={15} aria-hidden />
                       Add at the playhead
                     </button>
+                    {clip.transcript && clip.transcript.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-quiet btn-sm"
+                        onClick={() => {
+                          const found = captionsFromTranscript(clip.transcript ?? [], edit.keep);
+                          if (found.length === 0) return setProblem('Nothing said in the kept parts was heard.');
+                          setProblem(null);
+                          change({ captions: found });
+                          setCaption(null);
+                          toast(`${found.length} caption${found.length === 1 ? '' : 's'} from the clip’s speech: check them against what is said`);
+                        }}
+                      >
+                        <AudioLines size={15} aria-hidden />
+                        From the clip’s speech
+                      </button>
+                    )}
                     <button type="button" className="btn btn-quiet btn-sm" onClick={() => subtitles.current?.click()}>
                       <Upload size={15} aria-hidden />
                       Import SRT or VTT

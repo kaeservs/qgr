@@ -11,6 +11,7 @@ export const STAGE_INFO: Record<StageKey, { name: string; job: string }> = {
 export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
   queued: 'Queued',
   running: 'Running',
+  waiting: 'Waiting for you',
   review: 'Ready for review',
   approved: 'Approved',
   failed: 'Failed',
@@ -33,6 +34,8 @@ export function runStatus(run: Pick<Run, 'stages' | 'approvedAt'>): RunStatus {
   const stages = STAGE_ORDER.map((key) => run.stages[key]);
   if (stages.some((s) => s.status === 'failed')) return 'failed';
   if (stages.some((s) => s.status === 'running')) return 'running';
+  // An agent's switch is off: the run goes on when a person gives the go-ahead.
+  if (stages.some((s) => s.status === 'waiting')) return 'waiting';
   if (stages.every((s) => s.status === 'done' || s.status === 'skipped')) {
     return run.approvedAt ? 'approved' : 'review';
   }
@@ -40,3 +43,10 @@ export function runStatus(run: Pick<Run, 'stages' | 'approvedAt'>): RunStatus {
   if (stages.some((s) => s.status === 'done')) return 'running';
   return 'queued';
 }
+
+/** What a person presses to start an agent that waits for them, or one that failed. */
+export const GO_AHEAD: Record<StageKey, { start: string; again: string }> = {
+  tracker: { start: 'Scan now', again: 'Scan again' },
+  strategist: { start: 'Build the strategy', again: 'Build it again' },
+  content: { start: 'Write the ads', again: 'Write them again' },
+};

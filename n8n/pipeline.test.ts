@@ -229,7 +229,7 @@ async function dashboardRun(runId: string): Promise<RunRow> {
         'files', r.files, 'excerpt', r.excerpt, 'platforms', r.platforms, 'goal', r.goal, 'summary', r.summary,
         'competitor_id', r.competitor_id, 'created_at', r.created_at, 'approved_at', r.approved_at,
         'page_ok', r.page -> 'ok', 'page_url', r.page ->> 'url', 'page_title', r.page ->> 'title', 'page_words', r.page -> 'words', 'page_error', r.page ->> 'error',
-        'run_stages', (select json_agg(json_build_object('stage', s.stage, 'status', s.status, 'summary', s.summary, 'error', s.error, 'finished_at', s.finished_at)) from public.run_stages s where s.run_id = r.id),
+        'run_stages', (select json_agg(json_build_object('stage', s.stage, 'status', s.status, 'summary', s.summary, 'error', s.error, 'finished_at', s.finished_at, 'waiting_since', s.waiting_since)) from public.run_stages s where s.run_id = r.id),
         'strategies', (select json_build_object('id', st.id, 'strategy_angles', coalesce((select json_agg(json_build_object('id', a.id)) from public.strategy_angles a where a.strategy_id = st.id), '[]')) from public.strategies st where st.run_id = r.id),
         'ad_sets', (select json_build_object('id', ad.id, 'ad_variants', coalesce((select json_agg(json_build_object('id', v.id)) from public.ad_variants v where v.ad_set_id = ad.id), '[]')) from public.ad_sets ad where ad.run_id = r.id),
         'competitor_reports', (select json_build_object('id', cr.id, 'hooks', coalesce((select json_agg(json_build_object('id', h.id)) from public.hooks h where h.report_id = cr.id), '[]')) from public.competitor_reports cr where cr.run_id = r.id),
@@ -427,5 +427,93 @@ describe('when an agent fails', () => {
     const runId = await startRun({ source: { kind: 'custom', type: 'text', excerpt: 'Another plain note about EB-5, long enough to be a source for a strategy.' }, platforms: ['meta'], goal: 'consultations' });
     await begin(runId, 'strategist');
     await expect(begin(runId, 'strategist')).rejects.toThrow(/is running, not waiting to start/);
+  });
+});
+
+describe('the switches and the schedule, down to the ads', () => {
+  /** What the pipeline asks the database before each agent after the first. */
+  const next = (runId: string, stage: string) => rpc('pipeline_next', { p_run_id: runId, p_stage: stage }).then((r) => r.result as boolean);
+  const settings = (s: { strategist: boolean; content: boolean; every?: string }) =>
+    t.asUser(teammate, () => t.db.query(`select public.update_agent_settings($1, $2, $3, 1, 0, 'UTC')`, [s.strategist, s.content, s.every ?? 'off']));
+
+  it('scans a tracked competitor on schedule, waits for the go-ahead, then writes the ads', async () => {
+    // A website run the team started by hand: the competitor and the page the app read.
+    const page = await readPage(`${siteUrl}/`, { policy: local });
+    const first = await startRun({ source: { kind: 'competitor', input: 'website', url: 'horizonvisa.example' }, platforms: ['meta', 'linkedin'], goal: 'webinar' }, page);
+    await runTracker(first);
+    await t.db.query(`update public.competitors set tracked = (domain = 'horizonvisa.example')`);
+
+    // The strategist waits after a scan; the content agent goes on by itself.
+    await settings({ strategist: false, content: true, every: 'day' });
+    await t.db.query(`update public.team_settings set scan_changed_at = now() - interval '2 days', last_scan_at = null`);
+
+    // "QGR · Scheduled scans": the hourly clock asks what is due and hands each run to the pipeline.
+    const due = (await rpc('start_due_scans', { p_max: 10 })).result as { run_id: string; competitor: string }[];
+    expect(due.map((d) => d.competitor)).toEqual(['Horizon Visa Partners']);
+    const scan = due[0]!.run_id;
+
+    const tracker = await runTracker(scan);
+    // The scan worked from the website as the app last read it: n8n fetched nothing.
+    expect(tracker.plan.websiteText).toContain('Your family’s path to a U.S. Green Card');
+    expect(await next(scan, 'strategist')).toBe(false);
+    let run = toRun(await dashboardRun(scan));
+    expect(run.status).toBe('waiting');
+    expect(run.stages.strategist.status).toBe('waiting');
+    await expect(begin(scan, 'strategist')).rejects.toThrow(/waits for a person/);
+
+    // A teammate gives the go-ahead on the run's page; the app hands it to the pipeline at the strategist.
+    expect(await t.asUser(teammate, () => t.value<string>(`select public.continue_run($1)`, [scan]))).toBe('strategist');
+    await runStrategist(scan);
+    expect(await next(scan, 'content')).toBe(true);
+    await runContent(scan);
+
+    run = toRun(await dashboardRun(scan));
+    expect(run.status).toBe('review');
+    expect(run.title).toBe('Horizon Visa Partners · scheduled scan');
+    expect(run.platforms).toEqual(['meta', 'linkedin']);
+    expect(run.activity.map((e) => e.text)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^Scheduled scan, with their website as the app last read it \(/),
+        'The Ad Strategist waits for you: it does not start by itself after a scan',
+        'Go-ahead given for the Ad Strategist',
+        'Ready for review',
+      ]),
+    );
+    expect(Object.keys(toAdSet(await dashboardAdSet(scan)).variants[0]!.copy)).toEqual(['meta', 'linkedin']);
+    await settings({ strategist: true, content: true });
+  });
+
+  it('holds the ads of a custom run for a go-ahead when the content agent is switched off', async () => {
+    await settings({ strategist: true, content: false });
+    const runId = await startRun({ source: { kind: 'custom', type: 'text', excerpt: 'Concurrent filing lets H-1B families apply for a green card while they stay and work in the U.S.' }, platforms: ['meta'], goal: 'consultations' });
+    // A person started this run: its first agent, the strategist, starts at once.
+    await runStrategist(runId);
+    expect(await next(runId, 'content')).toBe(false);
+    expect(toRun(await dashboardRun(runId)).stages.content.status).toBe('waiting');
+    expect(await t.asUser(teammate, () => t.value<string>(`select public.continue_run($1)`, [runId]))).toBe('content');
+    await runContent(runId);
+    expect(toRun(await dashboardRun(runId)).status).toBe('review');
+    await settings({ strategist: true, content: true });
+  });
+
+  it('carries a clip’s transcript with the run, and the strategist works from the notes', async () => {
+    const path = `uploads/${teammate}/7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d.mp4`;
+    await t.asUser(teammate, () => t.db.query(`insert into storage.objects (bucket_id, name) values ('run-media', $1)`, [path]));
+    const transcript = [
+      { start: 0.4, end: 2.9, text: 'EB-5 is an investment, and it carries risk.' },
+      { start: 3.1, end: 6.2, text: 'Families on H-1B visas can plan it early.' },
+    ];
+    const runId = await startRun({
+      source: { kind: 'custom', type: 'video', clip: { path, name: 'founder.mp4', duration: 6.5, width: 1080, height: 1920, size: 2_400_000, transcript }, notes: transcript.map((l) => l.text).join(' ') },
+      platforms: ['meta'],
+      goal: 'consultations',
+    });
+    const { body } = await runStrategist(runId);
+    expect(JSON.stringify(body)).toContain('Families on H-1B visas can plan it early.');
+    await runContent(runId);
+    const run = toRun(await dashboardRun(runId));
+    expect(run.status).toBe('review');
+    const media = await t.value<{ transcript: unknown[] }>('select media from public.runs where id = $1', [runId]);
+    expect(media.transcript).toEqual(transcript);
   });
 });

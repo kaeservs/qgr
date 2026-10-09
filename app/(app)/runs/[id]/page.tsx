@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, CalendarDays, CircleCheck, ExternalLink, Target,
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { GoAheadButton } from '@/components/runs/GoAheadButton';
 import { RetryButton } from '@/components/runs/RetryButton';
 import { StageBadge } from '@/components/runs/StageBadge';
 import { LiveRefresh } from '@/components/ui/LiveRefresh';
@@ -12,7 +13,7 @@ import { ClipPreview } from '@/components/video/ClipPreview';
 import { cx } from '@/lib/cx';
 import { getClipUrl, getRun, usingSampleData } from '@/lib/data';
 import { formatDate, formatTime } from '@/lib/format';
-import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
+import { GO_AHEAD, STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
 import type { Run, StageKey } from '@/lib/types';
@@ -30,6 +31,13 @@ const WAITING: Record<StageKey, string> = {
   tracker: 'Waiting to scan.',
   strategist: 'Waiting for the report.',
   content: 'Waiting for the strategy.',
+};
+
+/** What a stage that waits for a person says: its switch is off. */
+const HELD: Record<StageKey, string> = {
+  tracker: 'Waits for you.',
+  strategist: 'Waits for you: it doesn’t start by itself after a scan. Read the report, then build the strategy above.',
+  content: 'Waits for your go-ahead: it doesn’t write ads by itself. Read the strategy, then write the ads above.',
 };
 
 function outputLink(key: StageKey, run: Run): { href: string; label: string } | null {
@@ -137,6 +145,16 @@ export default async function RunPage({ params }: Props) {
         </div>
       </header>
 
+      {run.status === 'waiting' &&
+        STAGE_ORDER.filter((key) => run.stages[key].status === 'waiting').map((key) => (
+          <div key={key} className={styles.callout}>
+            <span>
+              <strong>The {STAGE_INFO[key].name} waits for your go-ahead.</strong> Its switch is off under Settings, Agents.
+            </span>
+            <GoAheadButton runId={run.id} label={GO_AHEAD[key].start} />
+          </div>
+        ))}
+
       {run.status === 'review' && run.output.adSetId && (
         <div className={styles.callout}>
           <span>
@@ -184,7 +202,9 @@ export default async function RunPage({ params }: Props) {
                     ? 'Skipped: a custom run has no competitor to track.'
                     : stage.status === 'failed'
                       ? stage.error
-                      : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && run.source.kind === 'custom' ? 'Waiting to start.' : WAITING[key]))}
+                      : stage.status === 'waiting'
+                        ? HELD[key]
+                        : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && run.source.kind === 'custom' ? 'Waiting to start.' : WAITING[key]))}
                 </p>
                 {link && (
                   <Link href={link.href} className={cx('link', styles.stageLink)}>
@@ -192,14 +212,18 @@ export default async function RunPage({ params }: Props) {
                     <ArrowRight size={15} aria-hidden />
                   </Link>
                 )}
-                {stage.status === 'failed' &&
-                  (run.source.kind === 'competitor' && run.source.input === 'upload' ? (
-                    <Link href="/runs/new?type=upload" className="btn btn-primary btn-sm">
-                      Upload again
-                    </Link>
-                  ) : (
-                    <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} />
-                  ))}
+                {stage.status === 'failed' && (
+                  <div className={styles.stageActions}>
+                    <GoAheadButton runId={run.id} label={GO_AHEAD[key].again} again />
+                    {run.source.kind === 'competitor' && run.source.input === 'upload' ? (
+                      <Link href="/runs/new?type=upload" className="btn btn-quiet btn-sm">
+                        Upload again
+                      </Link>
+                    ) : (
+                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} />
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}

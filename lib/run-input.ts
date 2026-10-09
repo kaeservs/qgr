@@ -1,6 +1,7 @@
 import { hostOf } from './format';
+import { MAX_LINE, MAX_LINES } from './transcribe';
 import { CUSTOM_SOURCES, GOALS, PLATFORMS } from './types';
-import type { Clip, Goal, Platform, RunSource } from './types';
+import type { Clip, Goal, Platform, RunSource, TranscriptLine } from './types';
 import { length, MAX_CLIP_SECONDS } from './video/edit';
 
 export interface NewRunInput {
@@ -65,7 +66,36 @@ export function parseClip(raw: unknown): ParseResult<Clip> {
   if (!isCount(raw.size, MAX_CLIP_BYTES)) return { ok: false, error: 'The clip is over 50 MB.' };
   // A file name is shown on the run; anything that is not plain text is dropped.
   const name = (typeof raw.name === 'string' ? raw.name : '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'Uploaded clip';
-  return { ok: true, value: { path: raw.path, name, duration: Math.round(duration * 1000) / 1000, width: raw.width, height: raw.height, size: raw.size } };
+  const transcript = parseTranscript(raw.transcript, duration);
+  if (!transcript.ok) return transcript;
+  return {
+    ok: true,
+    value: {
+      path: raw.path,
+      name,
+      duration: Math.round(duration * 1000) / 1000,
+      width: raw.width,
+      height: raw.height,
+      size: raw.size,
+      ...(transcript.value.length > 0 ? { transcript: transcript.value } : {}),
+    },
+  };
+}
+
+/** A clip's transcript as it came back from /api/transcribe: lines in the clip's seconds. None is fine. */
+function parseTranscript(raw: unknown, duration: number): ParseResult<TranscriptLine[]> {
+  if (raw === undefined || raw === null) return { ok: true, value: [] };
+  if (!Array.isArray(raw) || raw.length > MAX_LINES) return { ok: false, error: 'The transcript is not readable.' };
+  const lines: TranscriptLine[] = [];
+  for (const l of raw) {
+    if (!isRecord(l) || typeof l.start !== 'number' || typeof l.end !== 'number' || typeof l.text !== 'string') return { ok: false, error: 'The transcript is not readable.' };
+    const text = l.text.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!Number.isFinite(l.start) || !Number.isFinite(l.end) || l.start < 0 || l.end <= l.start || l.end > duration + 0.5 || !text || text.length > MAX_LINE) {
+      return { ok: false, error: 'The transcript does not fit the clip.' };
+    }
+    lines.push({ start: Math.round(l.start * 100) / 100, end: Math.round(l.end * 100) / 100, text });
+  }
+  return { ok: true, value: lines };
 }
 
 function parseSource(raw: unknown): ParseResult<RunSource> {

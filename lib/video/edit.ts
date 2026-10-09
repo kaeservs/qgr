@@ -418,3 +418,22 @@ export function length(t: number): string {
   const seconds = Math.round(Math.max(0, t));
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
+
+/**
+ * Captions from what is said in the clip (its transcript, in the clip's own
+ * seconds): every line that is heard in a kept part, cut to that part. A line
+ * said in a cut part is not heard, so it has no caption.
+ */
+export function captionsFromTranscript(lines: readonly Caption[], keep: readonly Part[]): Caption[] {
+  const captions: Caption[] = [];
+  for (const line of lines) {
+    const text = line.text.replace(/\s+/g, ' ').trim().slice(0, TEXT_LIMITS.caption);
+    if (!text) continue;
+    for (const part of keep) {
+      const start = Math.max(line.start, part.start);
+      const end = Math.min(line.end, part.end);
+      if (end - start >= 0.2 && captions.length < MAX_CAPTIONS) captions.push({ start: ms(start), end: ms(end), text });
+    }
+  }
+  return byStart(captions);
+}

@@ -8,13 +8,14 @@ import { CLIP_PATH, runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
-import { GOALS, PLATFORMS } from '../types';
+import { GOALS, PLACES, PLATFORMS } from '../types';
 import type {
   AdExample,
   AdFormat,
   AdSet,
   AdSource,
   Agent,
+  AgentSettings,
   AngleShare,
   BrandProfile,
   ChannelPlan,
@@ -28,15 +29,22 @@ import type {
   PageSummary,
   Platform,
   PlatformCopy,
+  Post,
+  PostStatus,
+  PostTarget,
   RunSource,
+  ScanEvery,
   Stage,
   StageKey,
   StageStatus,
   Strategy,
+  TeamSettings,
+  TranscriptLine,
   User,
   Variant,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
+import { scanLabel } from '../schedule';
 import { initialsOf } from './source';
 import type { RunWithStatus } from './source';
 
@@ -52,6 +60,8 @@ export interface StageRow {
   summary: string | null;
   error: string | null;
   finished_at: string | null;
+  /** Set while the agent waits for a person: its switch is off. */
+  waiting_since?: string | null;
 }
 
 export interface RunRow {
@@ -88,6 +98,7 @@ export interface CompetitorRow {
   id: string;
   name: string;
   domain: string | null;
+  tracked?: boolean;
   competitor_reports: {
     id: string;
     data_source: string;
@@ -140,6 +151,26 @@ export interface AdSetRow {
 }
 
 export type BrandRow = Database['public']['Tables']['brand_profile']['Row'];
+export type SettingsRow = Database['public']['Tables']['team_settings']['Row'];
+
+export interface PostRow {
+  id: string;
+  variant_id: string;
+  scheduled_for: string;
+  created_at: string;
+  thumbnail: string | null;
+  post_targets: {
+    place: string;
+    text: string;
+    media_kind: string | null;
+    status: string;
+    posted_at: string | null;
+    remote_url: string | null;
+    stand_in: boolean;
+    error: string | null;
+  }[];
+  ad_variants: One<{ label: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
+}
 
 // ---------------------------------------------------------------- values
 
@@ -148,6 +179,7 @@ const isRecord = (value: unknown): value is { [key: string]: Json | undefined } 
 
 const FORMATS: readonly AdFormat[] = ['video', 'image', 'carousel', 'document', 'text'];
 const STATUSES: readonly StageStatus[] = ['skipped', 'queued', 'running', 'done', 'failed'];
+const POST_STATUSES: readonly PostStatus[] = ['scheduled', 'posting', 'posted', 'failed', 'unknown', 'cancelled'];
 const STYLES: readonly CreativeStyle[] = ['arcs', 'split', 'spotlight'];
 const SOURCES: readonly AdSource[] = ['apify', 'placeholder', 'upload'];
 const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
@@ -193,6 +225,7 @@ export function copyOf(json: Json): Partial<Record<Platform, PlatformCopy>> {
 export function clipOf(path: string | null, media: Json | null): Clip | null {
   if (!path || !CLIP_PATH.test(path) || !isRecord(media) || typeof media.duration !== 'number' || media.duration <= 0) return null;
   const count = (v: Json | undefined) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+  const transcript = transcriptOf(media.transcript);
   return {
     path,
     name: typeof media.name === 'string' && media.name ? media.name : 'Uploaded clip',
@@ -200,7 +233,18 @@ export function clipOf(path: string | null, media: Json | null): Clip | null {
     width: count(media.width),
     height: count(media.height),
     size: count(media.size),
+    ...(transcript.length > 0 ? { transcript } : {}),
   };
+}
+
+/** Lines of a stored transcript; a malformed line is left out. */
+export function transcriptOf(json: Json | undefined): TranscriptLine[] {
+  if (!Array.isArray(json)) return [];
+  return json.flatMap((l) =>
+    isRecord(l) && typeof l.start === 'number' && typeof l.end === 'number' && typeof l.text === 'string' && l.end > l.start && l.text.trim()
+      ? [{ start: l.start, end: l.end, text: l.text }]
+      : [],
+  );
 }
 
 export function sourceOf(row: Pick<RunRow, 'kind' | 'input' | 'url' | 'competitor_name' | 'files' | 'excerpt' | 'title' | 'media_path' | 'media'>): RunSource {
@@ -218,8 +262,9 @@ export function sourceOf(row: Pick<RunRow, 'kind' | 'input' | 'url' | 'competito
 function stagesOf(rows: StageRow[]): Record<StageKey, Stage> {
   const stage = (key: StageKey): Stage => {
     const row = rows.find((s) => s.stage === key);
+    const status: StageStatus = row && isOneOf(STATUSES, row.status) ? row.status : 'queued';
     return {
-      status: row && isOneOf(STATUSES, row.status) ? row.status : 'queued',
+      status: status === 'queued' && row?.waiting_since ? 'waiting' : status,
       ...(row?.summary ? { summary: row.summary } : {}),
       ...(row?.error ? { error: row.error } : {}),
     };
@@ -270,8 +315,12 @@ export function toNotices(rows: RunRow[], limit = 6): Notice[] {
     const stage = (key: StageKey) => row.run_stages.find((s) => s.stage === key);
     const failed = STAGE_ORDER.find((key) => stage(key)?.status === 'failed');
     const adSet = one(row.ad_sets);
+    const waiting = STAGE_ORDER.find((key) => stage(key)?.status === 'queued' && stage(key)?.waiting_since);
     if (failed) {
       return [{ id: `${row.id}-failed`, text: `${STAGE_INFO[failed].name} stopped: ${row.title}`, at: stage(failed)?.finished_at ?? row.created_at, href: `/runs/${row.id}`, tone: 'failed' }];
+    }
+    if (waiting) {
+      return [{ id: `${row.id}-waiting`, text: `${STAGE_INFO[waiting].name} waits for you: ${row.title}`, at: stage(waiting)?.waiting_since ?? row.created_at, href: `/runs/${row.id}`, tone: 'review' }];
     }
     if (adSet && row.approved_at) {
       return [{ id: `${row.id}-approved`, text: `Approved: ${row.title}`, at: row.approved_at, href: `/content/${adSet.id}`, tone: 'done' }];
@@ -308,6 +357,7 @@ export function toCompetitor(row: CompetitorRow): Competitor | null {
   return {
     id: row.id,
     name: row.name,
+    tracked: row.tracked ?? true,
     ...(row.domain ? { domain: row.domain } : {}),
     ...(isOneOf(SOURCES, report.data_source) ? { dataSource: report.data_source } : {}),
     platforms: platformsOf(report.platforms),
@@ -407,42 +457,99 @@ export function toUser(viewer: Viewer): User {
   };
 }
 
-/** The agent cards, from what is in the database. The pipeline runs every agent in turn, so nothing here can be switched yet. */
-export function toAgents(competitors: number, strategies: number, toReview: AdSet[]): Agent[] {
+/**
+ * The agent cards, from what is in the database and the team's switches. The
+ * tracker's switch is the scan schedule; the strategist's and the content
+ * agent's say whether each starts by itself after the agent before it.
+ */
+export function toAgents(settings: AgentSettings, counts: { competitors: number; strategies: number }, toReview: AdSet[], switchable = true): Agent[] {
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const first = toReview[0];
   return [
     {
       key: 'tracker',
-      auto: false,
-      switchable: false,
-      autoLabel: '',
-      manualLabel: 'Scans when you start a run',
-      stat: `${plural(competitors, 'competitor', 'competitors')} tracked`,
+      auto: settings.scanEvery !== 'off',
+      switchable,
+      autoLabel: scanLabel(settings.scanEvery === 'off' ? { ...settings, scanEvery: 'week' } : settings) ?? '',
+      manualLabel: 'Scans when you ask',
+      stat: `${plural(counts.competitors, 'competitor', 'competitors')} tracked`,
       href: '/competitors',
       action: { label: 'New scan', href: '/runs/new' },
     },
     {
       key: 'strategist',
-      auto: true,
-      switchable: false,
+      auto: settings.strategistAuto,
+      switchable,
       autoLabel: 'Runs after every scan',
-      manualLabel: '',
-      stat: plural(strategies, 'strategy', 'strategies'),
+      manualLabel: 'Waits for you after a scan',
+      stat: plural(counts.strategies, 'strategy', 'strategies'),
       href: '/strategy',
       action: { label: 'Custom run', href: '/runs/new?type=custom' },
     },
     {
       key: 'content',
-      auto: true,
-      switchable: false,
+      auto: settings.contentAuto,
+      switchable,
       autoLabel: 'Writes ads from every strategy',
-      manualLabel: '',
+      manualLabel: 'Waits for your go-ahead',
       stat: `${plural(toReview.length, 'set', 'sets')} to review`,
       href: '/content',
       action: first ? { label: 'Review', href: `/content/${first.id}` } : { label: 'View ads', href: '/content' },
     },
   ];
+}
+
+const SCAN_EVERY: readonly ScanEvery[] = ['off', 'day', 'week'];
+
+export function toTeamSettings(row: SettingsRow): TeamSettings {
+  return {
+    timeZone: row.time_zone,
+    strategistAuto: row.strategist_auto,
+    contentAuto: row.content_auto,
+    scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
+    scanDay: row.scan_day,
+    scanHour: row.scan_hour,
+    pages: {
+      facebook: row.facebook_page_id ? { id: row.facebook_page_id, name: row.facebook_page_name ?? '' } : null,
+      instagram: row.instagram_account_id ? { id: row.instagram_account_id, username: row.instagram_username ?? '' } : null,
+      linkedin: row.linkedin_org_id ? { id: row.linkedin_org_id, name: row.linkedin_page_name ?? '' } : null,
+    },
+  };
+}
+
+export function toPost(row: PostRow): Post | null {
+  const variant = one(row.ad_variants);
+  if (!variant || (variant.label !== 'A' && variant.label !== 'B' && variant.label !== 'C')) return null;
+  const order = (p: string) => (PLACES as readonly string[]).indexOf(p);
+  const targets = [...row.post_targets]
+    .sort((a, b) => order(a.place) - order(b.place))
+    .flatMap((t): PostTarget[] =>
+      isOneOf(PLACES, t.place) && isOneOf(POST_STATUSES, t.status)
+        ? [
+            {
+              place: t.place,
+              text: t.text,
+              media: t.media_kind === 'image' || t.media_kind === 'video' ? t.media_kind : null,
+              status: t.status,
+              ...(t.posted_at ? { postedAt: t.posted_at } : {}),
+              ...(t.remote_url ? { url: t.remote_url } : {}),
+              standIn: t.stand_in,
+              ...(t.error ? { error: t.error } : {}),
+            },
+          ]
+        : [],
+    );
+  return {
+    id: row.id,
+    variantId: row.variant_id,
+    variantLabel: variant.label,
+    adSetId: variant.ad_set_id,
+    adSetTitle: one(variant.ad_sets)?.title ?? 'Ads',
+    scheduledFor: row.scheduled_for,
+    createdAt: row.created_at,
+    ...(row.thumbnail ? { thumbnail: row.thumbnail } : {}),
+    targets,
+  };
 }
 
 /** A validated new run as create_run's arguments. Absent SQL defaults are omitted, never sent as null. */
@@ -455,8 +562,9 @@ export function toCreateRunArgs(input: NewRunInput, page: PageRead | null = null
   }
   if (source.type === 'text') return { ...base, p_kind: 'custom', p_input: 'text', p_excerpt: source.excerpt };
   if ('clip' in source) {
-    const { path, name, duration, width, height, size } = source.clip;
-    return { ...base, p_kind: 'custom', p_input: 'video', p_excerpt: source.notes, p_media_path: path, p_media: { name, duration, width, height, size } };
+    const { path, name, duration, width, height, size, transcript } = source.clip;
+    const media = { name, duration, width, height, size, ...(transcript ? { transcript: transcript.map((l) => ({ start: l.start, end: l.end, text: l.text })) } : {}) };
+    return { ...base, p_kind: 'custom', p_input: 'video', p_excerpt: source.notes, p_media_path: path, p_media: media };
   }
   return { ...base, p_kind: 'custom', p_input: source.type, p_url: source.url };
 }

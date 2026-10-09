@@ -52,6 +52,11 @@ describe('runStatus', () => {
     expect(runStatus(run(stages('done', 'done', 'done'), '2026-10-07T10:00:00Z'))).toBe('approved');
   });
 
+  it('waits for a person when an agent’s switch is off', () => {
+    expect(runStatus(run(stages('done', 'waiting', 'queued')))).toBe('waiting');
+    expect(runStatus(run(stages('skipped', 'done', 'waiting')))).toBe('waiting');
+  });
+
   it('reports a failure over anything else', () => {
     expect(runStatus(run(stages('failed', 'queued', 'queued')))).toBe('failed');
     expect(runStatus(run(stages('done', 'running', 'failed')))).toBe('failed');

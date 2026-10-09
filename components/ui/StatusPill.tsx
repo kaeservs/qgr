@@ -1,4 +1,4 @@
-import { CircleCheck, Eye, Hourglass, LoaderCircle, TriangleAlert } from 'lucide-react';
+import { CircleCheck, Eye, Hand, Hourglass, LoaderCircle, TriangleAlert } from 'lucide-react';
 import { RUN_STATUS_LABEL } from '@/lib/pipeline';
 import { cx } from '@/lib/cx';
 import type { RunStatus } from '@/lib/types';
@@ -7,6 +7,7 @@ import styles from './ui.module.css';
 const ICON = {
   queued: Hourglass,
   running: LoaderCircle,
+  waiting: Hand,
   review: Eye,
   approved: CircleCheck,
   failed: TriangleAlert,

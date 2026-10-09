@@ -3,7 +3,7 @@
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
 
-import type { AdSet, Agent, Clip, Competitor, Notice, Run, Strategy, User } from './types';
+import type { AdSet, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
 import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
@@ -19,6 +19,7 @@ export const user: User = {
 export const competitors: Competitor[] = [
   {
     id: 'c-horizon',
+    tracked: true,
     name: 'Horizon Visa Partners',
     domain: 'horizonvisa.example',
     platforms: ['meta', 'linkedin'],
@@ -53,6 +54,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-atlas',
+    tracked: true,
     name: 'Atlas Residency Group',
     domain: 'atlasresidency.example',
     platforms: ['meta', 'x'],
@@ -83,6 +85,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-meridian',
+    tracked: true,
     name: 'Meridian EB-5 Advisors',
     domain: 'meridianeb5.example',
     platforms: ['linkedin'],
@@ -111,6 +114,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-northstar',
+    tracked: false,
     name: 'Northstar Global',
     domain: 'northstarglobal.example',
     platforms: ['meta', 'linkedin', 'x'],
@@ -690,6 +694,30 @@ export const adSets: AdSet[] = [
 
 export const runs: Run[] = [
   {
+    id: 'r-1044',
+    title: 'Horizon Visa Partners · scheduled scan',
+    source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.example' },
+    platforms: ['meta', 'linkedin'],
+    goal: 'consultations',
+    createdAt: '2026-10-05T13:00:00Z',
+    summary: 'Age-out urgency still runs their longest ads.',
+    stages: {
+      tracker: { status: 'done', summary: 'Scanned 31 active ads and found 5 winning hooks.' },
+      strategist: { status: 'waiting' },
+      content: { status: 'queued' },
+    },
+    output: { competitorId: 'c-horizon' },
+    counts: { hooks: 5 },
+    activity: [
+      { at: '2026-10-05T13:00:00Z', text: 'Run started' },
+      { at: '2026-10-05T13:00:00Z', text: 'Scheduled scan, with their website as the app last read it (28 Sep 2026)' },
+      { at: '2026-10-05T13:00:00Z', text: 'Competitor Tracker started' },
+      { at: '2026-10-05T13:01:00Z', text: 'Used sample ads: Apify is not connected yet' },
+      { at: '2026-10-05T13:03:00Z', text: 'Scanned 31 active ads and found 5 winning hooks.' },
+      { at: '2026-10-05T13:03:00Z', text: 'The Ad Strategist waits for you: it does not start by itself after a scan' },
+    ],
+  },
+  {
     id: 'r-1043',
     title: 'Video · eb5-explainer',
     source: {
@@ -855,45 +883,64 @@ export const runs: Run[] = [
   },
 ];
 
-export const agents: Agent[] = [
+/** The team's settings: scans every Monday at 9:00 in New York, and the strategist waits for a person after one. */
+export const settings: TeamSettings = {
+  timeZone: 'America/New_York',
+  strategistAuto: false,
+  contentAuto: true,
+  scanEvery: 'week',
+  scanDay: 1,
+  scanHour: 9,
+  pages: {
+    facebook: { id: '104000000000001', name: 'Quantum Global Residency' },
+    instagram: { id: '17841400000000001', username: 'quantumglobalresidency' },
+    linkedin: null,
+  },
+};
+
+/** Posts of approved variants: one went out through the stand-ins, one waits for Thursday morning. */
+export const posts: Post[] = [
   {
-    key: 'tracker',
-    auto: true,
-    switchable: true,
-    autoLabel: 'Scans every Monday, 9:00',
-    manualLabel: 'Scans when you ask',
-    stat: '4 competitors tracked',
-    href: '/competitors',
-    action: { label: 'New scan', href: '/runs/new' },
+    id: 'p-2',
+    variantId: 'v-ns-a',
+    variantLabel: 'A',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    scheduledFor: '2026-10-08T13:00:00Z',
+    createdAt: '2026-10-07T08:15:00Z',
+    targets: [
+      { place: 'facebook', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
+      { place: 'instagram', text: 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.', media: 'image', status: 'scheduled', standIn: false },
+    ],
   },
   {
-    key: 'strategist',
-    auto: true,
-    switchable: true,
-    autoLabel: 'Runs after every scan',
-    manualLabel: 'Waits for you',
-    stat: '5 strategies',
-    href: '/strategy',
-    action: { label: 'Custom run', href: '/runs/new?type=custom' },
-  },
-  {
-    key: 'content',
-    auto: false,
-    switchable: true,
-    autoLabel: 'Writes ads from every strategy',
-    manualLabel: 'Waits for your go-ahead',
-    stat: '2 sets to review',
-    href: '/content',
-    action: { label: 'Review', href: '/content/a-q4' },
+    id: 'p-1',
+    variantId: 'v-pod-a',
+    variantLabel: 'A',
+    adSetId: 'a-podcast',
+    adSetTitle: 'From H-1B to EB-5',
+    scheduledFor: '2026-10-06T14:00:00Z',
+    createdAt: '2026-10-06T11:20:00Z',
+    targets: [
+      {
+        place: 'facebook',
+        text: "Layoffs shouldn't decide where your family lives. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.",
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-10-06T14:00:20Z',
+        standIn: true,
+      },
+    ],
   },
 ];
 
 export const notices: Notice[] = [
+  { id: 'n-5', text: 'Ad Strategist waits for you: Horizon Visa Partners · scheduled scan', at: '2026-10-05T13:03:00Z', href: '/runs/r-1044', tone: 'review' },
   { id: 'n-2', text: 'Atlas Residency Group scanned: 4 winning hooks', at: '2026-10-07T09:03:00Z', href: '/competitors/c-atlas', tone: 'done' },
   { id: 'n-4', text: 'Video ads ready for review: EB-5, explained', at: '2026-10-07T07:41:00Z', href: '/content/a-clip', tone: 'review' },
   { id: 'n-1', text: 'Ads ready for review: Q4 consultation push', at: '2026-10-06T09:58:00Z', href: '/content/a-q4', tone: 'review' },
   { id: 'n-3', text: 'Upload failed: Meridian EB-5 Advisors', at: '2026-09-29T10:24:00Z', href: '/runs/r-1038', tone: 'failed' },
 ];
 
-/** The tracker's next scheduled scan: the Monday after NOW. */
-export const NEXT_SCAN = '2026-10-12T09:00:00Z';
+/** The tracker's next scheduled scan: the Monday after NOW, 9:00 in New York. */
+export const NEXT_SCAN = '2026-10-12T13:00:00Z';

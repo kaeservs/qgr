@@ -12,8 +12,9 @@ export type Goal = (typeof GOALS)[number];
 
 /** The three agents, in the order a run passes through them. */
 export type StageKey = 'tracker' | 'strategist' | 'content';
-export type StageStatus = 'skipped' | 'queued' | 'running' | 'done' | 'failed';
-export type RunStatus = 'queued' | 'running' | 'review' | 'approved' | 'failed';
+/** `waiting`: queued, but its agent waits for a person because its switch is off. */
+export type StageStatus = 'skipped' | 'queued' | 'waiting' | 'running' | 'done' | 'failed';
+export type RunStatus = 'queued' | 'running' | 'waiting' | 'review' | 'approved' | 'failed';
 
 export const CUSTOM_SOURCES = ['podcast', 'blog', 'video', 'text'] as const;
 export type CustomSourceType = (typeof CUSTOM_SOURCES)[number];
@@ -32,6 +33,15 @@ export interface Clip {
   height: number;
   /** Bytes. */
   size: number;
+  /** What is said in it, line by line, when it was transcribed: in the clip's own seconds. */
+  transcript?: TranscriptLine[];
+}
+
+/** One line said in a clip. Seconds are the clip's own, so a line stays with its words whatever is cut. */
+export interface TranscriptLine {
+  start: number;
+  end: number;
+  text: string;
 }
 
 /**
@@ -133,6 +143,8 @@ export type AdSource = 'apify' | 'placeholder' | 'upload';
 export interface Competitor {
   id: string;
   name: string;
+  /** Scanned on the team's schedule. Off for a competitor the team no longer follows. */
+  tracked: boolean;
   /** Absent for a competitor known only from uploaded ads. */
   domain?: string;
   /** Where the latest report's ads came from. */
@@ -262,4 +274,66 @@ export interface SearchItem {
   sub: string;
   href: string;
   kind: 'competitor' | 'run' | 'strategy' | 'content' | 'page';
+}
+
+/** Where a post goes. Facebook and Instagram take a variant's Meta copy, LinkedIn its LinkedIn copy. */
+export const PLACES = ['facebook', 'instagram', 'linkedin'] as const;
+export type Place = (typeof PLACES)[number];
+
+/**
+ * scheduled → posting → posted; failed when nothing went out (a person can
+ * try again); unknown when it may have gone out, so it is never sent again by
+ * itself; cancelled by a person.
+ */
+export type PostStatus = 'scheduled' | 'posting' | 'posted' | 'failed' | 'unknown' | 'cancelled';
+
+export interface PostTarget {
+  place: Place;
+  /** Exactly what goes out: the approved copy, copied when the post was made. */
+  text: string;
+  media: 'image' | 'video' | null;
+  status: PostStatus;
+  postedAt?: string;
+  /** The live post, when the platform gave a link. */
+  url?: string;
+  /** Went through a stand-in for the platform: nothing was really posted. */
+  standIn: boolean;
+  error?: string;
+}
+
+export interface Post {
+  id: string;
+  variantId: string;
+  variantLabel: Variant['label'];
+  adSetId: string;
+  adSetTitle: string;
+  scheduledFor: string;
+  createdAt: string;
+  /** A small JPEG of what goes out, as a data URL. */
+  thumbnail?: string;
+  targets: PostTarget[];
+}
+
+export type ScanEvery = 'off' | 'day' | 'week';
+
+/** What the team sets on Settings: its time zone, the agents' switches, the scan schedule. */
+export interface AgentSettings {
+  timeZone: string;
+  strategistAuto: boolean;
+  contentAuto: boolean;
+  scanEvery: ScanEvery;
+  /** ISO weekday, Monday = 1. */
+  scanDay: number;
+  scanHour: number;
+}
+
+/** The Pages posts go to. The keys that post live in n8n, never in the dashboard. */
+export interface PostPages {
+  facebook: { id: string; name: string } | null;
+  instagram: { id: string; username: string } | null;
+  linkedin: { id: string; name: string } | null;
+}
+
+export interface TeamSettings extends AgentSettings {
+  pages: PostPages;
 }

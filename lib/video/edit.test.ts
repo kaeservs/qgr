@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   addCaption,
   captionAt,
+  captionsFromTranscript,
   clipTimeAt,
   clock,
   defaultEdit,
@@ -11,6 +12,7 @@ import {
   gapAt,
   keptSeconds,
   length,
+  MAX_CAPTIONS,
   MAX_PARTS,
   moveEdge,
   nextPlayable,
@@ -194,5 +196,24 @@ describe('time in words', () => {
     expect(clock(65.34)).toBe('1:05.3');
     expect(clock(59.96)).toBe('1:00.0');
     expect(length(83.4)).toBe('1:23');
+  });
+});
+
+describe('captions from the clip’s speech', () => {
+  it('keeps the lines heard in the kept parts, cut to them', () => {
+    const lines = [
+      { start: 0.5, end: 2.5, text: 'EB-5 is an investment.' },
+      { start: 3, end: 5.2, text: 'This part is cut.' },
+      { start: 6, end: 9, text: '  It carries   risk. ' },
+    ];
+    expect(captionsFromTranscript(lines, [{ start: 0, end: 2 }, { start: 5.5, end: 8 }])).toEqual([
+      { start: 0.5, end: 2, text: 'EB-5 is an investment.' },
+      { start: 6, end: 8, text: 'It carries risk.' },
+    ]);
+  });
+
+  it('stops at the most captions an edit holds', () => {
+    const lines = Array.from({ length: 150 }, (_, i) => ({ start: i, end: i + 0.8, text: `Line ${i}` }));
+    expect(captionsFromTranscript(lines, [{ start: 0, end: 200 }])).toHaveLength(MAX_CAPTIONS);
   });
 });

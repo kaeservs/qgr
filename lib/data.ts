@@ -9,7 +9,7 @@ import { supabaseConfig } from './supabase/config';
 // without them it serves the sample data, so the dashboard runs with no setup.
 // Both sources return the same shapes (lib/types.ts).
 
-export type { ClipExtension, RunWithStatus, Saved, VariantEdit } from './data/source';
+export type { ClipExtension, NewPost, NewPostTarget, PostMediaExtension, RunWithStatus, Saved, VariantEdit } from './data/source';
 
 /** True when Supabase is not configured and pages show the sample data. */
 export const usingSampleData = (): boolean => supabaseConfig() === null;
@@ -41,3 +41,17 @@ export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source()
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
 export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);
+export const transcribeClip: DataSource['transcribeClip'] = (path) => source().transcribeClip(path);
+
+export const getTeamSettings: DataSource['getTeamSettings'] = () => source().getTeamSettings();
+export const saveAgentSettings: DataSource['saveAgentSettings'] = (settings) => source().saveAgentSettings(settings);
+export const savePostPages: DataSource['savePostPages'] = (pages) => source().savePostPages(pages);
+export const setCompetitorTracked: DataSource['setCompetitorTracked'] = (id, tracked) => source().setCompetitorTracked(id, tracked);
+export const continueRun: DataSource['continueRun'] = (runId) => source().continueRun(runId);
+
+export const getPosts: DataSource['getPosts'] = () => source().getPosts();
+export const schedulePost: DataSource['schedulePost'] = (post) => source().schedulePost(post);
+export const cancelPost: DataSource['cancelPost'] = (id) => source().cancelPost(id);
+export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
+export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);
+export const deletePostMedia: DataSource['deletePostMedia'] = (path) => source().deletePostMedia(path);

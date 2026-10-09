@@ -1,5 +1,6 @@
 import { PLATFORM_LABEL } from '@/lib/platforms';
-import type { Platform } from '@/lib/types';
+import { PLACE_LABEL } from '@/lib/post-input';
+import type { Place, Platform } from '@/lib/types';
 
 // Meta and X marks from simple-icons (CC0). LinkedIn's mark is drawn here:
 // simple-icons no longer carries it.
@@ -40,5 +41,32 @@ export function PlatformIcons({ platforms, size = 16 }: { platforms: readonly Pl
         <PlatformIcon key={p} platform={p} size={size} />
       ))}
     </span>
+  );
+}
+
+const PLACE_COLOR: Record<Place, string> = { facebook: '#0866FF', instagram: '#E4405F', linkedin: COLOR.linkedin };
+
+/** Where a post goes: Facebook and Instagram drawn plainly here, LinkedIn as above. */
+export function PlaceIcon({ place, size = 16, decorative = false }: { place: Place; size?: number; decorative?: boolean }) {
+  if (place === 'linkedin') return <PlatformIcon platform="linkedin" size={size} decorative={decorative} />;
+  const label = PLACE_LABEL[place];
+  const a11y = decorative ? ({ 'aria-hidden': true } as const) : ({ role: 'img', 'aria-label': label } as const);
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" focusable="false" {...a11y}>
+      {!decorative && <title>{label}</title>}
+      {place === 'facebook' ? (
+        <>
+          <circle cx="12" cy="12" r="12" fill={PLACE_COLOR.facebook} />
+          <path d="M13.4 24v-8.6h2.9l.45-3.4H13.4V9.86c0-.98.28-1.66 1.69-1.66h1.8V5.17A24 24 0 0 0 14.27 5c-2.6 0-4.37 1.59-4.37 4.5V12H7v3.4h2.9V24z" fill="#fff" />
+        </>
+      ) : (
+        <>
+          <rect width="24" height="24" rx="6" fill={PLACE_COLOR.instagram} />
+          <rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <circle cx="12" cy="12" r="3.4" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <circle cx="16.3" cy="7.7" r="1.1" fill="#fff" />
+        </>
+      )}
+    </svg>
   );
 }

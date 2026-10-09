@@ -1,9 +1,10 @@
-// Builds the n8n Workflow SDK source for the four QGR workflows from the
-// Code-node scripts in ./code (tested by code.test.ts). The output in
-// ./workflows is what gets validated and saved to n8n through its MCP server.
-// Scripts are embedded with JSON.stringify so their backslashes survive.
+// Builds the n8n Workflow SDK source for the six QGR workflows from the
+// Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts and
+// publisher.test.ts). The output in ./workflows is what gets validated and
+// saved to n8n through its MCP server. Scripts are embedded with
+// JSON.stringify so their backslashes survive.
 //
-//   node n8n/build-workflows.mjs [--ids=tracker=ID,strategist=ID,content=ID]
+//   node n8n/build-workflows.mjs [--ids=tracker=ID,strategist=ID,content=ID,pipeline=ID]
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,6 +20,7 @@ const idsArg = process.argv.find((a) => a.startsWith('--ids='))?.slice(6) ?? '';
 const ids = Object.fromEntries(idsArg.split(',').filter(Boolean).map((p) => p.split('=')));
 
 const SUPABASE_RPC = 'https://tcinsdexwvzpznqlcpww.supabase.co/rest/v1/rpc';
+const SUPABASE_STORAGE = 'https://tcinsdexwvzpznqlcpww.supabase.co/storage/v1';
 const IMPORTS = "import { workflow, node, trigger, sticky, newCredential, ifElse, switchCase, expr } from '@n8n/workflow-sdk';";
 
 // ---------------------------------------------------------------- shared pieces
@@ -95,6 +97,22 @@ const ${varName} = ifElse({
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
         conditions: [{ leftValue: expr('{{ $json.ok }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});`;
+
+/** A boolean a database function returned: PostgREST answers a bare true, which n8n puts in data. */
+const isTrue = (varName, name) => `
+const ${varName} = ifElse({
+  version: 2.3,
+  config: {
+    name: ${JSON.stringify(name)},
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
         combinator: 'and',
       },
     },
@@ -331,23 +349,212 @@ ${runAgent('runStrategist', 'Ad Strategist', ids.strategist, 'Ad Strategist')}
 ${runAgent('runContent', 'Content Agent', ids.content, 'Content Agent')}
 ${isOk('trackerOk', 'Tracker finished?')}
 ${isOk('strategistOk', 'Strategy finished?')}
+${rpcNode('askStrategist', 'Start the strategist now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "strategist" }) }}', '{ data: true }')}
+${rpcNode('askContent', 'Write the ads now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "content" }) }}', '{ data: true }')}
+${isTrue('strategistOn', 'Strategist switched on?')}
+${isTrue('contentOn', 'Content Agent switched on?')}
 
-const noteFlow = sticky('## The run\\nThe app posts { runId, startAt } with the shared secret header and gets 202 at once. A competitor run starts at the tracker; a custom run (podcast, blog, video, text) starts at the strategist. Each agent records its own success or failure on the run, so this workflow only decides what runs next.', [webhook, readRequest, whereToStart], { color: 4 });
+const fromScan = trigger({
+  type: 'n8n-nodes-base.executeWorkflowTrigger',
+  version: 1.2,
+  config: {
+    name: 'When a scheduled scan starts a run',
+    parameters: { inputSource: 'workflowInputs', workflowInputs: { values: [{ name: 'runId', type: 'string' }, { name: 'startAt', type: 'string' }] } },
+  },
+  output: [{ runId: '00000000-0000-0000-0000-000000000000', startAt: 'tracker' }],
+});
+
+const noteFlow = sticky('## The run\\nThe app posts { runId, startAt } with the shared secret header and gets 202 at once; a scheduled scan hands its run in from **QGR · Scheduled scans**. A competitor run starts at the tracker; a custom run (podcast, blog, video, text) starts at the strategist; a go-ahead from the dashboard starts where the run waits. Each agent records its own success or failure on the run, so this workflow only decides what runs next.', [webhook, fromScan, readRequest, whereToStart], { color: 4 });
+const noteSwitches = sticky('## The switches\\nBefore the strategist after a scan, and before the Content Agent after a strategy, the database is asked (**pipeline_next**). With that agent\\'s switch off on the dashboard, the run waits there for a person, and their go-ahead starts the pipeline again from that agent.', [askStrategist, askContent], { color: 5 });
 
 export default workflow('qgr-run-pipeline', 'QGR · Run pipeline')
   .add(webhook)
   .to(readRequest)
   .to(whereToStart
-    .onCase(0, runTracker.to(trackerOk.onTrue(runStrategist)))
+    .onCase(0, runTracker.to(trackerOk.onTrue(askStrategist.to(strategistOn.onTrue(runStrategist)))))
     .onCase(1, runStrategist)
     .onCase(2, runContent))
+  .add(fromScan)
+  .to(readRequest)
   .add(runStrategist)
-  .to(strategistOk.onTrue(runContent))
+  .to(strategistOk.onTrue(askContent.to(contentOn.onTrue(runContent))))
+  .add(noteFlow)
+  .add(noteSwitches);
+`;
+
+// ---------------------------------------------------------------- the publisher
+
+const placeNode = (varName, place, label) =>
+  codeNode(varName, `${label} (stand-in)`, code('publisher-stand-in.js', { __PLACE_NAME__: label }), `{ ok: true, post_id: 'post-id', place: '${place}', remote_id: null, remote_url: null, stand_in: true }`);
+
+const publisher = `${IMPORTS}
+
+const everyMinute = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every minute',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 1 }] } },
+  },
+  output: [{}],
+});
+
+const postNow = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Post now',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-publish',
+      authentication: 'headerAuth',
+      responseMode: 'onReceived',
+      options: { responseCode: { values: { responseCode: 'customCode', customCode: 202 } } },
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: {} }],
+});
+${rpcNode('takeDue', 'Take the posts that are due', 'publisher_take_due', '{{ JSON.stringify({ p_limit: 10 }) }}', `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' } }`, "\n    executeOnce: true,")}
+${codeNode('eachPlace', 'One item per place', code('shared-items.js'), `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' } }`)}
+
+const wherePost = switchCase({
+  version: 3.4,
+  config: {
+    name: 'Which place?',
+    parameters: {
+      mode: 'rules',
+      rules: {
+        values: [
+          { outputKey: 'facebook', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'facebook', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+          { outputKey: 'instagram', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'instagram', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+          { outputKey: 'linkedin', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'linkedin', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
+        ],
+      },
+      options: {},
+    },
+  },
+});
+${placeNode('facebook', 'facebook', 'Facebook')}
+${placeNode('instagram', 'instagram', 'Instagram')}
+${placeNode('linkedin', 'linkedin', 'LinkedIn')}
+${isOk('wentOut', 'Did it go out?')}
+${rpcNode('finish', 'Record it posted', 'publisher_finish', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_remote_id: $json.remote_id, p_remote_url: $json.remote_url, p_stand_in: $json.stand_in === true }) }}', `{ remove_media: 'posts/user/file.jpg' }`)}
+${rpcNode('fail', 'Record why it did not', 'publisher_fail', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_error: $json.error, p_unknown: $json.unknown === true }) }}', '{}')}
+
+const fileToRemove = ifElse({
+  version: 2.3,
+  config: {
+    name: 'A file no post needs?',
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.remove_media }}'), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+
+const removeFile = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Remove the file from Storage',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'DELETE',
+      url: '${SUPABASE_STORAGE}/object/post-media',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ prefixes: [$json.remove_media] }) }}'),
+      options: { timeout: 30000 },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{}],
+});
+
+const noteFlow = sticky('## Posting\\nEvery minute, and at once when the dashboard sends a post now, the database hands over the places that are due (**publisher_take_due**, never the same one twice). Each goes to its place, and the result is recorded. A file goes from Storage once no post needs it: the platform keeps its own copy. A send cut off halfway is marked *check the Page* and never sent again by itself.', [everyMinute, postNow, takeDue, eachPlace], { color: 4 });
+const noteStandIns = sticky('## Stand-ins until the keys are in\\nThese three post nothing and say so. Each is replaced by real steps with the same output (see the note in its code):\\n- **Facebook**: POST /{page-id}/photos (url, message) or /{page-id}/videos (file_url, description) with a Page access token.\\n- **Instagram**: POST /{ig-user-id}/media (image_url or video_url with media_type REELS, caption), wait for status FINISHED, then POST /{ig-user-id}/media_publish.\\n- **LinkedIn**: initializeUpload on /rest/images or /rest/videos, PUT the file, then POST /rest/posts as urn:li:organization:{id}.\\nThe file goes to Meta as a link Storage signs for a few minutes; LinkedIn is sent the bytes.', [facebook, instagram, linkedin], { color: 3 });
+
+export default workflow('qgr-publisher', 'QGR · Publisher')
+  .add(everyMinute)
+  .to(takeDue)
+  .to(eachPlace)
+  .to(wherePost
+    .onCase(0, facebook)
+    .onCase(1, instagram)
+    .onCase(2, linkedin))
+  .add(postNow)
+  .to(takeDue)
+  .add(facebook)
+  .to(wentOut.onTrue(finish.to(fileToRemove.onTrue(removeFile))).onFalse(fail))
+  .add(instagram)
+  .to(wentOut)
+  .add(linkedin)
+  .to(wentOut)
+  .add(noteFlow)
+  .add(noteStandIns);
+`;
+
+// ---------------------------------------------------------------- scheduled scans
+
+const scans = `${IMPORTS}
+
+const everyHour = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every hour',
+    parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 1, triggerAtMinute: 1 }] } },
+  },
+  output: [{}],
+});
+${rpcNode('startScans', 'Start the scans that are due', 'start_due_scans', '{{ JSON.stringify({ p_max: 10 }) }}', `{ run_id: 'run-id', competitor: 'Horizon Visa Partners' }`, "\n    executeOnce: true,")}
+${codeNode('eachScan', 'One item per scan', code('shared-items.js'), `{ run_id: 'run-id', competitor: 'Horizon Visa Partners' }`)}
+
+const runPipeline = node({
+  type: 'n8n-nodes-base.executeWorkflow',
+  version: 1.3,
+  config: {
+    name: 'Hand each scan to the pipeline',
+    parameters: {
+      mode: 'each',
+      source: 'database',
+      workflowId: { __rl: true, mode: 'id', value: ${JSON.stringify(ids.pipeline ?? 'PIPELINE_WORKFLOW_ID')}, cachedResultName: 'QGR · Run pipeline' },
+      workflowInputs: {
+        mappingMode: 'defineBelow',
+        value: { runId: expr('{{ $json.run_id }}'), startAt: 'tracker' },
+        matchingColumns: [],
+        schema: [
+          { id: 'runId', displayName: 'runId', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+          { id: 'startAt', displayName: 'startAt', required: false, defaultMatch: false, display: true, canBeUsedToMatch: true, type: 'string' },
+        ],
+        attemptToConvertTypes: false,
+        convertFieldsToString: true,
+      },
+      options: { waitForSubWorkflow: false },
+    },
+  },
+  output: [{}],
+});
+
+const noteFlow = sticky('## Scheduled scans\\nEvery hour the database is asked whether the team\\'s schedule (Settings, Agents) has fallen due (**start_due_scans**). When it has, it starts a scan of each tracked competitor that has a website, at most ten, with their website as the app last read it: n8n fetches nothing. Each run goes to **QGR · Run pipeline**, whose switches decide whether the strategist and the Content Agent follow by themselves.', [everyHour, startScans, runPipeline], { color: 4 });
+
+export default workflow('qgr-scheduled-scans', 'QGR · Scheduled scans')
+  .add(everyHour)
+  .to(startScans)
+  .to(eachScan)
+  .to(runPipeline)
   .add(noteFlow);
 `;
 
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

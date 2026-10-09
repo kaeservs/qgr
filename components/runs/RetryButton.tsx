@@ -6,7 +6,11 @@ import { useState } from 'react';
 import type { Goal, Platform, RunSource } from '@/lib/types';
 import { useToast } from '../ui/Toast';
 
-/** Starts a fresh run with the same input. The failed run stays, with its error, as the record. */
+/**
+ * Starts a fresh run with the same input, its link read again. The failed run
+ * stays, with its error, as the record. Trying a failed agent again in place
+ * (GoAheadButton) keeps what the run already has; this starts over.
+ */
 export function RetryButton({ source, platforms, goal, title }: { source: RunSource; platforms: Platform[]; goal: Goal; title: string }) {
   const router = useRouter();
   const toast = useToast();
@@ -14,7 +18,7 @@ export function RetryButton({ source, platforms, goal, title }: { source: RunSou
   return (
     <button
       type="button"
-      className="btn btn-primary"
+      className="btn btn-quiet btn-sm"
       disabled={busy}
       onClick={async () => {
         setBusy(true);
@@ -30,7 +34,7 @@ export function RetryButton({ source, platforms, goal, title }: { source: RunSou
       }}
     >
       <RotateCcw size={16} aria-hidden />
-      {busy ? 'Starting…' : 'Retry run'}
+      {busy ? 'Starting…' : 'Start over'}
     </button>
   );
 }
