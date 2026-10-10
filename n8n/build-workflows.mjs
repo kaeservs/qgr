@@ -27,7 +27,10 @@ const IMPORTS = "import { workflow, node, trigger, sticky, newCredential, ifElse
 
 // ---------------------------------------------------------------- shared pieces
 
-const rpcNode = (varName, name, fn, body, output, extra = '') => `
+// A function that answers with a bare value (an id, true or false) is read as
+// text: n8n's HTTP step refuses a JSON reply that is not an object or a list,
+// even after Supabase has done the work (the first live run, 2026-10-10).
+const rpcNode = (varName, name, fn, body, output, extra = '', bare = false) => `
 const ${varName} = node({
   type: 'n8n-nodes-base.httpRequest',
   version: 4.5,
@@ -42,7 +45,7 @@ const ${varName} = node({
       contentType: 'json',
       specifyBody: 'json',
       jsonBody: expr(${JSON.stringify(body)}),
-      options: { timeout: 30000 },
+      options: ${bare ? "{ timeout: 30000, response: { response: { responseFormat: 'text', outputPropertyName: 'data' } } }" : '{ timeout: 30000 }'},
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
@@ -114,7 +117,7 @@ const ${varName} = ifElse({
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        conditions: [{ leftValue: expr('{{ String($json.data ?? $json.pipeline_next).trim() === "true" }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
         combinator: 'and',
       },
     },
@@ -235,7 +238,7 @@ ${codeNode('buildRequest', 'Build the Claude request', code('tracker-build-reque
 ${claudeNode('claude', 'Claude: read the ads')}
 ${codeNode('readAnswer', "Read Claude's answer", code('tracker-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_report: { hooks: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Report ready?')}
-${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_report: $json.p_report, p_usage: $json.p_usage }) }}', `{ data: 'report-id' }`, "\n    onError: 'continueErrorOutput',")}
+${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_report: $json.p_report, p_usage: $json.p_usage }) }}', `{ data: 'report-id' }`, "\n    onError: 'continueErrorOutput',", true)}
 ${failTail('tracker')}
 
 const noteWebsite = sticky('## Their website\\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
@@ -276,7 +279,7 @@ ${codeNode('buildRequest', 'Build the Claude request', code('strategist-build-re
 ${claudeNode('claude', 'Claude: write the strategy')}
 ${codeNode('readAnswer', "Read Claude's answer", code('strategist-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_strategy: { angles: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Strategy ready?')}
-${rpcNode('save', 'Save the strategy', 'agent_finish_strategist', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}', `{ data: 'strategy-id' }`, "\n    onError: 'continueErrorOutput',")}
+${rpcNode('save', 'Save the strategy', 'agent_finish_strategist', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}', `{ data: 'strategy-id' }`, "\n    onError: 'continueErrorOutput',", true)}
 ${failTail('strategist')}
 
 const noteSource = sticky('## Custom runs\\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the words said in it: its transcript, read over by the team, or what they typed. Pasted text is used as it is.\\n\\n## What worked\\nThe material carries how the team\\'s own recent posts did (**QGR · Post results**), ranked by engagement per person reached, worked out in code. Without any, the request is exactly as before.', [plan], { color: 3 });
@@ -306,7 +309,7 @@ ${codeNode('buildRequest', 'Build the Claude request', code('content-build-reque
 ${claudeNode('claude', 'Claude: write the ads')}
 ${codeNode('readAnswer', "Read Claude's answer", code('content-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Ads ready?')}
-${rpcNode('save', 'Save the ads', 'agent_finish_content', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_ad_set: $json.p_ad_set, p_usage: $json.p_usage }) }}', `{ data: 'ad-set-id' }`, "\n    onError: 'continueErrorOutput',")}
+${rpcNode('save', 'Save the ads', 'agent_finish_content', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_ad_set: $json.p_ad_set, p_usage: $json.p_usage }) }}', `{ data: 'ad-set-id' }`, "\n    onError: 'continueErrorOutput',", true)}
 ${failTail('content')}
 
 const notePictures = sticky('## Pictures\\nEvery ad but a clip\\'s carries an **image_prompt**. Pictures are made from it by **QGR · Pictures**, not here: when someone asks in the studio, or for every ad saved here once the team turns that on (Settings, Agents). Without one the dashboard draws the branded design.', [save], { color: 3 });
@@ -397,8 +400,8 @@ ${runAgent('runStrategist', 'Ad Strategist', ids.strategist, 'Ad Strategist')}
 ${runAgent('runContent', 'Content Agent', ids.content, 'Content Agent')}
 ${isOk('trackerOk', 'Tracker finished?')}
 ${isOk('strategistOk', 'Strategy finished?')}
-${rpcNode('askStrategist', 'Start the strategist now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "strategist" }) }}', '{ data: true }')}
-${rpcNode('askContent', 'Write the ads now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "content" }) }}', '{ data: true }')}
+${rpcNode('askStrategist', 'Start the strategist now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "strategist" }) }}', "{ data: 'true' }", '', true)}
+${rpcNode('askContent', 'Write the ads now?', 'pipeline_next', '{{ JSON.stringify({ p_run_id: $("Read the request").first().json.runId, p_stage: "content" }) }}', "{ data: 'true' }", '', true)}
 ${isTrue('strategistOn', 'Strategist switched on?')}
 ${isTrue('contentOn', 'Content Agent switched on?')}
 

@@ -123,7 +123,7 @@ const save = node({
       contentType: 'json',
       specifyBody: 'json',
       jsonBody: expr("{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}"),
-      options: { timeout: 30000 },
+      options: { timeout: 30000, response: { response: { responseFormat: 'text', outputPropertyName: 'data' } } },
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
