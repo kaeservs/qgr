@@ -196,10 +196,10 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Credentials, created in n8n and attached by hand: `Anthropic` (Anthropic
   API), `Supabase QGR` (Supabase API: project URL and service role key, on
   every Supabase call), `QGR webhook secret` (Header Auth, on the pipeline's,
-  the publisher's and the pictures' webhooks), `Apify token` (Templated
-  Custom Auth: the header `Authorization: Bearer {{api_key}}`, the token as
-  `api_key`; this n8n refuses a new plain Header Auth credential on the HTTP
-  node). The Meta and LinkedIn tokens and the image model's key will be n8n
+  the publisher's and the pictures' webhooks), `Apify token` (Custom Auth: JSON
+  `{"headers": {"Authorization": "Bearer <token>"}}`, allowed domain
+  `api.apify.com`; an existing plain Custom Auth credential is fine on the
+  HTTP node, only creating one from a workflow is refused). The Meta and LinkedIn tokens and the image model's key will be n8n
   credentials too; nothing that posts or draws is kept in Supabase or the app.
   A node holds its credential by id, so renaming one in n8n changes nothing
   (the webhook secret was saved as "Header Auth account").

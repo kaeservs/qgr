@@ -68,7 +68,7 @@ const apify = node({
       method: 'POST',
       url: 'https://api.apify.com/v2/acts/apify~facebook-ads-scraper/run-sync-get-dataset-items',
       authentication: 'genericCredentialType',
-      genericAuthType: 'httpTemplatedCustomAuth',
+      genericAuthType: 'httpCustomAuth',
       sendQuery: true,
       queryParameters: { parameters: [{ name: 'timeout', value: '240' }, { name: 'maxItems', value: '60' }] },
       sendBody: true,
@@ -77,7 +77,7 @@ const apify = node({
       jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $json.library.url }], resultsLimit: 60, activeStatus: "active" }) }}'),
       options: { timeout: 300000 },
     },
-    credentials: { httpTemplatedCustomAuth: newCredential('Apify token') },
+    credentials: { httpCustomAuth: newCredential('Apify token') },
   },
   output: [{ adArchiveID: '1234567890', pageName: 'Example Visa Partners', isActive: true, startDate: 1754000000, snapshot: { body: { text: 'Hook' }, ctaText: 'Book now', displayFormat: 'VIDEO' } }],
 });
@@ -292,7 +292,7 @@ const done = node({
 });
 
 const noteWebsite = sticky('## Their website\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
-const noteApify = sticky('## Their ads: sample, or Apify\n**Real ads?** follows the team\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\n\nWith Apify on, Apify\'s Facebook Ads Library Scraper reads the page of Meta\'s Ad Library the plan names: the link pasted, or a search for the competitor\'s name. **Read Apify\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Templated Custom Auth, the header Authorization: Bearer {{api_key}}, with the token as api_key); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
+const noteApify = sticky('## Their ads: sample, or Apify\n**Real ads?** follows the team\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\n\nWith Apify on, Apify\'s Facebook Ads Library Scraper reads the page of Meta\'s Ad Library the plan names: the link pasted, or a search for the competitor\'s name. **Read Apify\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Custom Auth, JSON {"headers": {"Authorization": "Bearer <token>"}}, allowed domain api.apify.com); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\nClaude groups ads into hooks by id and names each ad\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
 const noteModel = sticky('## Claude\nHaiku 5.5 while the app is being built (about a cent a run), medium effort, JSON constrained by a schema. A refusal stands: Haiku has no fallback model. No temperature. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
 
