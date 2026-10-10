@@ -165,11 +165,11 @@ const askStrategist = node({
       contentType: 'json',
       specifyBody: 'json',
       jsonBody: expr("{{ JSON.stringify({ p_run_id: $(\"Read the request\").first().json.runId, p_stage: \"strategist\" }) }}"),
-      options: { timeout: 30000 },
+      options: { timeout: 30000, response: { response: { responseFormat: 'text', outputPropertyName: 'data' } } },
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
-  output: [{ data: true }],
+  output: [{ data: 'true' }],
 });
 
 const askContent = node({
@@ -186,11 +186,11 @@ const askContent = node({
       contentType: 'json',
       specifyBody: 'json',
       jsonBody: expr("{{ JSON.stringify({ p_run_id: $(\"Read the request\").first().json.runId, p_stage: \"content\" }) }}"),
-      options: { timeout: 30000 },
+      options: { timeout: 30000, response: { response: { responseFormat: 'text', outputPropertyName: 'data' } } },
     },
     credentials: { supabaseApi: newCredential('Supabase QGR') },
   },
-  output: [{ data: true }],
+  output: [{ data: 'true' }],
 });
 
 const strategistOn = ifElse({
@@ -200,7 +200,7 @@ const strategistOn = ifElse({
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        conditions: [{ leftValue: expr('{{ String($json.data ?? $json.pipeline_next).trim() === "true" }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
         combinator: 'and',
       },
     },
@@ -214,7 +214,7 @@ const contentOn = ifElse({
     parameters: {
       conditions: {
         options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
-        conditions: [{ leftValue: expr('{{ $json.data ?? $json.pipeline_next }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        conditions: [{ leftValue: expr('{{ String($json.data ?? $json.pipeline_next).trim() === "true" }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
         combinator: 'and',
       },
     },
