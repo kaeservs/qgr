@@ -1,7 +1,8 @@
-// The Claude request: Opus 5.5 at high effort, because the strategy is the
-// judgement the rest of the run depends on. JSON constrained by the schema;
-// server-side fallback if a classifier declines; no temperature.
-const MODEL = 'claude-opus-5-5';
+// The Claude request: Haiku 5.5 at high effort, because the strategy is the
+// judgement the rest of the run depends on (high is Anthropic's advice for
+// Haiku on knowledge work). JSON constrained by the schema; fallbacks for a
+// declined request, which only Sonnet and Opus act on; no temperature.
+const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'high';
 const p = $input.first().json;
 const run = p.run;

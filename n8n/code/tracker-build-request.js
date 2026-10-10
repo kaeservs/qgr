@@ -1,8 +1,9 @@
-// The Claude request: Opus 5.5 at medium effort (reading and grouping ads is
-// not the hard part), JSON constrained by the schema below, and a server-side
-// fallback model if a safety classifier declines. No temperature: Opus 5.5
-// rejects it.
-const MODEL = 'claude-opus-5-5';
+// The Claude request: Haiku 5.5 at medium effort (reading and grouping ads is
+// not the hard part), JSON constrained by the schema below. Haiku while the
+// app is being built (CLAUDE.md, n8n). fallbacks retries a request a safety
+// classifier declines on another model, on Sonnet and Opus; on Haiku a
+// refusal stands and the run says so. No temperature: Haiku 5.5 can reject it.
+const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'medium';
 const p = $input.first().json;
 const ANGLES = ['Timeline & urgency', 'Family & education', 'Due diligence', 'Investment safety', 'Career freedom', 'Process explained', 'Cost & pricing', 'Lifestyle', 'Social proof', 'Other'];

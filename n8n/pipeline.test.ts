@@ -105,7 +105,7 @@ function claude(body: Json, answer: (material: Json, schema: Json) => Json): Jso
   const reply = answer(material, schema);
   expect(conforms(reply, schema), 'the answer fits the schema the request sent').toEqual([]);
   return {
-    model: 'claude-opus-5-5',
+    model: 'claude-haiku-5-5',
     stop_reason: 'end_turn',
     content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(reply) }],
     usage: { input_tokens: 4000, output_tokens: 1200, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
@@ -484,7 +484,7 @@ describe('custom runs, which skip the tracker', () => {
 describe('when an agent fails', () => {
   it('records why, keeps the usage, and lets the agent run again', async () => {
     const runId = await startRun({ source: { kind: 'custom', type: 'text', excerpt: 'A plain note about EB-5 timelines being estimates, for families planning ahead.' }, platforms: ['meta'], goal: 'consultations' });
-    const refused = await runStrategist(runId, () => ({ model: 'claude-opus-5-5', stop_reason: 'refusal', stop_details: { category: 'cyber' }, content: [], usage: { input_tokens: 900, output_tokens: 0 } }));
+    const refused = await runStrategist(runId, () => ({ model: 'claude-haiku-5-5', stop_reason: 'refusal', stop_details: { category: 'cyber' }, content: [], usage: { input_tokens: 900, output_tokens: 0 } }));
     expect(refused.failed).toMatchObject({ p_stage: 'strategist', p_error: 'Claude declined to write this strategy (cyber).' });
     let run = toRun(await dashboardRun(runId));
     expect(run.status).toBe('failed');

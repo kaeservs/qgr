@@ -32,7 +32,7 @@ function run(file: string, input: Json, nodes: Record<string, Json> = {}, swap: 
 
 /** A Messages API reply whose text block is `answer`, as Claude returns it with structured outputs. */
 const reply = (answer: unknown, extra: Json = {}): Json => ({
-  model: 'claude-opus-5-5',
+  model: 'claude-haiku-5-5',
   stop_reason: 'end_turn',
   content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: JSON.stringify(answer) }],
   usage: { input_tokens: 5000, output_tokens: 1500, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
@@ -66,7 +66,7 @@ function assertStrictSchema(node: unknown, path = 'schema'): void {
 }
 
 function assertRequest(body: Json, effort: string) {
-  expect(body.model).toBe('claude-opus-5-5');
+  expect(body.model).toBe('claude-haiku-5-5');
   expect(body).not.toHaveProperty('temperature');
   expect(body).not.toHaveProperty('thinking');
   expect(body.fallbacks).toBe('default');
@@ -106,7 +106,7 @@ describe('Competitor Tracker', () => {
     expect(ads[0]).toMatchObject({ id: 'a1', days_running: 63, hook_line: "Your kids shouldn't age out while you wait." });
   });
 
-  it('asks Opus 5.5 for a strict JSON report, with no temperature', () => {
+  it('asks Haiku 5.5 for a strict JSON report, with no temperature', () => {
     const { body } = run('tracker-build-request.js', prepared) as { body: Json };
     assertRequest(body, 'medium');
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
@@ -148,7 +148,7 @@ describe('Competitor Tracker', () => {
       { label: 'Timeline & urgency', ads: 1 },
     ]);
     expect((report.ads as unknown[]).length).toBe(4);
-    expect(out.p_usage).toMatchObject({ model: 'claude-opus-5-5', input_tokens: 5000, output_tokens: 1500 });
+    expect(out.p_usage).toMatchObject({ model: 'claude-haiku-5-5', input_tokens: 5000, output_tokens: 1500 });
   });
 
   it('turns a refusal or unreadable answer into a stated failure, keeping the usage', () => {

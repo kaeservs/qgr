@@ -7,7 +7,7 @@ const run = ctx.run;
 const angles = ctx.strategy.angles;
 const u = res.usage || {};
 const usage = {
-  model: res.model || 'claude-opus-5-5',
+  model: res.model || 'claude-haiku-5-5',
   input_tokens: u.input_tokens || 0,
   output_tokens: u.output_tokens || 0,
   cache_creation_input_tokens: u.cache_creation_input_tokens || 0,

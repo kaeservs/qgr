@@ -87,7 +87,7 @@ const ${varName} = node({
     },
     credentials: { anthropicApi: newCredential('Anthropic') },
   },
-  output: [{ model: 'claude-opus-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: '{}' }], usage: { input_tokens: 5000, output_tokens: 1500 } }],
+  output: [{ model: 'claude-haiku-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: '{}' }], usage: { input_tokens: 5000, output_tokens: 1500 } }],
 });`;
 
 const isOk = (varName, name) => `
@@ -215,7 +215,7 @@ const apify = node({
       method: 'POST',
       url: '${APIFY_ACTOR}/run-sync-get-dataset-items',
       authentication: 'genericCredentialType',
-      genericAuthType: 'httpTemplatedCustomAuth',
+      genericAuthType: 'httpCustomAuth',
       sendQuery: true,
       queryParameters: { parameters: [{ name: 'timeout', value: '240' }, { name: 'maxItems', value: '60' }] },
       sendBody: true,
@@ -224,24 +224,24 @@ const apify = node({
       jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $json.library.url }], resultsLimit: 60, activeStatus: "active" }) }}'),
       options: { timeout: 300000 },
     },
-    credentials: { httpTemplatedCustomAuth: newCredential('Apify token') },
+    credentials: { httpCustomAuth: newCredential('Apify token') },
   },
   output: [{ adArchiveID: '1234567890', pageName: 'Example Visa Partners', isActive: true, startDate: 1754000000, snapshot: { body: { text: 'Hook' }, ctaText: 'Book now', displayFormat: 'VIDEO' } }],
 });
 ${codeNode('apifyAds', "Read Apify's ads", code('tracker-apify-ads.js'), `{ runId: 'run-id', dataSource: 'apify', ads: [] }`, "\n    onError: 'continueErrorOutput',")}
 ${codeNode('sampleAds', 'Sample ads', code('tracker-placeholder-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [] }`)}
 ${codeNode('prepareAds', 'Prepare the ads', code('tracker-prepare-ads.js'), `{ runId: 'run-id', dataSource: 'placeholder', ads: [{ id: 'a1', platform: 'meta', format: 'video', days_running: 63, text: 'Hook', hook_line: 'Hook' }] }`, "\n    onError: 'continueErrorOutput',")}
-${codeNode('buildRequest', 'Build the Claude request', code('tracker-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('buildRequest', 'Build the Claude request', code('tracker-build-request.js'), `{ body: { model: 'claude-haiku-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
 ${claudeNode('claude', 'Claude: read the ads')}
-${codeNode('readAnswer', "Read Claude's answer", code('tracker-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_report: { hooks: [] }, p_usage: { model: 'claude-opus-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('readAnswer', "Read Claude's answer", code('tracker-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_report: { hooks: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Report ready?')}
 ${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_report: $json.p_report, p_usage: $json.p_usage }) }}', `{ data: 'report-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('tracker')}
 
 const noteWebsite = sticky('## Their website\\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
-const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Templated Custom Auth, the header Authorization: Bearer {{api_key}}, with the token as api_key); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
+const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Custom Auth, JSON {"headers": {"Authorization": "Bearer <token>"}}, allowed domain api.apify.com); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\\nClaude groups ads into hooks by id and names each ad\\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
-const noteModel = sticky('## Claude\\nOpus 5.5, medium effort, JSON constrained by a schema, server-side fallback on a refusal. No temperature: Opus 5.5 rejects it. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
+const noteModel = sticky('## Claude\\nHaiku 5.5 while the app is being built (about a cent a run), medium effort, JSON constrained by a schema. A refusal stands: Haiku has no fallback model. No temperature. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
 
 export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
@@ -272,15 +272,15 @@ const strategist = `${IMPORTS}
 ${subTrigger}
 ${beginNode('strategist')}
 ${codeNode('plan', 'Gather the material', code('strategist-plan.js'), `{ runId: 'run-id', run: ${sampleRun}, brand: { guardrails: [] }, report: null, page: null, clip: null, sourceText: '', sourceLabel: 'Podcast · Ep. 1' }`, "\n    onError: 'continueErrorOutput',")}
-${codeNode('buildRequest', 'Build the Claude request', code('strategist-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('buildRequest', 'Build the Claude request', code('strategist-build-request.js'), `{ body: { model: 'claude-haiku-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
 ${claudeNode('claude', 'Claude: write the strategy')}
-${codeNode('readAnswer', "Read Claude's answer", code('strategist-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_strategy: { angles: [] }, p_usage: { model: 'claude-opus-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('readAnswer', "Read Claude's answer", code('strategist-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_strategy: { angles: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Strategy ready?')}
 ${rpcNode('save', 'Save the strategy', 'agent_finish_strategist', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_strategy: $json.p_strategy, p_usage: $json.p_usage }) }}', `{ data: 'strategy-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('strategist')}
 
 const noteSource = sticky('## Custom runs\\nA blog post, podcast or video link was read by the app when the run started and stored with the run. A podcast or video page has **no transcript**: the strategist is told so. An uploaded clip comes with the words said in it: its transcript, read over by the team, or what they typed. Pasted text is used as it is.\\n\\n## What worked\\nThe material carries how the team\\'s own recent posts did (**QGR · Post results**), ranked by engagement per person reached, worked out in code. Without any, the request is exactly as before.', [plan], { color: 3 });
-const noteModel = sticky('## Claude\\nOpus 5.5, high effort: the strategy is the judgement the rest of the run depends on. Budget shares are made to add up to 100 in code, and the brand guardrails always lead.', [buildRequest, claude, readAnswer], { color: 6 });
+const noteModel = sticky('## Claude\\nHaiku 5.5 while the app is being built, high effort: the strategy is the judgement the rest of the run depends on. Budget shares are made to add up to 100 in code, and the brand guardrails always lead.', [buildRequest, claude, readAnswer], { color: 6 });
 
 export default workflow('qgr-ad-strategist', 'QGR · Ad Strategist')
   .add(start)
@@ -302,9 +302,9 @@ export default workflow('qgr-ad-strategist', 'QGR · Ad Strategist')
 const content = `${IMPORTS}
 ${subTrigger}
 ${beginNode('content')}
-${codeNode('buildRequest', 'Build the Claude request', code('content-build-request.js'), `{ body: { model: 'claude-opus-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('buildRequest', 'Build the Claude request', code('content-build-request.js'), `{ body: { model: 'claude-haiku-5-5', max_tokens: 16000 } }`, "\n    onError: 'continueErrorOutput',")}
 ${claudeNode('claude', 'Claude: write the ads')}
-${codeNode('readAnswer', "Read Claude's answer", code('content-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-opus-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('readAnswer', "Read Claude's answer", code('content-read-answer.js'), `{ ok: true, p_run_id: 'run-id', p_ad_set: { title: 'Q4', variants: [] }, p_usage: { model: 'claude-haiku-5-5' } }`, "\n    onError: 'continueErrorOutput',")}
 ${isOk('answerOk', 'Ads ready?')}
 ${rpcNode('save', 'Save the ads', 'agent_finish_content', '{{ JSON.stringify({ p_run_id: $json.p_run_id, p_ad_set: $json.p_ad_set, p_usage: $json.p_usage }) }}', `{ data: 'ad-set-id' }`, "\n    onError: 'continueErrorOutput',")}
 ${failTail('content')}
