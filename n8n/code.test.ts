@@ -287,6 +287,10 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
         camel('3', 'Atlas Residency', 'Another firm that named them.', { snapshot: { body: { text: 'Another firm that named them.' }, linkUrl: 'https://atlas.example/' } }),
         camel('4', 'Horizon Visa Partners', '{{product.brand}}', { snapshot: { body: { text: '{{product.brand}}' }, displayFormat: 'DCO', cards: [{ body: 'A catalogue card with words.', title: 'Card' }, { body: '{{product.name}}' }] } }),
         camel('5', 'Horizon Visa Partners', '{{product.brand}}', { snapshot: { body: { text: '{{product.brand}}' }, cards: [] } }),
+        // Seen in a real scan: real words under a headline that is still a template.
+        camel('6', 'Horizon Visa Partners', 'Real words, template headline.', { snapshot: { body: { text: 'Real words, template headline.' }, title: '{{product.name}}' } }),
+        // And a template headline over a card with a real one, as EB5AN's ads came.
+        camel('7', 'Horizon Visa Partners', '{{product.brand}}', { snapshot: { body: { text: '{{product.brand}}' }, title: '{{product.name}}', displayFormat: 'DCO', cards: [{ body: 'Card words.', title: 'Card headline' }] } }),
         {},
       ],
       plan,
@@ -295,7 +299,11 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
       ['1', 'Ours, by Page name.', 'video'],
       ['2', 'Theirs, by the link to their site.', 'image'],
       ['4', 'A catalogue card with words.', 'carousel'],
+      ['6', 'Real words, template headline.', 'text'],
+      ['7', 'Card words.', 'carousel'],
     ]);
+    expect((out.ads as Json[]).find((a) => a.id === '6')!.headline).toBeNull();
+    expect((out.ads as Json[]).find((a) => a.id === '7')!.headline).toBe('Card headline');
   });
 
   it('says plainly when there is nothing to read', () => {

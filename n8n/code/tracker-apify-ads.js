@@ -68,6 +68,10 @@ function theirs(pageName, link) {
   const h = hostOf(link);
   return !!(keep.domain && h && (h === keep.domain || h.slice(-keep.domain.length - 1) === '.' + keep.domain));
 }
+// A catalogue ad's headline can be its unfilled template ({{product.name}}).
+function untemplated(text) {
+  return text && text.indexOf('{{') === -1 ? text : null;
+}
 function first(list) {
   return Array.isArray(list) && list.length > 0 && list[0] && typeof list[0] === 'object' ? list[0] : {};
 }
@@ -116,7 +120,7 @@ $input.all().forEach(function (item) {
     isActive: pick(a, ['isActive', 'is_active']) !== false,
     pageName: pageName || null,
     text: text,
-    headline: clean(words(pick(snap, ['title'])) || words(pick(card, ['title']))) || null,
+    headline: untemplated(clean(words(pick(snap, ['title'])))) || untemplated(clean(words(pick(card, ['title'])))),
     cta: clean(pick(snap, ['ctaText', 'cta_text']) || pick(card, ['ctaText', 'cta_text'])) || null,
     adUrl: archiveId && /^\d+$/.test(String(archiveId)) ? 'https://www.facebook.com/ads/library/?id=' + archiveId : null,
     mediaUrl: typeof media === 'string' && /^https:\/\//.test(media) ? media : null,
