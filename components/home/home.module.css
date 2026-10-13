@@ -284,6 +284,14 @@
   gap: 16px;
 }
 
+.direction {
+  grid-column: 1 / -1;
+}
+
+.directionBox {
+  min-height: 64px;
+}
+
 .platformPick {
   display: flex;
   gap: 6px;
@@ -484,6 +492,22 @@
   gap: 8px;
 }
 
+/* Above the card's own link, so a count opens its agent's result rather than the run. */
+.countLink {
+  position: relative;
+  z-index: 1;
+  gap: 4px;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.countLink:hover {
+  background: var(--indigo);
+  color: #fff;
+}
+
 /* ---------- Side panel ---------- */
 
 .sideCol {
@@ -539,9 +563,9 @@
   display: inline-grid;
   place-items: center;
   width: 40px;
-  height: 40px;
+  height: 44px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 12px;
   background: transparent;
   color: var(--text);
   font-size: 15px;
@@ -553,29 +577,38 @@
 }
 
 .dayHasRuns {
+  padding-bottom: 12px;
   font-weight: 500;
   transition: background-color 0.15s ease;
 }
 
-/* A run is a gold dot under the date, a post an indigo one. */
+/* Under the date, how many runs started (gold) and how many posts go out (indigo) that day. */
 .marks {
   position: absolute;
   bottom: 4px;
   display: flex;
-  gap: 3px;
+  gap: 2px;
 }
 
 .markRun,
 .markPost {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
   background: var(--gold);
+  color: var(--text);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .markPost {
-  background: var(--indigo-400);
+  background: var(--indigo);
+  color: #fff;
 }
 
 .calKey {
@@ -586,6 +619,13 @@
   padding-left: 4px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.calKey .markRun,
+.calKey .markPost {
+  min-width: 10px;
+  height: 10px;
+  padding: 0;
 }
 
 .calKey .markPost {
@@ -609,9 +649,109 @@
   box-shadow: 0 6px 14px rgb(28 27 157 / 0.3);
 }
 
-.daySelected .markRun,
 .daySelected .markPost {
   background: #fff;
+  color: var(--indigo);
+}
+
+/* ---------- The day under the calendar ---------- */
+
+.dayPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 4px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dayPanelHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.dayPanelTitle {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dayPanelLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dayGroup {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.dayList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A post has an indigo bar, a run a gold one: the calendar's colours. */
+.dayItem {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.dayItem::before {
+  content: '';
+  border-radius: 2px;
+  background: var(--indigo);
+}
+
+.dayItemRun::before {
+  background: var(--gold);
+}
+
+.dayItem:hover {
+  background: var(--indigo-50);
+}
+
+.dayItemMain {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dayItemMain strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dayItemSub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.dayPlaces {
+  display: inline-flex;
+  gap: 3px;
 }
 
 .nextScan {

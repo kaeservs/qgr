@@ -92,6 +92,7 @@ export interface RunRow {
   page_error: string | null;
   media_path: string | null;
   media: Json | null;
+  guidance: string | null;
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -319,6 +320,7 @@ export function toRun(row: RunRow): RunWithStatus {
     },
     activity: [...(row.run_events ?? [])].sort((a, b) => a.at.localeCompare(b.at)).map((e) => ({ at: e.at, text: e.text })),
     ...(pageOf(row) ? { page: pageOf(row) as PageSummary } : {}),
+    ...(row.guidance ? { guidance: row.guidance } : {}),
   };
   return { ...run, status: runStatus(run) };
 }

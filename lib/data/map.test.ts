@@ -32,6 +32,7 @@ const runRow = (extra: Partial<RunRow> = {}): RunRow => ({
   page_error: null,
   media_path: null,
   media: null,
+  guidance: null,
   run_stages: [stage('tracker', 'queued'), stage('strategist', 'queued'), stage('content', 'queued')],
   strategies: null,
   ad_sets: null,
@@ -53,6 +54,11 @@ describe('toRun', () => {
     const run = toRun(runRow());
     expect(run).toMatchObject({ id: 'run-1', status: 'queued', platforms: ['meta', 'x'], source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.example/' }, output: {}, counts: {}, activity: [] });
     expect(run).not.toHaveProperty('summary');
+    expect(run).not.toHaveProperty('guidance');
+  });
+
+  it('carries the team’s direction for the agents', () => {
+    expect(toRun(runRow({ guidance: 'Lead with the family angle.' })).guidance).toBe('Lead with the family angle.');
   });
 
   it('reads a finished run: its outputs, counts and events in order', () => {

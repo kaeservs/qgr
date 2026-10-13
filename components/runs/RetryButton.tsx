@@ -7,11 +7,11 @@ import type { Goal, Platform, RunSource } from '@/lib/types';
 import { useToast } from '../ui/Toast';
 
 /**
- * Starts a fresh run with the same input, its link read again. The failed run
+ * Starts a fresh run with the same input and direction, its link read again. The failed run
  * stays, with its error, as the record. Trying a failed agent again in place
  * (GoAheadButton) keeps what the run already has; this starts over.
  */
-export function RetryButton({ source, platforms, goal, title }: { source: RunSource; platforms: Platform[]; goal: Goal; title: string }) {
+export function RetryButton({ source, platforms, goal, title, guidance }: { source: RunSource; platforms: Platform[]; goal: Goal; title: string; guidance?: string }) {
   const router = useRouter();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -23,7 +23,7 @@ export function RetryButton({ source, platforms, goal, title }: { source: RunSou
       aria-busy={busy}
       onClick={async () => {
         setBusy(true);
-        const res = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, platforms, goal, title }) });
+        const res = await fetch('/api/runs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source, platforms, goal, title, ...(guidance ? { guidance } : {}) }) });
         const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
         if (res.ok && body?.id) {
           toast('Run started again');

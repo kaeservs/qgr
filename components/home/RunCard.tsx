@@ -1,5 +1,6 @@
-import { CalendarDays } from 'lucide-react';
+import { ArrowUpRight, CalendarDays } from 'lucide-react';
 import Link from 'next/link';
+import { cx } from '@/lib/cx';
 import type { RunWithStatus } from '@/lib/data';
 import { formatDate } from '@/lib/format';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
@@ -11,11 +12,12 @@ import styles from './home.module.css';
 
 export function RunCard({ run }: { run: RunWithStatus }) {
   const kind = sourceKind(run.source);
+  // Each count is an agent's result, and opens it: the report, the strategy, the ads.
   const counts = [
-    run.counts.hooks !== undefined && `Hooks: ${run.counts.hooks}`,
-    run.counts.angles !== undefined && `Angles: ${run.counts.angles}`,
-    run.counts.variants !== undefined && `Variants: ${run.counts.variants}`,
-  ].filter((c): c is string => Boolean(c));
+    run.counts.hooks !== undefined && { label: `Hooks: ${run.counts.hooks}`, href: run.output.competitorId && `/competitors/${run.output.competitorId}`, opens: 'the competitor report' },
+    run.counts.angles !== undefined && { label: `Angles: ${run.counts.angles}`, href: run.output.strategyId && `/strategy/${run.output.strategyId}`, opens: 'the strategy' },
+    run.counts.variants !== undefined && { label: `Variants: ${run.counts.variants}`, href: run.output.adSetId && `/content/${run.output.adSetId}`, opens: 'the ads' },
+  ].filter((c) => c !== false);
 
   return (
     <article className={styles.run}>
@@ -46,8 +48,15 @@ export function RunCard({ run }: { run: RunWithStatus }) {
       <div className={styles.runFoot}>
         <ul className={styles.counts}>
           {counts.map((c) => (
-            <li key={c} className="pill">
-              {c}
+            <li key={c.label}>
+              {c.href ? (
+                <Link href={c.href} className={cx('pill', styles.countLink)} title={`Open ${c.opens}`}>
+                  {c.label}
+                  <ArrowUpRight size={13} aria-hidden />
+                </Link>
+              ) : (
+                <span className="pill">{c.label}</span>
+              )}
             </li>
           ))}
         </ul>

@@ -1,7 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight, Radar, Send } from 'lucide-react';
-import Link from 'next/link';
+import { ChevronLeft, ChevronRight, Radar } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { cx } from '@/lib/cx';
 import { dayKey, formatMonth } from '@/lib/format';
@@ -40,7 +39,6 @@ export function RunCalendar({
   selected,
   onSelect,
   nextScan,
-  nextPost,
   timeZone,
 }: {
   runDates: string[];
@@ -51,9 +49,7 @@ export function RunCalendar({
   onSelect: (day: string | null) => void;
   /** Null while no scan is scheduled. */
   nextScan: string | null;
-  /** The next post waiting to go out, if any. */
-  nextPost: string | null;
-  /** The team's zone: a scan and a post are wall times in it. */
+  /** The team's zone: a scan is a wall time in it. */
   timeZone: string;
 }) {
   const [month, setMonth] = useState(() => monthStart(today));
@@ -117,8 +113,8 @@ export function RunCalendar({
                       >
                         {day.getUTCDate()}
                         <span className={styles.marks} aria-hidden>
-                          {runs > 0 && <i className={styles.markRun} />}
-                          {posts > 0 && <i className={styles.markPost} />}
+                          {runs > 0 && <i className={styles.markRun}>{runs}</i>}
+                          {posts > 0 && <i className={styles.markPost}>{posts}</i>}
                         </span>
                       </button>
                     ) : (
@@ -145,14 +141,6 @@ export function RunCalendar({
             Next scan <strong>{formatInZone(nextScan, timeZone)}</strong>
           </span>
         </p>
-      )}
-      {nextPost && (
-        <Link href="/posts" className={styles.nextScan}>
-          <Send size={16} aria-hidden />
-          <span>
-            Next post <strong>{formatInZone(nextPost, timeZone)}</strong>
-          </span>
-        </Link>
       )}
     </div>
   );

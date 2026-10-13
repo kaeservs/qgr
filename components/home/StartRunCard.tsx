@@ -7,7 +7,7 @@ import type { FormEvent, KeyboardEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
-import { competitorInputFor, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
+import { competitorInputFor, MAX_GUIDANCE, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
 import { transcriptText } from '@/lib/transcribe';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { AdsSetting, CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
@@ -36,6 +36,13 @@ const SOURCES = [
 
 const MAX_FILE_MB = 50;
 
+// What a direction can say, by where the run starts: the agents read it as the team's brief.
+const DIRECTION_EXAMPLE: Record<StartTab, string> = {
+  competitor: 'E.g. Look at how they talk about processing times. We want hooks for families whose children are close to 21.',
+  custom: 'E.g. This is our founder’s talk at the Dubai seminar. Make ads about the rural projects and lead with the family angle.',
+  upload: 'E.g. These ran on their Instagram this month. Answer the “green card in months” claims honestly, without naming them.',
+};
+
 export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSource = 'sample' }: { initialTab?: StartTab; initialUrl?: string; adsSource?: AdsSetting }) {
   const router = useRouter();
   const toast = useToast();
@@ -53,6 +60,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
   const [title, setTitle] = useState('');
   const [platforms, setPlatforms] = useState<Platform[]>([...PLATFORMS]);
   const [goal, setGoal] = useState<Goal>('consultations');
+  const [guidance, setGuidance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // A video is a link to read, or a clip uploaded from here.
@@ -139,7 +147,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
       const res = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: built, platforms, goal, ...(title.trim() ? { title: title.trim() } : {}) }),
+        body: JSON.stringify({ source: built, platforms, goal, ...(title.trim() ? { title: title.trim() } : {}), ...(guidance.trim() ? { guidance: guidance.trim() } : {}) }),
       });
       const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !body?.id) throw new Error(body?.error ?? 'The run could not be started.');
@@ -382,6 +390,18 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
                 </option>
               ))}
             </select>
+          </label>
+          <label className={cx('field', styles.direction)}>
+            <span className="label">Direction for the agents (optional)</span>
+            <textarea
+              className={cx('textarea', styles.directionBox)}
+              placeholder={DIRECTION_EXAMPLE[tab]}
+              value={guidance}
+              onChange={(e) => setGuidance(e.target.value)}
+              rows={2}
+              maxLength={MAX_GUIDANCE}
+            />
+            <span className="muted small">Every agent on this run reads it: what to focus on, the hooks to try, what to leave out.</span>
           </label>
         </div>
 

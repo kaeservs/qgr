@@ -580,6 +580,7 @@ export type Database = {
           excerpt: string | null
           files: string[] | null
           goal: string
+          guidance: string | null
           id: string
           input: string
           kind: string
@@ -600,6 +601,7 @@ export type Database = {
           excerpt?: string | null
           files?: string[] | null
           goal: string
+          guidance?: string | null
           id?: string
           input: string
           kind: string
@@ -620,6 +622,7 @@ export type Database = {
           excerpt?: string | null
           files?: string[] | null
           goal?: string
+          guidance?: string | null
           id?: string
           input?: string
           kind?: string
@@ -987,6 +990,10 @@ export type Database = {
         Returns: undefined
       }
       set_pictures_auto: { Args: { p_on: boolean }; Returns: undefined }
+      set_run_guidance: {
+        Args: { p_guidance: string; p_run_id: string }
+        Returns: undefined
+      }
       start_due_scans: { Args: { p_max?: number }; Returns: Json }
       start_run: {
         Args: {

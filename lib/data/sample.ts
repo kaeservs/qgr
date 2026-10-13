@@ -116,6 +116,7 @@ export const sampleData: DataSource = {
         { at: now, text: `Queued for ${platforms}` },
       ],
       ...(page ? { page: summarizePage(page) } : {}),
+      ...(input.guidance ? { guidance: input.guidance } : {}),
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },

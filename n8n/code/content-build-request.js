@@ -103,11 +103,16 @@ const system = [
   'Never say guaranteed, never promise approval, a timeline or a return, and never name a competitor. Processing times are estimates.',
 ]).join('\n');
 
+// The team's direction for the run, in their words. Only when they gave one;
+// without it the request is exactly as before.
+const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their own words: follow it in the ads (the hooks, the focus, what to leave out) within the strategy. The rules above win wherever it conflicts with them.";
+
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
   strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: strategy.angles, channels: strategy.channels },
 };
 if (clip) material.clip = { length: clipLength, what_is_said: run.excerpt || '' };
+if (run.guidance) material.direction = run.guidance;
 
 return [{
   json: {
@@ -116,7 +121,7 @@ return [{
       max_tokens: 16000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: system,
+      system: run.guidance ? system + '\n\n' + DIRECTION_RULE : system,
       messages: [{ role: 'user', content: 'The brand and the strategy, as JSON:\n' + JSON.stringify(material) }],
     },
   },
