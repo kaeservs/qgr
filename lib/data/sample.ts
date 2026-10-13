@@ -301,6 +301,10 @@ export const sampleData: DataSource = {
     delete target.error;
     return { ok: true, value: null, sample: true };
   },
+  // The sample data stores nothing: a file added to an edit stays in the tab (lib/video/local-files.ts).
+  createEditMediaUpload: async () => ({ ok: true, value: { path: `local:${crypto.randomUUID()}`, url: null }, sample: true }),
+  deleteEditMedia: async () => ({ ok: true, value: null, sample: true }),
+  signEditMedia: async () => ({}),
   createPostUpload: async (extension) => ({ ok: true, value: { path: `posts/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deletePostMedia: async () => ({ ok: true, value: null, sample: true }),
 };

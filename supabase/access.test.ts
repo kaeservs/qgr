@@ -235,6 +235,25 @@ describe('clips and storage', () => {
     expect(await t.value<number>(`select count(*)::int from public.run_events where run_id = $1 and text in ('Variant B video edited', 'Variant B video reset')`, [runId])).toBe(2);
   });
 
+  it('saves a timeline only with files uploaded to edit-media, and keeps those files while an edit uses them', async () => {
+    const { variantId } = await finishedRun({ mediaPath: mine() });
+    const picture = `media/${member}/3c1d2e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f.jpg`;
+    const piece = (media: unknown) => ({ id: 'b', kind: 'image', media, seconds: 3 });
+    const edit = (path: string) => ({ keep: [{ start: 0, end: 10 }], sequence: [{ id: 'a', kind: 'clip', media: null, start: 0, end: 10 }, piece({ path, name: 'x.jpg', width: 10, height: 10 })], overlays: [] });
+    const save = (e: unknown) => t.asUser(member, () => t.db.query('select public.save_video_edit($1, $2::jsonb)', [variantId, JSON.stringify(e)]));
+    await expect(save(edit(picture))).rejects.toThrow(/not uploaded/);
+    await t.asUser(member, async () => {
+      await t.db.query(`insert into storage.objects (bucket_id, name) values ('edit-media', $1)`, [picture]);
+      await expect(t.db.query(`insert into storage.objects (bucket_id, name) values ('edit-media', $1)`, [`media/${outsider}/x.jpg`])).rejects.toThrow(/row-level security/);
+    });
+    await save(edit(picture));
+    await expect(save({ ...edit(picture), sequence: Array.from({ length: 41 }, (_, i) => ({ ...piece(null), id: `p${i}` })) })).rejects.toThrow(/40 pieces/);
+    const remove = () => t.asUser(member, () => t.value<number>(`with gone as (delete from storage.objects where bucket_id = 'edit-media' and name = $1 returning 1) select count(*)::int from gone`, [picture]));
+    expect(await remove()).toBe(0);
+    await t.asUser(member, () => t.db.query('select public.save_video_edit($1, null)', [variantId]));
+    expect(await remove()).toBe(1);
+  });
+
   it('refuses a video edit on a run without a clip', async () => {
     const { variantId } = await finishedRun();
     await t.asUser(member, () => expect(t.db.query('select public.save_video_edit($1, $2::jsonb)', [variantId, JSON.stringify({ keep: [{ start: 0, end: 5 }] })])).rejects.toThrow(/no clip/));

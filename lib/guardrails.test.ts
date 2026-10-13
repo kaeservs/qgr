@@ -64,6 +64,9 @@ describe('videoWarnings', () => {
     expect(videoWarnings(edit)).toEqual(['a caption says "guarantee"', 'end card says "risk-free"', 'a caption promises a timeline']);
     expect(describeWarning('a caption says "guarantee"')).toBe('A caption says “guarantee”');
     expect(videoWarnings({ captions: [], endCard: null })).toEqual([]);
+    expect(
+      videoWarnings({ captions: [], endCard: null, overlays: [{ text: 'Guaranteed return' }], sequence: [{ kind: 'clip' }, { kind: 'title', text: 'Green card in 6 months', subtext: '' }] }),
+    ).toEqual(['a text on the video says "guarantee"', 'a title card promises a timeline']);
     expect(videoWarnings(undefined)).toEqual([]);
   });
 });

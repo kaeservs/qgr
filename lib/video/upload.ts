@@ -3,8 +3,9 @@
 // reports how much of an upload has gone. The request is the one supabase-js's
 // uploadToSignedUrl sends, so Storage reads it the same way.
 
-import { CLIP_TYPES, POST_MEDIA_TYPES } from '../data/source';
-import type { ClipExtension, PostMediaExtension } from '../data/source';
+import { CLIP_TYPES, EDIT_MEDIA_TYPES, POST_MEDIA_TYPES } from '../data/source';
+import type { ClipExtension, EditMediaExtension, PostMediaExtension } from '../data/source';
+import { keepLocalFile } from './local-files';
 
 /** A failure in words a person can act on. */
 export class UploadError extends Error {}
@@ -19,7 +20,7 @@ export const extensionFor = (type: string): ClipExtension | null => (Object.keys
 
 function refusal(xhr: XMLHttpRequest, what: 'clip' | 'file'): string {
   if (xhr.status === 413) return what === 'clip' ? 'The clip is over 50 MB. Cut it shorter.' : 'The file is over 50 MB.';
-  if (/mime|type/i.test(xhr.responseText)) return what === 'clip' ? 'Storage takes MP4, MOV or WebM videos only.' : 'Storage takes a JPEG or an MP4 for a post.';
+  if (/mime|type/i.test(xhr.responseText)) return what === 'clip' ? 'Storage takes MP4, MOV or WebM videos only.' : 'Storage doesn’t take this kind of file.';
   if (xhr.status === 400 && /expired|signature|token/i.test(xhr.responseText)) return 'The upload link expired. Try again.';
   return `Storage refused the ${what} (${xhr.status}). Try again.`;
 }
@@ -91,4 +92,39 @@ export async function removePostFile(path: string): Promise<void> {
  */
 export async function removeUpload(path: string): Promise<void> {
   await fetch('/api/uploads', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
+}
+
+/** The extension Storage keeps a file added to an edit under, or null when it takes no such file. */
+export const editMediaExtension = (type: string): EditMediaExtension | null =>
+  (Object.keys(EDIT_MEDIA_TYPES) as EditMediaExtension[]).find((ext) => EDIT_MEDIA_TYPES[ext] === (type === 'audio/x-wav' || type === 'audio/wave' ? 'audio/wav' : type === 'audio/x-m4a' ? 'audio/mp4' : type)) ?? null;
+
+/**
+ * Uploads a file added to a video edit through a link /api/edit-media signs.
+ * On the sample data nothing is stored: the file stays in this tab, under a
+ * `local:` path, until the page is reloaded.
+ */
+export async function uploadEditFile(file: File, onProgress: (share: number) => void, signal?: AbortSignal): Promise<Uploaded> {
+  const extension = editMediaExtension(file.type);
+  if (!extension) throw new UploadError('Add an MP4, MOV or WebM video, a JPEG, PNG or WebP picture, or MP3, M4A, WAV or OGG music.');
+  const init: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: EDIT_MEDIA_TYPES[extension], size: file.size }) };
+  if (signal) init.signal = signal;
+  const res = await fetch('/api/edit-media', init);
+  const body = (await res.json().catch(() => null)) as { path?: string; url?: string | null; sample?: boolean; error?: string } | null;
+  if (!res.ok || !body?.path) throw new UploadError(body?.error ?? 'The file could not be uploaded.');
+  if (body.sample || !body.url) {
+    keepLocalFile(body.path.replace(/^local:/, ''), file);
+    onProgress(1);
+    return { path: body.path, sample: true };
+  }
+  // Storage checks the type against the bucket's list: send the one it knows this file by.
+  const typed = file.type === EDIT_MEDIA_TYPES[extension] ? file : new File([file], file.name, { type: EDIT_MEDIA_TYPES[extension] });
+  await put(body.url, typed, `media.${extension}`, 'file', onProgress, signal);
+  onProgress(1);
+  return { path: body.path, sample: false };
+}
+
+/** Removes a file added to an edit that no saved edit uses. Best effort. */
+export async function removeEditFile(path: string): Promise<void> {
+  if (path.startsWith('local:')) return;
+  await fetch('/api/edit-media', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
 }

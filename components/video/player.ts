@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { RefObject } from 'react';
-import { keptSeconds, partIndexAt } from '@/lib/video/edit';
+import { partIndexAt } from '@/lib/video/edit';
 import type { Part } from '@/lib/video/edit';
 
 /** Where playback is: the clip's second on screen, and how far into the end card (null while the clip shows). */
@@ -201,17 +201,6 @@ export function usePlayer(ref: RefObject<HTMLVideoElement | null>, keep: readonl
     seek,
     showAt,
   };
-}
-
-/** The edited video's second at a moment, or null when the clip is shown inside a cut. */
-export function editedAt(keep: readonly Part[], moment: Moment): number | null {
-  if (moment.tailTime !== null) return keptSeconds(keep) + moment.tailTime;
-  let offset = 0;
-  for (const part of keep) {
-    if (moment.clipTime >= part.start && moment.clipTime <= part.end) return offset + (moment.clipTime - part.start);
-    offset += part.end - part.start;
-  }
-  return null;
 }
 
 /**

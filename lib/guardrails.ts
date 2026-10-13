@@ -64,12 +64,24 @@ export function guardrailWarnings(
  * The same checks on the words a video adds to an ad: its captions and its
  * end card. People write these in the studio, so they are flagged like copy.
  */
-export function videoWarnings(edit: { captions: readonly { text: string }[]; endCard: { text: string } | null } | undefined): string[] {
+export function videoWarnings(
+  edit:
+    | {
+        captions: readonly { text: string }[];
+        endCard: { text: string } | null;
+        overlays?: readonly { text: string }[] | undefined;
+        sequence?: readonly ({ kind: 'title'; text: string; subtext: string } | { kind: 'clip' | 'image' })[] | undefined;
+      }
+    | undefined,
+): string[] {
   if (!edit) return [];
   const warnings: string[] = [];
+  const titles = (edit.sequence ?? []).flatMap((s) => (s.kind === 'title' ? [s.text, s.subtext] : []));
   for (const [rule, says] of RULES) {
     if (edit.captions.some((c) => rule.test(c.text))) warnings.push(`a caption ${says}`);
     if (edit.endCard && rule.test(edit.endCard.text)) warnings.push(`end card ${says}`);
+    if ((edit.overlays ?? []).some((o) => rule.test(o.text))) warnings.push(`a text on the video ${says}`);
+    if (titles.some((t) => rule.test(t))) warnings.push(`a title card ${says}`);
   }
   return warnings;
 }

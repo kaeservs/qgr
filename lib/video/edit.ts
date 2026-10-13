@@ -9,6 +9,8 @@
 // `cover` are the edited video's seconds, counted from its first frame.
 
 import type { ParseResult } from '../run-input';
+import { keepOfSequence, layout, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
+import type { Look, Music, Overlay, Segment } from './timeline';
 
 /** The longest clip a run takes: ten minutes. The database holds the same limit. */
 export const MAX_CLIP_SECONDS = 600;
@@ -69,6 +71,16 @@ export interface VideoEdit {
   endCard: { text: string; seconds: number } | null;
   /** The frame a feed shows before the video plays, in edited seconds. */
   cover: number;
+  /**
+   * The timeline (lib/video/timeline.ts), when the edit uses it: the pieces
+   * played one after another, texts over the video, the look of its words and
+   * music. Without a sequence, `keep` is the sequence. With one, `keep` is
+   * derived from it (the parts of the run's clip it uses), for the database.
+   */
+  sequence?: Segment[];
+  overlays?: Overlay[];
+  look?: Look;
+  music?: Music;
 }
 
 export interface Size {
@@ -86,8 +98,9 @@ export const wholeClip = (duration: number): Part[] => [{ start: 0, end: ms(dura
 
 export const keptSeconds = (keep: readonly Part[]): number => ms(keep.reduce((sum, p) => sum + (p.end - p.start), 0));
 
-/** How long the edited video runs: the parts kept, then the end card. */
-export const editedSeconds = (edit: Pick<VideoEdit, 'keep' | 'endCard'>): number => ms(keptSeconds(edit.keep) + (edit.endCard?.seconds ?? 0));
+/** How long the edited video runs: the parts kept (or the timeline's pieces), then the end card. */
+export const editedSeconds = (edit: Pick<VideoEdit, 'keep' | 'endCard'> & { sequence?: Segment[] | undefined }): number =>
+  ms((edit.sequence && edit.sequence.length > 0 ? sequenceSeconds(layout(edit.sequence)) : keptSeconds(edit.keep)) + (edit.endCard?.seconds ?? 0));
 
 /** The clip's second that an edited second shows, or null past the last part (on the end card). */
 export function clipTimeAt(keep: readonly Part[], t: number): number | null {
@@ -355,7 +368,14 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
   const fail = (error: string): ParseResult<VideoEdit> => ({ ok: false, error });
   if (!isRecord(raw)) return fail('The edit is not readable.');
 
-  const keep = keepOf(raw.keep, duration);
+  // A timeline's sequence decides which parts of the clip are kept; without one, `keep` does.
+  let sequence: Segment[] | undefined;
+  if (raw.sequence !== undefined) {
+    const parsed = parseSequence(raw.sequence, duration);
+    if (typeof parsed === 'string') return fail(parsed);
+    sequence = parsed;
+  }
+  const keep = sequence ? keepOfSequence(sequence) : keepOf(raw.keep, duration);
   if (typeof keep === 'string') return fail(keep);
 
   const { aspect, fit, focus, text, logo, volume, cover } = raw;
@@ -392,9 +412,19 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
     volume: Math.round(volume * 100) / 100,
     endCard,
     cover: 0,
+    ...(sequence ? { sequence } : {}),
   };
+  const total = editedSeconds(edit);
+  const overlays = parseOverlays(raw.overlays, total);
+  if (typeof overlays === 'string') return fail(overlays);
+  if (overlays.length > 0) edit.overlays = overlays;
+  const look = parseLook(raw.look);
+  if (look) edit.look = look;
+  const music = parseMusic(raw.music);
+  if (typeof music === 'string') return fail(music);
+  if (music) edit.music = music;
   // The cover is a frame of the video, so it can't be past its end.
-  edit.cover = ms(clamp(cover, 0, Math.max(0, editedSeconds(edit) - 0.05)));
+  edit.cover = ms(clamp(cover, 0, Math.max(0, total - 0.05)));
   return { ok: true, value: edit };
 }
 

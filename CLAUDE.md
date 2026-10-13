@@ -59,6 +59,8 @@ posts that work (Brand memory below).
             ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
                when the team gave a direction → POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
+            ── POST /api/edit-media → a signed upload link for a file added to a video edit;
+               POST /api/edit-media/links → links to read them
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant_words(), approve_variant(), save_video_edit(), update_brand_profile(),
@@ -86,7 +88,8 @@ posts that work (Brand memory below).
 - The browser never calls Supabase or n8n, with one exception: a file goes
   from the browser straight to Storage, through a link the server signs as the
   teammate for one path in their own folder (a clip through `/api/uploads`,
-  the file a post goes out with through `/api/post-media`), because a 50 MB
+  the file a post goes out with through `/api/post-media`, a video, picture or
+  music added to an edit through `/api/edit-media`), because a 50 MB
   file cannot pass through a Vercel function (4.5 MB a request). Clips play
   and export from links the server signs too (`getClipUrl`). Every other
   Supabase call is made by the server with the person's own session and the
@@ -166,6 +169,13 @@ posts that work (Brand memory below).
   their own folder and removes a file only while no post waits on it; n8n
   removes it once the last place has it (`publisher_finish` returns
   `remove_media`), since each platform keeps its own copy.
+- A file added to a video edit (another video, a picture, music) lives in the
+  private bucket `edit-media` (50 MB; MP4, WebM, MOV, JPEG, PNG, WebP, MP3,
+  M4A, AAC, WAV, OGG) at `media/{uploader}/{uuid}.{ext}`. A member reads any
+  and uploads only into their own folder; the uploader removes one only while
+  no saved edit names it (the editor takes back what it uploaded and the
+  saved edit left out). `save_video_edit` refuses an edit naming a file not
+  in the bucket.
 - An ad's picture lives in the private bucket `ad-pictures` (10 MB, PNG, JPEG
   or WebP) at `pictures/{variant}/{uuid}.{ext}`, uploaded by n8n alone. A
   member reads any, and removes only one no variant shows and no variant keeps
@@ -546,8 +556,31 @@ posts that work (Brand memory below).
   the cover frame. Kept parts and captions are in the clip's own seconds, so a
   caption stays with its words when the cut changes. `parseVideoEdit` is the
   app's check; `save_video_edit` checks the parts are inside the clip.
-- One function draws a frame (`lib/video/draw.ts`): the studio's preview and
-  the exported file are both drawn by it, so what is seen is what is exported.
+- The timeline (`lib/video/timeline.ts`, pure and tested) makes an edit a
+  sequence of pieces played one after another: parts of the run's clip (in
+  any order, any speed from 0.5× to 2×, each its own volume), other videos,
+  pictures and title cards. Each piece has its effects (ten filters,
+  brightness, contrast, colour, a punch-in, a slow zoom or pan, mirror, a
+  blurred fill, vignette, grain) and the transition into it (cut, cross-fade,
+  through black or white, four slides, two wipes, zoom, circle, blur). Over
+  the video: texts with a place, a style, a size and how they come in, a
+  caption style (boxed, bold, word by word, minimal), a progress bar; under
+  it, music, faded and quieter while a clip speaks. Up to 40 pieces, 30 texts
+  and ten minutes. Without a sequence, `keep` is the sequence, so every edit
+  from before reads as it did; with one, `keep` is derived from it for the
+  database, and `compactEdit` saves a plain cut as `keep` alone. Captions show
+  wherever a piece of the run's clip plays, never over another video or a
+  picture. Overlays, the words' `until` and the cover are in the edited
+  video's seconds. A sped-up or slowed piece plays silent.
+- One function draws a frame (`lib/video/compose.ts`, from the pieces in
+  `lib/video/draw.ts`): the studio's preview (`useEditedVideo`, a <video> per
+  file, two per file so the next piece waits ready) and the exported file
+  (`renderTimeline`: a decoder per piece, opened as it comes on screen, the
+  sound mixed ten seconds at a time in an OfflineAudioContext) are both drawn
+  by it, so what is seen is what is exported. Its sound rules (`pieceGainAt`,
+  `musicGainAt`) drive both too. Filters are the canvas's own (`ctx.filter`):
+  a browser without them shows and exports the pieces unfiltered, so the
+  filtered look is checked in Chrome or Edge.
 - Files are made in the browser by Mediabunny over WebCodecs
   (`lib/video/render.ts`): MP4 with H.264 and AAC whenever the browser can
   (the ad platforms want MP4), Mediabunny's own AAC encoder where the browser

@@ -749,3 +749,271 @@
   border-radius: var(--radius);
   background: #0e0f2c;
 }
+
+/* ---------- Sequence (the timeline's pieces) ---------- */
+
+.sequence {
+  display: grid;
+  gap: 6px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.sequenceTrack {
+  position: relative;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: var(--indigo-100);
+  touch-action: none;
+  cursor: pointer;
+}
+
+.sequenceTrack:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.piece {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  border: 2px solid rgb(255 255 255 / 0.9);
+  border-radius: 6px;
+  background: var(--indigo-500) center / cover no-repeat;
+  box-shadow: inset 0 0 0 1px rgb(28 27 157 / 0.35);
+  pointer-events: none;
+}
+
+.pieceVideo {
+  background-color: #2a2b6e;
+}
+
+.pieceImage {
+  background-color: #4b4f9b;
+}
+
+.pieceTitle {
+  background: linear-gradient(135deg, var(--indigo-strong), var(--indigo));
+}
+
+.pieceEnd {
+  background: repeating-linear-gradient(135deg, rgb(28 27 157 / 0.85) 0 6px, rgb(28 27 157 / 0.7) 6px 12px);
+}
+
+.pieceOn {
+  border-color: var(--gold);
+  box-shadow:
+    inset 0 0 0 1px var(--gold),
+    0 0 0 1px rgb(14 15 44 / 0.25);
+  z-index: 1;
+}
+
+.pieceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(14 15 44 / 0.7);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pieceLabel span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.joint {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: rgb(14 15 44 / 0.55);
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+
+.jointOn {
+  background: var(--gold);
+  border-color: var(--indigo-strong);
+}
+
+.joint:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.seqPlayhead {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  z-index: 3;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--indigo-strong);
+  pointer-events: none;
+}
+
+.overlayLane {
+  position: relative;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--indigo-50);
+}
+
+.overlayMark {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 6px;
+  overflow: hidden;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--indigo-200);
+  color: var(--indigo-strong);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.overlayMarkOn {
+  background: var(--gold);
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px;
+}
+
+.swatch {
+  display: grid;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.swatch span:first-child {
+  height: 36px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #1c1b9d, #efb74a 60%, #3f44b4);
+}
+
+.swatchOn {
+  border-color: var(--indigo);
+  box-shadow: inset 0 0 0 1px var(--indigo);
+  color: var(--indigo);
+}
+
+.slider {
+  display: grid;
+  grid-template-columns: 96px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.slider input {
+  width: 100%;
+  accent-color: var(--indigo);
+}
+
+.slider output {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.section {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.section:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.overlayItem {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.overlayItemOn {
+  border-color: var(--indigo);
+  box-shadow: inset 0 0 0 1px var(--indigo);
+}
+
+.pieceHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* A checkbox keeps its words beside it, however long they run. */
+.row:has(> input[type='checkbox']) {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+
+.row > input[type='checkbox'] {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+/* Beside the panel, the picture and the pieces stay in view while the panel scrolls. */
+@media (min-width: 901px) {
+  .editorMain {
+    position: sticky;
+    top: 0;
+  }
+}
+
+/* Six tabs: two rows of three, each name whole. */
+.panelTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}

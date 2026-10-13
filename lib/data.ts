@@ -73,4 +73,7 @@ export const stopPicture: DataSource['stopPicture'] = (id) => source().stopPictu
 export const removePicture: DataSource['removePicture'] = (id) => source().removePicture(id);
 export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
 export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);
+export const createEditMediaUpload: DataSource['createEditMediaUpload'] = (extension) => source().createEditMediaUpload(extension);
+export const deleteEditMedia: DataSource['deleteEditMedia'] = (path) => source().deleteEditMedia(path);
+export const signEditMedia: DataSource['signEditMedia'] = (paths) => source().signEditMedia(paths);
 export const deletePostMedia: DataSource['deletePostMedia'] = (path) => source().deletePostMedia(path);

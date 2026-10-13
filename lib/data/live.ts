@@ -59,6 +59,7 @@ const POST =
 const MEDIA_BUCKET = 'run-media';
 /** The files posts go out with, made in the browser. Removed once every place has its post. */
 const POST_BUCKET = 'post-media';
+const EDIT_MEDIA_BUCKET = 'edit-media';
 /** The pictures an image model made for ads, uploaded by n8n. */
 const PICTURE_BUCKET = 'ad-pictures';
 /** Long enough to read a page and post from it. */
@@ -553,6 +554,40 @@ export const liveData: DataSource = {
       return { ok: false, status: 500, error: 'The post’s file could not be uploaded.' };
     }
     return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  createEditMediaUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to upload.' };
+    const path = `media/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    const { data, error } = await (await db()).storage.from(EDIT_MEDIA_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing an edit file upload link failed', error);
+      return { ok: false, status: 500, error: 'The file could not be uploaded.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deleteEditMedia: async (path) => {
+    // Storage refuses (by its policy) a file that is not the caller's or that a saved edit uses.
+    const { data, error } = await (await db()).storage.from(EDIT_MEDIA_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing an edit file failed', error);
+      return { ok: false, status: 500, error: 'The file could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That file is in use or already gone.' };
+  },
+
+  signEditMedia: async (paths) => {
+    if (paths.length === 0) return {};
+    const { data, error } = await (await db()).storage.from(EDIT_MEDIA_BUCKET).createSignedUrls([...new Set(paths)], PLAY_SECONDS);
+    if (error) {
+      console.error('Signing edit file links failed', error);
+      return {};
+    }
+    const out: Record<string, string> = {};
+    for (const item of data) if (item.path && item.signedUrl && !item.error) out[item.path] = item.signedUrl;
+    return out;
   },
 
   deletePostMedia: async (path) => {

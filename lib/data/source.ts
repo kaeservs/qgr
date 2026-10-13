@@ -75,6 +75,22 @@ export interface NewPost {
 export const POST_MEDIA_TYPES = { jpg: 'image/jpeg', mp4: 'video/mp4' } as const;
 export type PostMediaExtension = keyof typeof POST_MEDIA_TYPES;
 
+/** The kinds of file the video editor adds to an edit (bucket edit-media): other videos, pictures and music. */
+export const EDIT_MEDIA_TYPES = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+} as const;
+export type EditMediaExtension = keyof typeof EDIT_MEDIA_TYPES;
+
 /** The kinds of file Storage keeps clips as (bucket run-media). */
 export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
 export type ClipExtension = keyof typeof CLIP_TYPES;
@@ -171,6 +187,16 @@ export interface DataSource {
   createPostUpload(extension: PostMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes a post file nothing waits on: one made for a post that was never sent. */
   deletePostMedia(path: string): Promise<Saved>;
+  /**
+   * Where the browser uploads a file added to a video edit: a fresh path in the
+   * teammate's own folder and a signed link. The sample data keeps the file in
+   * the tab, so its path is `local:` and its link null.
+   */
+  createEditMediaUpload(extension: EditMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a file added to an edit that no saved edit uses. */
+  deleteEditMedia(path: string): Promise<Saved>;
+  /** Links the browser can read files added to edits from, for a while, by path. */
+  signEditMedia(paths: string[]): Promise<Record<string, string>>;
 }
 
 /** The app's own pages, for search. */
