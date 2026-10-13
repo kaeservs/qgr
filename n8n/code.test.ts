@@ -127,6 +127,13 @@ describe('Competitor Tracker', () => {
     expect(String(plain.system)).not.toContain('direction');
   });
 
+  it('writes its insights for QGR, from the brand memory', () => {
+    const withMemory = run('tracker-prepare-ads.js', run('tracker-placeholder-ads.js', run('tracker-plan.js', { ...ctx, brand: { ...brand, topics: ['EB-5 basics'] } })));
+    const { body } = run('tracker-build-request.js', withMemory) as { body: Json };
+    expect(materialOf(body).our_brand).toEqual({ company: 'Quantum Global Residency', offer: 'EB-5 guidance', audience: 'Indian families', topics: ['EB-5 basics'] });
+    expect(String(body.system)).toContain('our_brand is QGR, who reads this report');
+  });
+
   it('builds hooks and angle counts from the ads, not from the model', () => {
     const answer = {
       competitor_name: 'Horizon Visa Partners',
@@ -365,6 +372,19 @@ describe('Ad Strategist', () => {
     expect(String(plain.system)).not.toContain('direction');
   });
 
+  it('keeps to the topics and learns from the posts that work, when the brand memory has them', () => {
+    const memory = { ...customCtx, brand: { ...brand, topics: ['EB-5 basics'] }, examples: [{ place: 'linkedin', text: 'A post that worked.', note: null, source: 'marked' }] };
+    const { body } = run('strategist-build-request.js', run('strategist-plan.js', memory)) as { body: Json };
+    expect(body.max_tokens).toBe(24000);
+    expect(materialOf(body).posts_that_work).toEqual([{ place: 'linkedin', text: 'A post that worked.' }]);
+    expect((materialOf(body).brand as Json).topics).toEqual(['EB-5 basics']);
+    expect(String(body.system)).toContain('brand.topics is what QGR usually posts about');
+    expect(String(body.system)).toContain('posts_that_work are posts the team kept');
+    const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
+    expect(String(plain.system)).not.toContain('brand.topics');
+    expect(materialOf(plain)).not.toHaveProperty('posts_that_work');
+  });
+
   it('builds from the team’s notes on an uploaded clip', () => {
     const clipCtx = { run: { id: 'run-6', kind: 'custom', input: 'video', url: null, title: 'Founder clip', excerpt: 'Our founder explains concurrent filing for families on H-1B visas.', media_path: 'uploads/u/c.mp4', media: { duration: 42.6 }, platforms: ['meta'], goal: 'consultations' }, brand, report: null };
     const plan = run('strategist-plan.js', clipCtx);
@@ -487,26 +507,85 @@ describe('Content Agent', () => {
 
   it('names variants after their angles and flags guardrail breaches instead of hiding them', () => {
     const copy = (text: string) => ({ meta: { text, headline: 'H', description: 'D', cta: 'Book now' }, x: { text, headline: 'H' } });
+    const posts = (facebook: string, instagram = 'A caption.\n\n#EB5') => ({ facebook, instagram });
+    const manyTags = `A caption. ${Array.from({ length: 31 }, (_, i) => `#tag${i}`).join(' ')}`;
     const answer = {
       variants: [
-        { label: 'C', creative_text: 'Ask for the file.', creative_style: 'spotlight', image_prompt: 'p', copy: copy('Clean copy.') },
-        { label: 'A', creative_text: 'Mapped out. Risk-free.', creative_style: 'arcs', image_prompt: 'p', copy: copy('Your green card, guaranteed in 6 months.') },
-        { label: 'B', creative_text: 'Move together.', creative_style: 'split', image_prompt: 'p', copy: copy('x'.repeat(290)) },
+        { label: 'C', creative_text: 'Ask for the file.', creative_style: 'spotlight', image_prompt: 'p', copy: copy('Clean copy.'), posts: posts('  A clean post.  ') },
+        { label: 'A', creative_text: 'Mapped out. Risk-free.', creative_style: 'arcs', image_prompt: 'p', copy: copy('Your green card, guaranteed in 6 months.'), posts: posts('Approval assured.') },
+        { label: 'B', creative_text: 'Move together.', creative_style: 'split', image_prompt: 'p', copy: copy('x'.repeat(290)), posts: posts('Plan early.', manyTags) },
       ],
     };
     const out = run('content-read-answer.js', reply(answer), { 'Begin: load the run': ctx });
     expect(out.ok).toBe(true);
-    const variants = (out.p_ad_set as { variants: { label: string; angle: string; warnings: string[] }[] }).variants;
+    const variants = (out.p_ad_set as { variants: { label: string; angle: string; warnings: string[]; posts: Record<string, string> }[] }).variants;
     expect(variants.map((v) => [v.label, v.angle])).toEqual([['A', 'Clarity over hype'], ['B', 'Family first'], ['C', 'Diligence']]);
-    expect(variants[0]!.warnings).toEqual(expect.arrayContaining(['meta text says "guarantee"', 'meta text promises a timeline', 'x text says "guarantee"', 'image text says "risk-free"']));
-    expect(variants[1]!.warnings).toContain('x text is 290 characters; X allows 280');
+    expect(variants[0]!.warnings).toEqual(expect.arrayContaining(['meta text says "guarantee"', 'meta text promises a timeline', 'x text says "guarantee"', 'image text says "risk-free"', 'facebook post says "assured"']));
+    expect(variants[1]!.warnings).toEqual(expect.arrayContaining(['x text is 290 characters; X allows 280', 'instagram post has 31 hashtags; Instagram allows 30']));
     expect(variants[2]!.warnings).toEqual([]);
+    // The posts are kept trimmed, for the places Meta posts to.
+    expect(variants[2]!.posts).toEqual({ facebook: 'A clean post.', instagram: 'A caption.\n\n#EB5' });
 
     // The studio re-checks every edit with lib/guardrails.ts: it must flag exactly what the agent flagged.
     for (const v of answer.variants) {
-      const agent = variants.find((x) => x.label === v.label)!.warnings;
-      expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'])).toEqual(agent);
+      const agent = variants.find((x) => x.label === v.label)!;
+      expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'], agent.posts)).toEqual(agent.warnings);
     }
+  });
+
+  it('fails when a variant’s post for a place is missing, or past what any place takes', () => {
+    const copy = { meta: { text: 't', headline: 'H', description: 'D', cta: 'Book now' }, x: { text: 't', headline: 'H' } };
+    const variant = (label: string, posts: Record<string, string>) => ({ label, creative_text: 'w', creative_style: 'arcs', image_prompt: 'p', copy, posts });
+    const missing = run('content-read-answer.js', reply({ variants: [variant('A', { facebook: 'Post.' }), variant('B', { facebook: 'P', instagram: 'C' }), variant('C', { facebook: 'P', instagram: 'C' })] }), { 'Begin: load the run': ctx });
+    expect(missing).toMatchObject({ ok: false, p_error: "Claude did not write variant A's Instagram post." });
+    const long = run('content-read-answer.js', reply({ variants: ['A', 'B', 'C'].map((l) => variant(l, { facebook: 'x'.repeat(3001), instagram: 'C' })) }), { 'Begin: load the run': ctx });
+    expect(long).toMatchObject({ ok: false, p_error: "Claude wrote variant A's Facebook post past 3,000 characters." });
+  });
+
+  it('asks for a post in full for each place the run posts to, and reads the whole chain and the brand memory', () => {
+    const report = { competitor: 'Horizon', summary: 'Age-out runs longest.', insights: ['One'], angles: [], hooks: [{ rank: 1, text: 'Your kids shouldn’t age out.', days_running: 63, variations: 2 }], website_summary: null };
+    const memoryCtx = {
+      ...ctx,
+      run: { ...ctx.run, platforms: ['meta', 'linkedin'] },
+      brand: { ...brand, topics: ['EB-5 basics'], post_formats: { instagram: 'Hashtags last.', x: 'Not this run.' }, picture_style: 'Warm light.' },
+      report,
+      examples: [{ place: 'instagram', text: 'Three questions to ask.', note: 'Saved a lot.', source: 'pasted' }],
+      results: [
+        { place: 'linkedin', text: 'The post that did best.', reach: 1000, views: null, reactions: 50, comments: 5, shares: 5, clicks: 40 },
+        { place: 'facebook', text: 'A quieter one.', reach: 1000, views: null, reactions: 5, comments: 0, shares: 0, clicks: 5 },
+        { place: 'facebook', text: null, reach: 1000, views: null, reactions: 90, comments: 0, shares: 0, clicks: 0 },
+      ],
+    };
+    const { body } = run('content-build-request.js', memoryCtx) as { body: Json };
+    assertRequest(body, 'high');
+    expect(body.max_tokens).toBe(32000);
+    const schema = JSON.stringify((body.output_config as { format: { schema: unknown } }).format.schema);
+    expect(schema).toContain('"posts":{"type":"object","additionalProperties":false,"required":["facebook","instagram","linkedin"]');
+    expect(String(body.system)).toContain('instagram: a caption of 40 to 120 words');
+    expect(String(body.system)).toContain('Keep to picture_style.');
+    expect(String(body.system)).toContain('Brand memory: follow post_formats');
+    const material = materialOf(body);
+    expect(material.competitor_report).toMatchObject({ competitor: 'Horizon', winning_hooks: [{ text: 'Your kids shouldn’t age out.', days_running: 63, variations: 2 }] });
+    expect(material.brand).toMatchObject({ topics: ['EB-5 basics'] });
+    expect(material.post_formats).toEqual({ instagram: 'Hashtags last.' });
+    expect(material.picture_style).toBe('Warm light.');
+    expect(material.posts_that_work).toEqual([{ place: 'instagram', text: 'Three questions to ask.', why_it_worked: 'Saved a lot.' }]);
+    // Best engagement first, computed as lib/results.ts does; a measured post with no words is left out.
+    expect(material.our_best_posts).toEqual([
+      { place: 'linkedin', text: 'The post that did best.', engagement: formatRate(engagementRate({ reach: 1000, views: null, reactions: 50, comments: 5, shares: 5, clicks: 40, at: '' })!).replace(/[^\d.%]/g, '') },
+      { place: 'facebook', text: 'A quieter one.', engagement: '1.0%' },
+    ]);
+  });
+
+  it('reads the source a custom run came from', () => {
+    const page = { ok: true, url: 'https://journal.example/post', title: 'A post', text: 'What the source says.', words: 4 };
+    const { body } = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'blog', title: 'Blog: A post', page } }) as { body: Json };
+    expect(materialOf(body).source).toEqual({ type: 'blog', title: 'A post', text: 'What the source says.' });
+    const pasted = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'text', title: 'Text', excerpt: 'Pasted words.' } }) as { body: Json };
+    expect(materialOf(pasted.body).source).toEqual({ type: 'text', title: 'Text', text: 'Pasted words.' });
+    // Without memory, nothing of it is asked for.
+    expect(String(pasted.body.system)).not.toContain('Brand memory');
+    expect(materialOf(pasted.body)).not.toHaveProperty('posts_that_work');
   });
 
   it('writes over the team’s clip on a clip run, with no image to describe', () => {

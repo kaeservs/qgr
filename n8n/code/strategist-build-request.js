@@ -57,11 +57,21 @@ const pastPosts = shown.map(function (x) {
 // The team's direction for the run, in their words: the brief. Only when they
 // gave one; without it the request is exactly as before.
 const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their own words. Follow it where the material allows: the angles it asks for, the hooks it wants tested, what to leave out. Where it asks for a promise of an outcome, a timeline or a return, the rule above wins.";
+// Brand memory: what QGR usually posts about (brand.topics) and the posts the
+// team keeps as ones that work. Each rule only when there is something for it.
+const examples = (p.examples || []).slice(0, 8).map(function (e) {
+  const example = { place: e.place, text: e.text };
+  if (e.note) example.why_it_worked = e.note;
+  return example;
+});
+const TOPICS_RULE = 'brand.topics is what QGR usually posts about: keep the angles within it unless the material points somewhere better, and say so in why.';
+const EXAMPLES_RULE = 'posts_that_work are posts the team kept because they worked for QGR: let them inform the angles and hooks, without copying them.';
 const RESULTS_RULE = "our_past_posts is how QGR's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
 
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
 if (run.guidance) material.direction = run.guidance;
 if (pastPosts.length > 0) material.our_past_posts = pastPosts;
+if (examples.length > 0) material.posts_that_work = examples;
 if (p.report) {
   material.competitor_report = {
     competitor: p.report.competitor,
@@ -133,10 +143,17 @@ return [{
   json: {
     body: {
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 24000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: [system].concat(run.guidance ? [DIRECTION_RULE] : [], pastPosts.length > 0 ? [RESULTS_RULE] : []).join('\n\n'),
+      system: [system]
+        .concat(
+          run.guidance ? [DIRECTION_RULE] : [],
+          p.brand && p.brand.topics && p.brand.topics.length > 0 ? [TOPICS_RULE] : [],
+          examples.length > 0 ? [EXAMPLES_RULE] : [],
+          pastPosts.length > 0 ? [RESULTS_RULE] : [],
+        )
+        .join('\n\n'),
       messages: [{ role: 'user', content: 'The material, as JSON:\n' + JSON.stringify(material) }],
     },
   },

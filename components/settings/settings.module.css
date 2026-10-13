@@ -199,3 +199,26 @@
   align-items: center;
   gap: 8px;
 }
+
+/* The card that says where the brand's voice and rules went. */
+.moved {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.moved > svg {
+  flex: none;
+  color: var(--indigo);
+}
+
+.moved > div {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .moved {
+    flex-wrap: wrap;
+  }
+}

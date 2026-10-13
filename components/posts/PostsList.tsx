@@ -20,6 +20,7 @@ export function PostCard({
   doing,
   onCancel,
   onRetry,
+  onRemember,
   onMove,
 }: {
   post: Post;
@@ -29,6 +30,8 @@ export function PostCard({
   doing: PostAction | null;
   onCancel: () => void;
   onRetry: (place: Place) => void;
+  /** Keeps one place's words in brand memory, once it went out. */
+  onRemember?: (place: Place) => void;
   /** Opens the post to move it or send it now, while nothing of it has gone out. */
   onMove?: () => void;
 }) {
@@ -57,7 +60,16 @@ export function PostCard({
         <p className={styles.postText}>{text}</p>
         <ul className={styles.targets}>
           {post.targets.map((t) => (
-            <PostTargetRow key={t.place} target={t} busy={busy} retrying={doing === `retry-${t.place}`} timeZone={timeZone} onRetry={() => onRetry(t.place)} />
+            <PostTargetRow
+              key={t.place}
+              target={t}
+              busy={busy}
+              retrying={doing === `retry-${t.place}`}
+              remembering={doing === `remember-${t.place}`}
+              timeZone={timeZone}
+              onRetry={() => onRetry(t.place)}
+              onRemember={onRemember ? () => onRemember(t.place) : undefined}
+            />
           ))}
         </ul>
       </div>
@@ -119,6 +131,7 @@ export function PostsList({ posts, timeZone }: { posts: Post[]; timeZone: string
                 doing={actions.busy === post.id ? actions.doing : null}
                 onCancel={() => void actions.cancel(post)}
                 onRetry={(place) => void actions.retry(post, place)}
+                onRemember={(place) => void actions.remember(post, place)}
               />
             ))}
           </section>

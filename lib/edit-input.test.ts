@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRecordId, parseBrandProfile, parseVariantEdit } from './edit-input';
+import { isRecordId, parseBrandExample, parseBrandMemory, parseBrandProfile, parseVariantEdit } from './edit-input';
 
 describe('parseVariantEdit', () => {
   const copy = { meta: { text: ' Talk to an advisor. ', headline: 'Plan ahead', description: 'Free call', cta: 'Book now' }, x: { text: 'Plan ahead.', headline: 'EB-5' } };
@@ -11,13 +11,23 @@ describe('parseVariantEdit', () => {
       value: {
         creativeText: 'Plan with care',
         copy: { meta: { text: 'Talk to an advisor.', headline: 'Plan ahead', description: 'Free call', cta: 'Book now' }, x: { text: 'Plan ahead.', headline: 'EB-5' } },
+        posts: {},
       },
     });
   });
 
+  it('keeps the posts for the places its copy goes to, trimmed, and drops an empty one', () => {
+    const parsed = parseVariantEdit({ creativeText: 'Words', copy, posts: { facebook: ' The full post. ', instagram: '  ' } });
+    expect(parsed).toMatchObject({ ok: true, value: { posts: { facebook: 'The full post.' } } });
+    // No LinkedIn copy, so no LinkedIn post.
+    expect(parseVariantEdit({ creativeText: 'Words', copy, posts: { linkedin: 'A post.' } })).toEqual({ ok: false, error: 'A post is for a place this ad does not go to.' });
+    expect(parseVariantEdit({ creativeText: 'Words', copy, posts: { facebook: 'x'.repeat(3001) } })).toMatchObject({ ok: false });
+    expect(parseVariantEdit({ creativeText: 'Words', copy, posts: 'nope' })).toMatchObject({ ok: false });
+  });
+
   it('ignores fields and platforms it does not know', () => {
     const parsed = parseVariantEdit({ creativeText: 'Words', copy: { tiktok: { text: 't', headline: 'h' }, x: { text: 't', headline: 'h', image: 'evil' } } });
-    expect(parsed).toEqual({ ok: true, value: { creativeText: 'Words', copy: { x: { text: 't', headline: 'h' } } } });
+    expect(parsed).toEqual({ ok: true, value: { creativeText: 'Words', copy: { x: { text: 't', headline: 'h' } }, posts: {} } });
   });
 
   it('refuses empty or missing parts', () => {
@@ -54,6 +64,28 @@ describe('parseBrandProfile', () => {
     expect(parseBrandProfile({ ...profile, offer: ' ' })).toEqual({ ok: false, error: 'Fill in what you offer.' });
     expect(parseBrandProfile({ ...profile, voice: [] })).toMatchObject({ ok: false });
     expect(parseBrandProfile({ ...profile, xHandle: '@not a handle' })).toMatchObject({ ok: false });
+  });
+});
+
+describe('parseBrandMemory', () => {
+  it('tidies the topics and keeps the format notes it knows', () => {
+    const parsed = parseBrandMemory({ topics: [' EB-5 basics ', 'EB-5 basics', ''], postFormats: { instagram: ' Hashtags last. ', tiktok: 'No.', x: ' ' }, pictureStyle: ' Warm light. ' });
+    expect(parsed).toEqual({ ok: true, value: { topics: ['EB-5 basics'], postFormats: { instagram: 'Hashtags last.' }, pictureStyle: 'Warm light.' } });
+  });
+
+  it('refuses too many topics and notes past their length', () => {
+    expect(parseBrandMemory({ topics: Array.from({ length: 13 }, (_, i) => `Topic ${i}`) })).toMatchObject({ ok: false });
+    expect(parseBrandMemory({ postFormats: { facebook: 'x'.repeat(1001) } })).toMatchObject({ ok: false });
+    expect(parseBrandMemory({ pictureStyle: 'x'.repeat(601) })).toMatchObject({ ok: false });
+  });
+});
+
+describe('parseBrandExample', () => {
+  it('needs a place and the post, and keeps a note when there is one', () => {
+    expect(parseBrandExample({ place: 'instagram', text: ' A post. ', note: ' Saved a lot. ' })).toEqual({ ok: true, value: { place: 'instagram', text: 'A post.', note: 'Saved a lot.' } });
+    expect(parseBrandExample({ place: 'x', text: 'A post.', note: ' ' })).toEqual({ ok: true, value: { place: 'x', text: 'A post.' } });
+    expect(parseBrandExample({ place: 'tiktok', text: 'A post.' })).toEqual({ ok: false, error: 'Say where the post ran.' });
+    expect(parseBrandExample({ place: 'x', text: ' ' })).toEqual({ ok: false, error: 'Paste the post.' });
   });
 });
 

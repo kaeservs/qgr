@@ -6,6 +6,8 @@ import { schedulePostAction } from '@/app/(app)/posts/actions';
 import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
 import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import type { NewPostTarget } from '@/lib/data/source';
+import { INSTAGRAM_MAX } from '@/lib/guardrails';
+import { PLATFORM_OF, postText } from '@/lib/platforms';
 import { MAX_THUMBNAIL, PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone, localTime, wallTime, zonedToUtc, zoneLabel } from '@/lib/schedule';
 import { PLACES } from '@/lib/types';
@@ -22,8 +24,6 @@ import styles from './posts.module.css';
 
 /** Meta's feed shows a square; LinkedIn's a 1.91:1 picture, as the studio previews them. */
 const RATIO: Record<Place, CreativeRatio> = { facebook: 'square', instagram: 'square', linkedin: 'wide' };
-const PLATFORM_OF: Record<Place, 'meta' | 'linkedin'> = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
-const INSTAGRAM_TEXT = 2200;
 const AHEAD_DAYS = 90;
 
 interface Picture {
@@ -112,7 +112,8 @@ export function PublishDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const running = useRef<AbortController | null>(null);
   const uploaded = useRef<string[]>([]);
-  const available = (place: Place) => !!variant.copy[PLATFORM_OF[place]] && !(place === 'instagram' && (variant.copy.meta?.text.length ?? 0) > INSTAGRAM_TEXT);
+  // Each place goes out with the variant's post for it, in full, or else its ad copy.
+  const available = (place: Place) => !!variant.copy[PLATFORM_OF[place]] && !(place === 'instagram' && postText(variant, place).length > INSTAGRAM_MAX);
   const [chosen, setChosen] = useState<Set<Place>>(() => new Set(PLACES.filter(available)));
   const [when, setWhen] = useState<'now' | 'later'>('now');
   const [date, setDate] = useState(() => suggestedTime(timeZone).date);
@@ -336,7 +337,7 @@ export function PublishDialog({
                         <LoaderCircle size={18} className="spin" aria-hidden />
                       </div>
                     )}
-                    <p className={styles.previewText}>{variant.copy[PLATFORM_OF[place]]?.text}</p>
+                    <p className={styles.previewText}>{postText(variant, place)}</p>
                   </div>
                 );
               })}

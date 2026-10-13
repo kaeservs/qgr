@@ -1,4 +1,5 @@
-import { ExternalLink, LoaderCircle, RotateCcw, TriangleAlert } from 'lucide-react';
+import { BookmarkCheck, BookmarkPlus, ExternalLink, LoaderCircle, RotateCcw, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
 import { cx } from '@/lib/cx';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { audience, engagementRate, engagements, formatCount, formatRate } from '@/lib/results';
@@ -33,20 +34,29 @@ function ResultsLine({ target, timeZone }: { target: PostTarget; timeZone: strin
   );
 }
 
-/** One place a post goes: how it went, its link, its numbers, and Try again when it did not go. */
+/**
+ * One place a post goes: how it went, its link, its numbers, Try again when it
+ * did not go, and "This worked" once it went out, to keep it in brand memory.
+ */
 export function PostTargetRow({
   target,
   onRetry,
+  onRemember,
   busy,
   retrying = false,
+  remembering = false,
   timeZone,
 }: {
   target: PostTarget;
   onRetry: () => void;
+  /** Keeps this place's words in brand memory as a post that works. */
+  onRemember?: (() => void) | undefined;
   /** Something is being sent for this post: its buttons wait. */
   busy: boolean;
   /** This place is the one being tried again. */
   retrying?: boolean;
+  /** This place is the one being kept in brand memory. */
+  remembering?: boolean;
   timeZone: string;
 }) {
   const { label, tone } = POST_STATUS[target.status];
@@ -67,6 +77,22 @@ export function PostTargetRow({
           <ExternalLink size={13} aria-hidden />
         </a>
       )}
+      {target.status === 'posted' &&
+        (target.remembered ? (
+          <Link href="/brand" className={cx('pill pill-sm', styles.remembered)}>
+            <BookmarkCheck size={13} aria-hidden />
+            In brand memory
+          </Link>
+        ) : (
+          // Through a stand-in nothing went out, so there is nothing that worked yet.
+          onRemember &&
+          !target.standIn && (
+            <button type="button" className="btn btn-quiet btn-sm" onClick={onRemember} disabled={busy} aria-busy={remembering} title="Keep these words in brand memory: the agents write more like them">
+              <BookmarkPlus size={14} aria-hidden />
+              This worked
+            </button>
+          )
+        ))}
       {(target.status === 'failed' || target.status === 'unknown') && (
         <button type="button" className="btn btn-quiet btn-sm" onClick={onRetry} disabled={busy} aria-busy={retrying}>
           <RotateCcw size={14} aria-hidden />

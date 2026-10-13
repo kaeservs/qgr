@@ -556,3 +556,33 @@
 .creative-spotlight .creativeField:focus {
   outline-color: var(--indigo);
 }
+
+/* ---------- Organic posts ---------- */
+
+.fromCopy {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #7a5200;
+  font-size: 12px;
+}
+
+.igActions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px 4px;
+  color: #050505;
+}
+
+.igSave {
+  margin-left: auto;
+}
+
+.igHandle {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+  font-weight: 600;
+}

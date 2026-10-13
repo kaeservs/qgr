@@ -22,6 +22,9 @@ const system = [
   'Work only from the material given.',
 ].join('\n');
 
+// Who reads the report: QGR, as its brand memory has it. The insights are for it to act on.
+const BRAND_RULE = 'our_brand is QGR, who reads this report: make the insights ones QGR can act on with what it offers and posts about, never claims the ads do not show.';
+
 // The team's direction for the run, in their words: what to look for. Only when
 // they gave one; without it the request is exactly as before.
 const DIRECTION_RULE = "direction is the QGR team's note on what to look for in these ads. Let it decide which hooks and insights come first, but report only what the ads show.";
@@ -33,6 +36,7 @@ const material = {
     return { id: a.id, platform: a.platform, format: a.format, days_running: a.days_running, text: a.text, headline: a.headline, cta: a.cta, page_name: a.page_name };
   }),
 };
+if (p.brand) material.our_brand = p.brand;
 if (p.guidance) material.direction = p.guidance;
 
 const schema = {
@@ -72,7 +76,7 @@ return [{
       max_tokens: 16000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: p.guidance ? system + '\n\n' + DIRECTION_RULE : system,
+      system: [system].concat(p.brand ? [BRAND_RULE] : [], p.guidance ? [DIRECTION_RULE] : []).join('\n\n'),
       messages: [{ role: 'user', content: 'The competitor material, as JSON:\n' + JSON.stringify(material) }],
     },
   },

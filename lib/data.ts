@@ -33,11 +33,16 @@ export const getNotices: DataSource['getNotices'] = () => source().getNotices();
 export const getActivity: DataSource['getActivity'] = () => source().getActivity();
 export const getSearchIndex: DataSource['getSearchIndex'] = () => source().getSearchIndex();
 export const getBrandProfile: DataSource['getBrandProfile'] = () => source().getBrandProfile();
+export const getBrandMemory: DataSource['getBrandMemory'] = () => source().getBrandMemory();
 
 export const createRun: DataSource['createRun'] = (input, page) => source().createRun(input, page);
 export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().saveVariant(id, edit);
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);
+export const saveBrandMemory: DataSource['saveBrandMemory'] = (memory) => source().saveBrandMemory(memory);
+export const addBrandExample: DataSource['addBrandExample'] = (example) => source().addBrandExample(example);
+export const removeBrandExample: DataSource['removeBrandExample'] = (id) => source().removeBrandExample(id);
+export const rememberPost: DataSource['rememberPost'] = (postId, place, note) => source().rememberPost(postId, place, note);
 export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source().saveVideoEdit(id, edit);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);

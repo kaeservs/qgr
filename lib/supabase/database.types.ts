@@ -75,6 +75,7 @@ export type Database = {
           picture_path: string | null
           picture_requested_at: string | null
           picture_status: string
+          posts: Json
           updated_at: string
           updated_by: string | null
           video_edit: Json | null
@@ -98,6 +99,7 @@ export type Database = {
           picture_path?: string | null
           picture_requested_at?: string | null
           picture_status?: string
+          posts?: Json
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
@@ -121,6 +123,7 @@ export type Database = {
           picture_path?: string | null
           picture_requested_at?: string | null
           picture_status?: string
+          posts?: Json
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
@@ -180,6 +183,50 @@ export type Database = {
           },
         ]
       }
+      brand_examples: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          note: string | null
+          place: string
+          post_id: string | null
+          removed_at: string | null
+          source: string
+          text: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          place: string
+          post_id?: string | null
+          removed_at?: string | null
+          source: string
+          text: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          note?: string | null
+          place?: string
+          post_id?: string | null
+          removed_at?: string | null
+          source?: string
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_examples_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_profile: {
         Row: {
           audience: string
@@ -188,6 +235,9 @@ export type Database = {
           id: number
           offer: string
           page_name: string
+          picture_style: string | null
+          post_formats: Json
+          topics: string[]
           updated_at: string
           voice: string[]
           website: string
@@ -200,6 +250,9 @@ export type Database = {
           id?: number
           offer: string
           page_name: string
+          picture_style?: string | null
+          post_formats?: Json
+          topics?: string[]
           updated_at?: string
           voice?: string[]
           website: string
@@ -212,6 +265,9 @@ export type Database = {
           id?: number
           offer?: string
           page_name?: string
+          picture_style?: string | null
+          post_formats?: Json
+          topics?: string[]
           updated_at?: string
           voice?: string[]
           website?: string
@@ -831,6 +887,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_brand_example: {
+        Args: { p_note?: string; p_place: string; p_text: string }
+        Returns: string
+      }
       agent_begin: {
         Args: { p_run_id: string; p_stage: string }
         Returns: Json
@@ -932,6 +992,11 @@ export type Database = {
         Args: { p_error: string; p_run_id: string }
         Returns: undefined
       }
+      remember_post: {
+        Args: { p_note?: string; p_place: string; p_post_id: string }
+        Returns: string
+      }
+      remove_brand_example: { Args: { p_id: string }; Returns: undefined }
       remove_picture: { Args: { p_variant_id: string }; Returns: string }
       request_picture: { Args: { p_variant_id: string }; Returns: undefined }
       reschedule_post: {
@@ -956,6 +1021,16 @@ export type Database = {
         Args: {
           p_copy: Json
           p_creative_text: string
+          p_variant_id: string
+          p_warnings: string[]
+        }
+        Returns: undefined
+      }
+      save_variant_words: {
+        Args: {
+          p_copy: Json
+          p_creative_text: string
+          p_posts: Json
           p_variant_id: string
           p_warnings: string[]
         }
@@ -1028,6 +1103,14 @@ export type Database = {
           p_scan_hour: number
           p_strategist_auto: boolean
           p_time_zone: string
+        }
+        Returns: undefined
+      }
+      update_brand_memory: {
+        Args: {
+          p_picture_style: string
+          p_post_formats: Json
+          p_topics: string[]
         }
         Returns: undefined
       }

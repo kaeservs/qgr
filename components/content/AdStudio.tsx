@@ -7,22 +7,43 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { approveVariantAction, removePictureAction, requestPictureAction, saveVariantAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
-import { PLATFORM_LABEL } from '@/lib/platforms';
+import { PLATFORM_LABEL, PLATFORM_OF, postText } from '@/lib/platforms';
+import { PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone } from '@/lib/schedule';
-import type { AdSet, Clip, Platform, PlatformCopy, Post, PostPages, Strategy, Variant } from '@/lib/types';
+import { PLACES } from '@/lib/types';
+import type { AdSet, Clip, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
 import { defaultEdit } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
 import { PublishDialog } from '../posts/PublishDialog';
-import { PlatformIcon } from '../ui/PlatformIcon';
+import { PlaceIcon, PlatformIcon } from '../ui/PlatformIcon';
 import { StatusPill } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { VideoEditor } from '../video/VideoEditor';
 import type { SavedVideo } from '../video/VideoEditor';
+import { POST_PREVIEW } from './PostPreviews';
 import { PREVIEW } from './Previews';
 import type { AdBrand } from './Previews';
 import styles from './content.module.css';
 
-const sameWords = (a: Variant, b: Variant | undefined) => !!b && a.creative.text === b.creative.text && JSON.stringify(a.copy) === JSON.stringify(b.copy);
+const sameWords = (a: Variant, b: Variant | undefined) =>
+  !!b && a.creative.text === b.creative.text && JSON.stringify(a.copy) === JSON.stringify(b.copy) && JSON.stringify(a.posts ?? {}) === JSON.stringify(b.posts ?? {});
+
+/** What the studio shows each variant as: an ad on a platform, or a post on a place. */
+type View = { kind: 'ad'; platform: Platform } | { kind: 'post'; place: Place };
+
+/** The variant with its post for a place set, or taken away when emptied (the ad copy goes out again). */
+function withPost(v: Variant, place: Place, text: string): Variant {
+  const { [place]: _, ...others } = v.posts ?? {};
+  const posts: Partial<Record<Place, string>> = text.trim() ? { ...others, [place]: text } : others;
+  const { posts: _old, ...rest } = v;
+  return Object.keys(posts).length > 0 ? { ...rest, posts } : rest;
+}
+
+/** The strategy's angle a variant was written to: by name, or else by its place among the three. */
+function angleOf(strategy: Strategy | null, v: Variant): StrategyAngle | undefined {
+  if (!strategy) return undefined;
+  return strategy.angles.find((a) => a.name === v.angle) ?? strategy.angles[{ A: 0, B: 1, C: 2 }[v.label]];
+}
 
 /** The variant with its video edit replaced, or taken away for the whole clip. */
 function withVideo(v: Variant, edit: VideoEdit | null): Variant {
@@ -96,7 +117,10 @@ export function AdStudio({
   const toast = useToast();
   const router = useRouter();
   const [postOf, setPostOf] = useState<string | null>(null);
-  const [platform, setPlatform] = useState<Platform>(platforms[0] ?? 'meta');
+  // Ads on each platform the run asked for; posts on each place those platforms post to.
+  const places = PLACES.filter((p) => platforms.includes(PLATFORM_OF[p]));
+  const [view, setView] = useState<View>({ kind: 'ad', platform: platforms[0] ?? 'meta' });
+  const platform = view.kind === 'ad' ? view.platform : PLATFORM_OF[view.place];
   const [variants, setVariants] = useState(adSet.variants);
   // The last version the server holds, for Reset and for knowing what changed.
   const [saved, setSaved] = useState(() => new Map(adSet.variants.map((v) => [v.id, v])));
@@ -176,7 +200,7 @@ export function AdStudio({
   async function persist(v: Variant): Promise<boolean> {
     if (!isDirty(v)) return true;
     setBusy('saving');
-    const result = await saveVariantAction(v.id, { creativeText: v.creative.text, copy: v.copy });
+    const result = await saveVariantAction(v.id, { creativeText: v.creative.text, copy: v.copy, posts: v.posts ?? {} });
     setBusy(null);
     if (!result.ok) {
       toast(result.error, 'info');
@@ -259,16 +283,34 @@ export function AdStudio({
             <StatusPill status={status} small />
           </p>
         </div>
-        {platforms.length > 1 && (
-          <div className={styles.platforms} role="radiogroup" aria-label="Preview on">
-            {platforms.map((p) => (
-              <button key={p} type="button" role="radio" aria-checked={platform === p} className={cx(styles.platformBtn, platform === p && styles.platformBtnOn)} onClick={() => setPlatform(p)}>
+        <div className={styles.platforms} role="radiogroup" aria-label="Show each variant as">
+          <span className={styles.viewGroup} aria-hidden>
+            Ads
+          </span>
+          {platforms.map((p) => {
+            const on = view.kind === 'ad' && view.platform === p;
+            return (
+              <button key={p} type="button" role="radio" aria-checked={on} aria-label={`${PLATFORM_LABEL[p]} ad`} className={cx(styles.platformBtn, on && styles.platformBtnOn)} onClick={() => setView({ kind: 'ad', platform: p })}>
                 <PlatformIcon platform={p} size={16} decorative />
                 {PLATFORM_LABEL[p]}
               </button>
-            ))}
-          </div>
-        )}
+            );
+          })}
+          {places.length > 0 && (
+            <span className={styles.viewGroup} aria-hidden>
+              Posts
+            </span>
+          )}
+          {places.map((place) => {
+            const on = view.kind === 'post' && view.place === place;
+            return (
+              <button key={place} type="button" role="radio" aria-checked={on} aria-label={`${PLACE_LABEL[place]} post`} className={cx(styles.platformBtn, on && styles.platformBtnOn)} onClick={() => setView({ kind: 'post', place })}>
+                <PlaceIcon place={place} size={16} decorative />
+                {PLACE_LABEL[place]}
+              </button>
+            );
+          })}
+        </div>
       </header>
 
       <div className={cx(styles.toolbar, selected && styles.toolbarActive)} aria-live="polite">
@@ -293,7 +335,8 @@ export function AdStudio({
                     'Saving…'
                   ) : (
                     <>
-                      Editing <strong>variant {selected.label}</strong> for {PLATFORM_LABEL[platform]}
+                      Editing <strong>variant {selected.label}</strong>
+                      {view.kind === 'ad' ? ` as a ${PLATFORM_LABEL[view.platform]} ad` : `’s ${PLACE_LABEL[view.place]} post`}
                     </>
                   )}
                 </span>
@@ -321,8 +364,8 @@ export function AdStudio({
                   const copy = selected.copy[platform];
                   if (!copy) return;
                   try {
-                    await navigator.clipboard.writeText(asText(copy));
-                    toast('Ad copy copied');
+                    await navigator.clipboard.writeText(view.kind === 'ad' ? asText(copy) : postText(selected, view.place));
+                    toast(view.kind === 'ad' ? 'Ad copy copied' : `${PLACE_LABEL[view.place]} post copied`);
                   } catch {
                     toast('Copying is blocked in this browser', 'info');
                   }
@@ -388,10 +431,14 @@ export function AdStudio({
       <div className={styles.variants}>
         {variants.map((v) => {
           const isSelected = v.id === selectedId;
-          const Preview = PREVIEW[platform];
           const copy = v.copy[platform];
-          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms), ...videoWarnings(v.videoEdit)];
+          const Preview = PREVIEW[platform];
+          const PostPreview = view.kind === 'post' ? POST_PREVIEW[view.place] : null;
+          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts), ...videoWarnings(v.videoEdit)];
           const state = postState(posts, v.id);
+          const angle = angleOf(strategy, v);
+          const editable = isSelected && busy === null && !state.waiting;
+          const video = clip && wholeClip ? { clip: clip.clip, url: clip.url, edit: v.videoEdit ?? wholeClip, brand: frameBrand, label: `Variant ${v.label}` } : undefined;
           return (
             <section key={v.id} className={cx(styles.variant, isSelected && styles.variantSelected)} aria-label={`Variant ${v.label}: ${v.angle}`}>
               <div className={styles.variantHead}>
@@ -419,6 +466,21 @@ export function AdStudio({
                   </span>
                 )}
               </div>
+              {angle && (
+                <div className={styles.chain}>
+                  <p>
+                    <span className={styles.chainLabel}>Why this angle</span> {angle.why}
+                  </p>
+                  {angle.basedOn && (
+                    <p>
+                      <span className={styles.chainLabel}>Answers their hook</span> “{angle.basedOn.hook}”{' '}
+                      <Link href={`/competitors/${angle.basedOn.competitorId}`} className="link">
+                        See the report
+                      </Link>
+                    </p>
+                  )}
+                </div>
+              )}
               {v.picture?.status === 'failed' && (
                 <div className={styles.flags} role="note">
                   <TriangleAlert size={15} aria-hidden />
@@ -440,19 +502,33 @@ export function AdStudio({
                 </div>
               )}
               <div className={styles.frame}>
-                {copy ? (
+                {copy && PostPreview && view.kind === 'post' ? (
+                  <PostPreview
+                    text={postText(v, view.place)}
+                    fromCopy={!v.posts?.[view.place]}
+                    creative={v.creative}
+                    image={v.imageUrl}
+                    brand={brand}
+                    editable={editable}
+                    onText={(text) => update(v.id, (x) => withPost(x, view.place, text))}
+                    onCreative={(text) => update(v.id, (x) => ({ ...x, creative: { ...x.creative, text } }))}
+                    video={video}
+                  />
+                ) : copy ? (
                   <Preview
                     copy={copy}
                     creative={v.creative}
                     image={v.imageUrl}
                     brand={brand}
-                    editable={isSelected && busy === null && !state.waiting}
-                    onCopy={(field, value) => update(v.id, (x) => {
-                      const current = x.copy[platform];
-                      return current ? { ...x, copy: { ...x.copy, [platform]: { ...current, [field]: value } } } : x;
-                    })}
+                    editable={editable}
+                    onCopy={(field, value) =>
+                      update(v.id, (x) => {
+                        const current = x.copy[platform];
+                        return current ? { ...x, copy: { ...x.copy, [platform]: { ...current, [field]: value } } } : x;
+                      })
+                    }
                     onCreative={(text) => update(v.id, (x) => ({ ...x, creative: { ...x.creative, text } }))}
-                    video={clip && wholeClip ? { clip: clip.clip, url: clip.url, edit: v.videoEdit ?? wholeClip, brand: frameBrand, label: `Variant ${v.label}` } : undefined}
+                    video={video}
                   />
                 ) : (
                   <p className={cx('muted small', styles.noCopy)}>No {PLATFORM_LABEL[platform]} copy in this variant.</p>

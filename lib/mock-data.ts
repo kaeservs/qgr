@@ -3,7 +3,7 @@
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
 
-import type { AdSet, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
+import type { AdSet, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
 import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
@@ -477,6 +477,14 @@ export const adSets: AdSet[] = [
             headline: 'Your EB-5 path, mapped out',
           },
         },
+        posts: {
+          facebook:
+            "EB-5 shouldn't feel like a maze.\n\nMost families we meet start with the same question: where do we even begin? The path to a U.S. Green Card through EB-5 comes down to six steps, from choosing a project to filing, and each one has a clear job.\n\nWe walk you through all six in plain English, with an independent due-diligence file on every project we suggest. Processing times are estimates, so we plan around them together.\n\nBook a free consultation and see your path mapped out.",
+          instagram:
+            "Your Green Card path, mapped out. 🗺️\n\nSix steps. Plain English. No hype.\n\nFrom choosing a project to filing, we show you what each step is for, and the independent due diligence behind every project we suggest.\n\nProcessing times are estimates: we plan around them with you.\n\nBook a free consultation (link in bio).\n\n#EB5 #GreenCard #USImmigration #InvestorVisa #FamilyMove",
+          linkedin:
+            "EB-5 is a big decision, and it deserves a clear map.\n\nWhen professionals ask us where to start, we lay out the six steps to a U.S. Green Card through EB-5: choosing a project, checking it, investing, filing, waiting on processing, and the conditional residence that follows.\n\nEvery project we suggest comes with an independent due-diligence report you can read first. Processing times are estimates, and we plan around them with you, not around promises.\n\nIf you are weighing EB-5 for your family, a free consultation is the simplest first step.\n\n#EB5 #Immigration #H1B",
+        },
       },
       {
         id: 'v-q4-b',
@@ -501,6 +509,14 @@ export const adSets: AdSet[] = [
             headline: 'EB-5 timing for families',
           },
         },
+        posts: {
+          facebook:
+            "Your children's ages can shape your EB-5 options.\n\nIf a child is close to 21, timing matters. Families who plan early keep everyone on one path, and we help you see where your family stands today.\n\nA free call maps your family's timeline. Processing times are estimates, so we build in room for them.\n\nBook a free consultation.",
+          instagram:
+            "Move together. Plan early. 👨‍👩‍👧\n\nIf your kids are close to 21, EB-5 timing matters.\n\nWe map your family's timeline in one free call, with room for the estimates every process has.\n\nBook now (link in bio).\n\n#EB5 #FamilyImmigration #GreenCard #IndianFamilies",
+          linkedin:
+            "For families, EB-5 timing matters.\n\nA child's age can change what is possible, and the families we work with often wish they had started a year earlier. We look at your family's timeline first, then the projects that fit it.\n\nProcessing times are estimates, so the plan leaves room for them.\n\nA free consultation maps your family's timeline early.\n\n#EB5 #Family #Immigration",
+        },
       },
       {
         id: 'v-q4-c',
@@ -524,6 +540,14 @@ export const adSets: AdSet[] = [
             text: "Before you pick an EB-5 project, ask for the due-diligence file. We'll send ours, independently prepared, before you commit.",
             headline: 'Independent due diligence',
           },
+        },
+        posts: {
+          facebook:
+            "Ask for the file. We'll send ours.\n\nEvery EB-5 project we suggest comes with an independent due-diligence report. Ask any advisor for theirs, then compare. EB-5 is an investment with risk, and you should see the work before you commit.\n\nBook a free consultation and we'll send ours.",
+          instagram:
+            "Ask for the file. 📁\n\nEvery EB-5 project we suggest comes with an independent due-diligence report.\n\nAsk any advisor for theirs. Then compare.\n\nEB-5 is an investment with risk: read the work before you commit.\n\n#EB5 #DueDiligence #InvestorVisa #GreenCard",
+          linkedin:
+            "Choosing an EB-5 project is an investment decision, with risk.\n\nThat is why each project we suggest comes with an independent due-diligence report you can read before you commit: who is building it, how the money is used, and what could go wrong.\n\nAsk any advisor for their file, then compare. We will send ours.\n\n#EB5 #DueDiligence #Investing",
         },
       },
     ],
@@ -1051,3 +1075,36 @@ export const notices: Notice[] = [
 
 /** The tracker's next scheduled scan: the Monday after NOW, 9:00 in New York. */
 export const NEXT_SCAN = '2026-10-12T13:00:00Z';
+
+/** What the agents read beside the brand profile: what the team posts about, how, and how its pictures look. */
+export const brandMemory: BrandMemory = {
+  topics: ['EB-5 basics', 'Rural (TEA) projects', 'Families with children near 21', 'From H-1B to a Green Card', 'Checking a project before investing'],
+  postFormats: {
+    facebook: 'Two or three short paragraphs. Open with the question families ask us, end with one clear next step.',
+    instagram: 'A first line that stops the scroll, short lines with a blank line between, one emoji at most, then 4 to 6 hashtags on the last line.',
+    linkedin: 'A strong first line, then short paragraphs written for professionals on H-1B visas. At most three hashtags.',
+    x: 'One idea in plain words. No hashtags.',
+  },
+  pictureStyle: 'Warm natural light: homes, desks, city skylines at dusk. QGR indigo and gold accents. No identifiable faces, no flags, no money.',
+};
+
+/** Posts that work for the team: one pasted, one marked "This worked" on a post that went out. */
+export const brandExamples: BrandExample[] = [
+  {
+    id: 'e-2',
+    place: 'linkedin',
+    text: 'In episode 12, our advisors explain how H-1B professionals use EB-5 to stop tying their future to one employer.',
+    note: 'Best engagement this month: a clear promise of what the episode explains, no hype.',
+    source: 'marked',
+    postId: 'p-5',
+    createdAt: '2026-10-07T09:00:00Z',
+  },
+  {
+    id: 'e-1',
+    place: 'instagram',
+    text: 'Three questions to ask before you pick an EB-5 project:\n\n1. Who checked it, and can I read their report?\n2. Where does the money go, step by step?\n3. What happens if the project is late?\n\nSave this for your first call. 📌\n\n#EB5 #DueDiligence #GreenCard #InvestorVisa',
+    note: 'Saved and shared more than anything we posted this year. Lists work.',
+    source: 'pasted',
+    createdAt: '2026-09-30T15:00:00Z',
+  },
+];

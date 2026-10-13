@@ -4,7 +4,8 @@
 // switched to Apify (Settings, Agents), it also says which page of Meta's Ad
 // Library Apify reads: the library link pasted, or else a search for the
 // competitor's name, kept afterwards to their own ads. The team's direction
-// for the run, if they gave one, goes along to the request.
+// for the run, if they gave one, and who QGR is (its brand memory) go along
+// to the request.
 const ctx = $input.first().json;
 const run = ctx.run;
 const page = run.page && run.page.ok ? run.page : null;
@@ -46,5 +47,6 @@ return [{
     adsSource: adsSource,
     library: library,
     guidance: run.guidance || null,
+    brand: ctx.brand ? { company: ctx.brand.company, offer: ctx.brand.offer, audience: ctx.brand.audience, topics: ctx.brand.topics || [] } : null,
   },
 }];

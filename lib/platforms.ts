@@ -1,10 +1,16 @@
-import type { Goal, Platform } from './types';
+import type { Goal, Place, Platform, Variant } from './types';
 
 export const PLATFORM_LABEL: Record<Platform, string> = {
   meta: 'Meta',
   linkedin: 'LinkedIn',
   x: 'X',
 };
+
+/** The platform whose ad copy a place's post stands beside: Meta's for Facebook and Instagram, LinkedIn's for LinkedIn. */
+export const PLATFORM_OF = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' } as const satisfies Record<Place, Platform>;
+
+/** What goes out to a place: the variant's post for it, in full, or else its ad copy. schedule_post does the same. */
+export const postText = (variant: Pick<Variant, 'copy' | 'posts'>, place: Place): string => variant.posts?.[place] ?? variant.copy[PLATFORM_OF[place]]?.text ?? '';
 
 export const GOAL_LABEL: Record<Goal, string> = {
   consultations: 'Book consultations',

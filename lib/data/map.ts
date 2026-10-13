@@ -8,7 +8,7 @@ import { CLIP_PATH, runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
-import { GOALS, PLACES, PLATFORMS } from '../types';
+import { EXAMPLE_PLACES, GOALS, PLACES, PLATFORMS } from '../types';
 import { PLACE_LABEL } from '../post-input';
 import type {
   ActivityItem,
@@ -20,6 +20,8 @@ import type {
   Agent,
   AgentSettings,
   AngleShare,
+  BrandExample,
+  BrandMemory,
   BrandProfile,
   ChannelPlan,
   Clip,
@@ -153,6 +155,7 @@ export interface AdSetRow {
     picture_error: string | null;
     picture_requested_at: string | null;
     copy: Json;
+    posts: Json;
     warnings: string[];
     approved_at: string | null;
     video_edit: Json | null;
@@ -188,7 +191,11 @@ export interface PostRow {
     results_error: string | null;
   }[];
   ad_variants: One<{ label: string; angle: string; ad_set_id: string; ad_sets: One<{ title: string }> }>;
+  /** The places of this post kept in brand memory as posts that work. */
+  brand_examples?: { place: string; removed_at: string | null }[];
 }
+
+export type BrandExampleRow = Pick<Database['public']['Tables']['brand_examples']['Row'], 'id' | 'place' | 'text' | 'note' | 'source' | 'post_id' | 'created_at'>;
 
 // ---------------------------------------------------------------- values
 
@@ -221,6 +228,17 @@ function channelsOf(json: Json): ChannelPlan[] {
       ? [{ platform: c.platform, share: c.share, role: typeof c.role === 'string' ? c.role : '', format: typeof c.format === 'string' ? c.format : '' }]
       : [],
   );
+}
+
+/** A variant's posts keyed by place; anything that is not words is left out. */
+export function postsOf(json: Json): Partial<Record<Place, string>> {
+  const posts: Partial<Record<Place, string>> = {};
+  if (!isRecord(json)) return posts;
+  for (const place of PLACES) {
+    const text = json[place];
+    if (typeof text === 'string' && text.trim()) posts[place] = text;
+  }
+  return posts;
 }
 
 /** Copy keyed by platform; any field that is not text is left out. */
@@ -459,6 +477,7 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
           angle: v.angle,
           creative: { text: v.creative_text, style: isOneOf(STYLES, v.creative_style) ? v.creative_style : 'arcs' },
           copy: copyOf(v.copy),
+          ...(Object.keys(postsOf(v.posts)).length > 0 ? { posts: postsOf(v.posts) } : {}),
           ...(v.approved_at ? { approved: true } : {}),
           warnings: v.warnings,
           ...(imageUrl ? { imageUrl } : {}),
@@ -492,6 +511,31 @@ export const toBrandProfile = (row: BrandRow): BrandProfile => ({
   pageName: row.page_name,
   xHandle: row.x_handle,
 });
+
+/** What the agents read beside the profile. A picture style left empty is an empty string. */
+export function toBrandMemory(row: BrandRow): BrandMemory {
+  const formats: BrandMemory['postFormats'] = {};
+  if (isRecord(row.post_formats)) {
+    for (const place of EXAMPLE_PLACES) {
+      const note = row.post_formats[place];
+      if (typeof note === 'string' && note.trim()) formats[place] = note;
+    }
+  }
+  return { topics: row.topics, postFormats: formats, pictureStyle: row.picture_style ?? '' };
+}
+
+export function toBrandExample(row: BrandExampleRow): BrandExample | null {
+  if (!isOneOf(EXAMPLE_PLACES, row.place) || (row.source !== 'pasted' && row.source !== 'marked')) return null;
+  return {
+    id: row.id,
+    place: row.place,
+    text: row.text,
+    ...(row.note ? { note: row.note } : {}),
+    source: row.source,
+    ...(row.post_id ? { postId: row.post_id } : {}),
+    createdAt: row.created_at,
+  };
+}
 
 const ROLE_LABEL: Record<TeamRole, string> = { owner: 'Owner', member: 'Team member' };
 
@@ -588,6 +632,7 @@ export function toPost(row: PostRow): Post | null {
                 ? { results: { reach: t.reach, views: t.views, reactions: t.reactions, comments: t.comments, shares: t.shares, clicks: t.clicks, at: t.results_at } }
                 : {}),
               ...(t.results_error ? { resultsError: t.results_error } : {}),
+              ...(row.brand_examples?.some((e) => e.place === t.place && e.removed_at === null) ? { remembered: true } : {}),
             },
           ]
         : [],
