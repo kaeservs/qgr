@@ -47,7 +47,6 @@ export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source()
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
 export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);
-export const transcribeClip: DataSource['transcribeClip'] = (path) => source().transcribeClip(path);
 
 export const getTeamSettings: DataSource['getTeamSettings'] = () => source().getTeamSettings();
 export const saveAgentSettings: DataSource['saveAgentSettings'] = (settings) => source().saveAgentSettings(settings);

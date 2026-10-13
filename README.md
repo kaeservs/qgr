@@ -27,8 +27,15 @@ A video can be a link, or a clip uploaded from your computer: cut it first
 (split, remove parts, trim), and only what you keep is uploaded. Every variant
 of a run from a clip is a video, which the studio's editor cuts, frames for a
 platform (1:1, 4:5, 9:16, 16:9), puts the words, captions, logo and an end card
-on, and exports to MP4, all in the browser. With a Deepgram key, what is said
-in an uploaded clip is transcribed for you to read over, and becomes captions.
+on, and exports to MP4, all in the browser. What is said in an uploaded clip is
+heard on your own computer (Whisper, in the browser, free) for you to read
+over, and becomes captions.
+
+Every ad but a clip's can have a picture: in the studio, open **Picture…**,
+write what to draw (or keep the Content Agent's prompt) and make one. Every
+picture made for a variant is kept to choose again, and each keeps to the
+picture style in Brand memory. Pictures are made by Cloudflare Workers AI's
+FLUX.1 schnell on its free daily allowance once it is chosen in Settings.
 
 ## Status
 
@@ -65,8 +72,8 @@ them to the team in the SQL editor:
 Runs start once `N8N_RUN_WEBHOOK_SECRET` is set and the same secret is in
 n8n's "QGR webhook secret" credential. Posts, scans and pictures need the "QGR
 · Publisher", "QGR · Scheduled scans", "QGR · Post results" and "QGR ·
-Pictures" workflows published in n8n; a clip's transcript needs
-`DEEPGRAM_API_KEY`.
+Pictures" workflows published in n8n. A clip's transcript needs nothing: it is
+made in the browser.
 
 To post for real, in n8n: a Meta app whose Page access token can publish to
 the Facebook Page and its Instagram professional account (`pages_manage_posts`,
@@ -74,9 +81,12 @@ the Facebook Page and its Instagram professional account (`pages_manage_posts`,
 LinkedIn app with the Community Management API (`w_organization_social`) for
 the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" and "QGR ·
 Post results" with the steps its note lists, and put the Pages' IDs in
-Settings, Where posts go. To make pictures for real, add the image model's key
-to n8n as a credential and replace the stand-in in "QGR · Pictures" the same
-way. To read competitors' real ads, add an Apify token to n8n as the "Apify
+Settings, Where posts go. To make pictures for real (free): in Cloudflare, copy
+the account ID and create an API token from the Workers AI template; in n8n,
+create a Bearer Auth credential named "Cloudflare Workers AI" holding the token
+and attach it to "Cloudflare: FLUX.1 schnell" in "QGR · Pictures"; then in
+Settings, Agents, choose Cloudflare Workers AI and paste the account ID. To
+read competitors' real ads, add an Apify token to n8n as the "Apify
 token" credential (Templated Custom Auth, `Authorization: Bearer {{api_key}}`),
 attach it to "Apify: their Meta ads" in the tracker, and switch Settings,
 Agents, Competitor ads to Apify.
@@ -91,7 +101,6 @@ before deploying the code that needs it.
     app/api/runs/        starts a run: reads its link, Supabase, then n8n
     app/api/link-check/  reads a pasted link as it is typed
     app/api/uploads/     signs a link for uploading a clip straight to Storage
-    app/api/transcribe/  what is said in an uploaded clip (Deepgram)
     app/api/post-media/  signs a link for uploading the file a post goes out with
     proxy.ts             sends anyone signed out to /sign-in
     components/          shell, home, runs, competitors, strategy, content, posts, settings, ui
@@ -106,6 +115,9 @@ before deploying the code that needs it.
     lib/creative/        draws an ad's picture for posting, as the studio shows it
     lib/page/            reads a link: safe fetching, and the page's main text
     lib/video/           video edits, drawing a frame, making the file, uploading
+    lib/speech.ts        what is said in a clip, heard in the browser (Whisper)
+    lib/transcribe.ts    Whisper's timed passages as caption lines
+    public/speech/       the worker Whisper runs in
     components/video/    the cutter, the timeline, the studio's video editor
     public/sample/       the sample data's clip and picture
     test/                PGlite with Supabase's roles and storage; n8n's sandbox

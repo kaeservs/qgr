@@ -24,10 +24,12 @@ Meta's Ad Library (Competitor ads below). An approved variant is posted now or a
 Instagram and the LinkedIn Page, and the whole path runs (the file made in the
 browser, the queue in Supabase, n8n's publisher), but n8n's three posting
 steps are stand-ins that post nothing and say so (Posting below). An ad's
-picture is asked for in the studio, or by every new ad, and goes through n8n's
-"QGR · Pictures" to a stand-in that makes none, so the studio says so and
-keeps the drawn design (Pictures below). A clip's transcript needs
-`DEEPGRAM_API_KEY`; without it the team types what is said. Not built: paid
+picture is asked for in the studio from a prompt, or by every new ad, and goes
+through n8n's "QGR · Pictures" to the image model chosen in Settings: the
+stand-in, which makes none and says so, or Cloudflare Workers AI's FLUX.1
+schnell, free each day, once its token is in n8n (Pictures below). A clip's
+transcript is heard in the browser, on the team's own computer (Whisper, free;
+Video below). Not built: paid
 ads (Meta Ads Manager, LinkedIn Campaign Manager) and posting to X, whose API
 is paid; X copy is for pasting.
 
@@ -50,7 +52,7 @@ posts that work (Brand memory below).
             ── pages read lib/data.ts → Supabase as the signed-in teammate (RLS)
             ── POST /api/link-check → reads a pasted link as it is typed (lib/page)
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
-            ── POST /api/transcribe → Deepgram reads the clip from a link signed for 15 min
+            ── a clip's words: heard in the browser (lib/speech.ts, public/speech/whisper-worker.js)
             ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
                when the team gave a direction → POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
@@ -59,8 +61,9 @@ posts that work (Brand memory below).
                save_variant_words(), approve_variant(), save_video_edit(), update_brand_profile(),
                update_brand_memory(), add_brand_example(), remove_brand_example(), remember_post(),
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
-               request_picture(), remove_picture(), update_agent_settings(),
-               set_pictures_auto(), set_ads_source(), update_publishing_settings(),
+               ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
+               update_agent_settings(), set_pictures_auto(), set_pictures_model(),
+               set_ads_source(), update_publishing_settings(),
                set_competitor_tracked()
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
         asking pipeline_next() before each of the last two
@@ -122,12 +125,14 @@ posts that work (Brand memory below).
   `update_brand_memory`, `add_brand_example`, `remove_brand_example`, `remember_post`,
   `continue_run` and `report_continue_failure`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
-  `remove_picture`, `update_agent_settings`, `set_pictures_auto`,
+  `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
+  `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
   `set_ads_source`, `update_publishing_settings`, `set_competitor_tracked`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
-  `start_due_scans`, `publisher_*`, `results_*`, `picture_*`) is granted to
+  `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
+  `prune_pictures`) is granted to
   the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
@@ -142,7 +147,8 @@ posts that work (Brand memory below).
   `remove_media`), since each platform keeps its own copy.
 - An ad's picture lives in the private bucket `ad-pictures` (10 MB, PNG, JPEG
   or WebP) at `pictures/{variant}/{uuid}.{ext}`, uploaded by n8n alone. A
-  member reads any, and removes only one no variant shows.
+  member reads any, and removes only one no variant shows and no variant keeps
+  to choose again (`variant_pictures`); n8n removes those past the eight kept.
 - The tests run every migration in PGlite, with stand-ins for Supabase's
   roles, `auth.uid()` and storage (`test/supabase.ts`):
   `supabase/access.test.ts` checks who can read and change what,
@@ -221,8 +227,12 @@ posts that work (Brand memory below).
   the publisher's and the pictures' webhooks), `Apify token` (Custom Auth: JSON
   `{"headers": {"Authorization": "Bearer <token>"}}`, allowed domain
   `api.apify.com`; an existing plain Custom Auth credential is fine on the
-  HTTP node, only creating one from a workflow is refused). The Meta and LinkedIn tokens and the image model's key will be n8n
-  credentials too; nothing that posts or draws is kept in Supabase or the app.
+  HTTP node, only creating one from a workflow is refused), `Cloudflare
+  Workers AI` (Bearer Auth: an API token made from Cloudflare's Workers AI
+  template, on "Cloudflare: FLUX.1 schnell" in Pictures; until it is attached
+  that step does not run, and the studio says so). The Meta and LinkedIn tokens
+  will be n8n credentials too; nothing that posts or draws is kept in Supabase
+  or the app (the Cloudflare account ID is: it is an ID, not a secret).
   A node holds its credential by id, so renaming one in n8n changes nothing
   (the webhook secret is "Header Auth account 2", on all three webhooks).
 - A node names its credential only once that credential exists in n8n: a
@@ -231,9 +241,9 @@ posts that work (Brand memory below).
 - Placeholders. The tracker's "Sample ads" returns the same example ads for
   every competitor, in the shape "Read Apify's ads" gives, and the report is
   marked `data_source: placeholder`; it runs while the team's ads source is
-  sample. "Image model (stand-in)" in Pictures makes nothing and answers
-  `stand_in: true`, so the studio says no picture was made and draws the
-  branded design. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
+  sample. "Image model (stand-in)" in Pictures is the way taken while pictures
+  are set to the stand-in: it makes nothing and answers `stand_in: true`, so
+  the studio says no picture was made. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
   (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
   the dashboard says nothing went out; their three "results (stand-in)" twins
   in Post results read nothing. Each is replaced by real steps with the same
@@ -282,11 +292,13 @@ posts that work (Brand memory below).
 
 - `team_settings` is one row: the team's time zone, the two switches
   (`strategist_auto`, `content_auto`), whether every new ad asks for a picture
-  (`pictures_auto`), where the tracker reads ads (`ads_source`), the scan
-  schedule (`scan_every` off, day or week, with `scan_day` and `scan_hour`)
-  and the Pages posts go to. Settings changes it through
-  `update_agent_settings`, `set_pictures_auto`, `set_ads_source` and
-  `update_publishing_settings`; Home's agent cards flip the same switches.
+  (`pictures_auto`), what makes pictures (`pictures_model`: stand-in or
+  cloudflare, with `cloudflare_account`), where the tracker reads ads
+  (`ads_source`), the scan schedule (`scan_every` off, day or week, with
+  `scan_day` and `scan_hour`) and the Pages posts go to. Settings changes it
+  through `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
+  `set_ads_source` and `update_publishing_settings`; Home's agent cards flip
+  the same switches.
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
   Content Agent's off, every strategy waits before the ads. The pipeline asks
@@ -394,35 +406,57 @@ posts that work (Brand memory below).
 
 - Every ad but a clip's carries an `image_prompt` from the Content Agent (the
   scene only: no words, the brand's colours, no identifiable people, no
-  flags). A picture is made from it when someone asks in the studio
-  (`request_picture`: Make a picture, Try another picture) or, with the
-  team's switch on (Settings, Agents), for every new ad as it is saved (a
-  trigger on `ad_variants`). The Content Agent makes none itself: a picture
-  takes its own time, and a run should neither wait for one nor fail with it.
+  flags). The studio's Picture dialog (`PictureDialog`) shows it to edit and
+  makes a picture from what is written there (`ask_for_picture`: the prompt
+  becomes the variant's, up to 1,200 characters); with the team's switch on
+  (Settings, Agents), every new ad asks for one as it is saved (a trigger on
+  `ad_variants`). The Content Agent makes none itself: a picture takes its
+  own time, and a run should neither wait for one nor fail with it.
+- Every picture made for a variant is kept to choose again (`variant_pictures`,
+  newest first, eight a variant): the dialog shows them, and picking one shows
+  it (`use_picture`; another picture takes the approval back, and one being
+  made is stopped). Stop (`stop_picture`) keeps what the variant shows; Use the
+  design (`remove_picture`) goes back to the drawn design and keeps the
+  picture to choose again, so no file is handed back. Past eight, the oldest
+  the variant does not show is marked (`removed_at`) and its file handed back
+  for n8n to remove (`prune_pictures`).
 - "QGR · Pictures" takes the asks (`picture_take_due`, claimed with
   `skip locked`; a claim lost for ten minutes is taken again, three tries at
   most) at once when the app pings `qgr-picture`, otherwise within five
-  minutes. Each goes to the image model with the path to upload to, and
-  `picture_finish` records it: the picture shows under the ad's words from
-  then on, and an approval is taken back. `picture_fail` keeps the reason. A
-  picture that arrives after its ask was stopped, or after the variant was
-  scheduled, is handed back for n8n to remove (`remove_picture`), never the
-  picture the variant shows.
+  minutes, each with its prompt, the brand's picture style (`look`), the
+  team's image model and the path to upload to. `picture_finish` keeps every
+  picture that arrives: one that answers the open ask is shown under the ad's
+  words from then on and takes an approval back; one for a variant scheduled
+  meanwhile, or whose ask was stopped, only joins the others (what was
+  approved is what goes out). The same answer twice is kept once.
+  `picture_fail` keeps the reason.
+- The image model is the team's choice in Settings, Agents (`pictures_model`,
+  `set_pictures_model`): the stand-in, or Cloudflare Workers AI's FLUX.1
+  schnell on the account named there. "Real pictures?" sends a Cloudflare ask
+  through "Write the prompt" (the scene, then the brand's picture style, then
+  the rules: no text, no real or identifiable people, no flags; 2,048
+  characters at most, only an agent's long scene is shortened), the call
+  (Bearer credential), "Read the picture" (the kind from its first bytes, the
+  path given that extension; Cloudflare's refusals in plain words: the day's
+  free allowance used up, the token, the account), "To a file" and "Upload to
+  Storage", then records it. Free: 10,000 neurons a day, about 170 pictures at
+  1024×1024, and on Cloudflare's free plan nothing is ever charged: past that a
+  picture fails and says so until 00:00 UTC. The workflow keeps no execution
+  data for runs that succeed, so pictures do not pile up in n8n.
 - The studio shows pictures through links the server signs as the teammate
-  for an hour (one `createSignedUrls` call for the page). Use the design
-  (`remove_picture`) goes back to the drawn design and hands back the file
-  for the app to remove. A picture asked for and not made in ten minutes may
-  be asked for again.
+  for an hour (one `createSignedUrls` call for the ad set, the kept pictures
+  with it; only the studio reads them). A picture asked for and not made in
+  ten minutes may be asked for again.
 - The posted image is drawn by the same function as before
   (`lib/creative/draw.ts`): a picture covers the frame, cropped about its
   middle, under a 38% black wash (the studio's `brightness(0.62)`), and the
   words are gold on it in every style. The publish dialog loads it with CORS
   so the canvas can still be exported.
-- Until an image model's key is in, "Image model (stand-in)" makes nothing
-  and answers `stand_in: true`: the ask ends, the studio says no picture was
-  made, and the design is drawn. The sample data has one picture
-  (`public/sample/picture-q4.jpg`, marked "Sample picture"), and asking for
-  one there says there is no image model to ask.
+- While pictures are set to the stand-in, "Image model (stand-in)" makes
+  nothing and answers `stand_in: true`: the ask ends and the studio says no
+  picture was made and where to choose a model. The sample data has one
+  picture (`public/sample/picture-q4.jpg`, marked "Sample picture"), and
+  asking for one there says there is no image model to ask.
 
 ### Video (`lib/video/`, `components/video/`)
 
@@ -447,14 +481,27 @@ posts that work (Brand memory below).
   removed again (`DELETE /api/uploads`), so Free's 1 GB of storage holds
   clips that runs use. The export downloads the clip once, renders it and
   hands the file to the person; it is never stored.
-- A clip's transcript (`lib/transcribe.ts`, `/api/transcribe`): once a clip
-  has uploaded, Deepgram fetches it from a link signed for 15 minutes
-  (`nova-3`, `mip_opt_out` so the clip is not theirs to learn from) and the
-  words come back as caption-sized lines in the clip's seconds. They fill the
-  run's notes when those are empty (the team reads them over before the run
-  starts), are stored with the clip in `runs.media.transcript`, and the editor
-  turns the ones in the kept parts into captions ("From the clip's speech").
-  Nothing else is kept. Without `DEEPGRAM_API_KEY` the team types what is said.
+- A clip's transcript is heard in the browser, on the team's own computer, so
+  it is free and the clip's sound goes nowhere (`lib/speech.ts`). Once the
+  clip is ready, the page decodes the file it uploaded to 16 kHz, one channel
+  (a silent clip stops there and says so), and a module worker
+  (`public/speech/whisper-worker.js`) runs Whisper base
+  (`onnx-community/whisper-base`, many languages) with transformers.js 4.3.0
+  from jsDelivr, pinned to a release at least two weeks old: on WebGPU where
+  the browser has it, WebAssembly otherwise, and once more on WebAssembly if
+  WebGPU fails. The model (about 80 MB) comes from Hugging Face the first time
+  and the browser keeps it; the worker ends after each clip, giving its memory
+  back. Whisper's timed passages become caption-sized lines in the clip's
+  seconds (`linesFromChunks` in `lib/transcribe.ts`, tested: 42 characters, a
+  sentence's end, time shared by length, noise like [Music] and a line
+  repeated over a silence left out, nothing past the clip's end). They fill
+  the run's notes when those are empty (the team reads them over before the
+  run starts), are stored with the clip in `runs.media.transcript`, and the
+  editor turns the ones in the kept parts into captions ("From the clip's
+  speech"). A failure says why (Try again where another try can help) and the
+  team types instead. This sandbox cannot reach jsDelivr or Hugging Face: the
+  browser check routes the library to a stand-in that reports what it was
+  given.
 - The sample data has a 15-second branded clip (`public/sample`, marked
   "Sample clip" in the picture, MP4 and a WebM for browsers that can't play
   H.264) and a video ad set made from it. A clip uploaded on sample data is

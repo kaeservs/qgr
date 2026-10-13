@@ -9,7 +9,6 @@ import { picturesConfig, pipelineConfig, publisherConfig } from '../supabase/con
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
-import { transcribe, transcriptionKey } from '../transcribe';
 import {
   toActivity,
   toAdSet,
@@ -61,8 +60,6 @@ const POST_BUCKET = 'post-media';
 const PICTURE_BUCKET = 'ad-pictures';
 /** Long enough to read a page and post from it. */
 const PICTURE_SECONDS = 60 * 60;
-/** Long enough for Deepgram to fetch a clip, no longer. */
-const TRANSCRIBE_SECONDS = 15 * 60;
 /** Long enough for a working session in the studio; a reload signs a fresh one. */
 const PLAY_SECONDS = 6 * 60 * 60;
 
@@ -336,18 +333,6 @@ export const liveData: DataSource = {
       return { ok: false, status: 500, error: 'The clip could not be removed.' };
     }
     return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That clip is in use or already gone.' };
-  },
-
-  transcribeClip: async (path) => {
-    const key = transcriptionKey();
-    if (!key) return { ok: false, status: 503, error: 'Transcripts aren’t connected yet (DEEPGRAM_API_KEY), so type what is said.' };
-    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, TRANSCRIBE_SECONDS);
-    if (error) {
-      console.error('Signing a clip link for its transcript failed', error);
-      return { ok: false, status: 404, error: 'That clip can’t be found.' };
-    }
-    const result = await transcribe(data.signedUrl, key);
-    return result.ok ? { ok: true, value: { lines: result.lines }, sample: false } : result;
   },
 
   getTeamSettings: () => teamSettings(),

@@ -28,7 +28,6 @@ import type {
   StageKey,
   Strategy,
   TeamSettings,
-  TranscriptLine,
   User,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
@@ -125,8 +124,6 @@ export interface DataSource {
   createClipUpload(extension: ClipExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes an uploaded clip that no run uses: one cut again or taken away before the run started. */
   deleteClipUpload(path: string): Promise<Saved>;
-  /** What is said in an uploaded clip, line by line, from a speech-to-text service. */
-  transcribeClip(path: string): Promise<Saved<{ lines: TranscriptLine[] }>>;
 
   getTeamSettings(): Promise<TeamSettings>;
   saveAgentSettings(settings: AgentSettings): Promise<Saved>;

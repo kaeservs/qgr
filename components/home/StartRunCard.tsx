@@ -67,7 +67,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>('link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
   const [notes, setNotes] = useState('');
-  const transcript = useClipTranscript(clipStatus);
+  const [transcript, hearAgain] = useClipTranscript(clipStatus);
   const heard = transcript.state === 'done' ? transcriptText(transcript.lines) : '';
   // What was said fills the notes once, if they are empty: the team reads it over before the run starts.
   useEffect(() => {
@@ -253,10 +253,16 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
               />
               <span className="muted small">{notes.trim().length < MIN_NOTES ? `At least ${MIN_NOTES} characters.` : 'The strategist and the Content Agent work from these notes.'}</span>
             </label>
+            {transcript.state === 'loading' && (
+              <p className={styles.heard} aria-live="polite">
+                <LoaderCircle size={14} className="spin" aria-hidden />
+                Getting the speech model ready, the first time only{transcript.share !== null ? `: ${Math.round(transcript.share * 100)}%` : '…'}
+              </p>
+            )}
             {transcript.state === 'working' && (
               <p className={styles.heard} aria-live="polite">
                 <LoaderCircle size={14} className="spin" aria-hidden />
-                Listening to the clip…
+                Listening to the clip on this computer{transcript.share !== null ? `: ${Math.round(transcript.share * 100)}%` : '…'} You can write the notes meanwhile.
               </p>
             )}
             {transcript.state === 'done' && (
@@ -270,7 +276,16 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
                 )}
               </p>
             )}
-            {transcript.state === 'failed' && <p className={cx('muted small', styles.heard)}>{transcript.error}</p>}
+            {transcript.state === 'failed' && (
+              <p className={cx('muted small', styles.heard)}>
+                {transcript.error}
+                {transcript.retry && (
+                  <button type="button" className="link small" onClick={hearAgain}>
+                    Try again
+                  </button>
+                )}
+              </p>
+            )}
             <div className={styles.clipGo}>
               <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || clipStatus.state === 'working'} aria-busy={busy || clipStatus.state === 'working'}>
                 {busy ? 'Starting…' : clipStatus.state === 'working' ? clipStatus.label : 'Start run'}
