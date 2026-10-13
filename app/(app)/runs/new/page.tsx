@@ -9,7 +9,7 @@ import styles from '@/components/runs/runs.module.css';
 
 export const metadata: Metadata = { title: 'New run' };
 
-const TABS: readonly StartTab[] = ['competitor', 'custom', 'upload'];
+const TABS: readonly StartTab[] = ['competitor', 'custom'];
 
 export default async function NewRunPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;

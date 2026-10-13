@@ -1,5 +1,6 @@
 import 'server-only';
 import { cache } from 'react';
+import { ownPhotoPath } from './profile-input';
 import { supabaseConfig } from './supabase/config';
 import { getSupabase } from './supabase/server';
 
@@ -9,6 +10,8 @@ export interface Viewer {
   id: string;
   email: string;
   name: string;
+  /** The profile photo's path in the profile-photos bucket, if they set one. */
+  photoPath: string | null;
   /** Null for an account that is not on the team: it can sign in but sees nothing. */
   role: TeamRole | null;
 }
@@ -38,7 +41,8 @@ export const getViewer = cache(async (): Promise<Viewer | null> => {
   const meta: Record<string, unknown> = claims.user_metadata ?? {};
   const given = [meta.full_name, meta.name].find((v): v is string => typeof v === 'string' && v.trim() !== '');
   const role = member?.role === 'owner' || member?.role === 'member' ? member.role : null;
-  return { id: claims.sub, email, name: given?.trim() ?? fromEmail(email), role };
+  const photoPath = ownPhotoPath(claims.sub, meta.photo_path) ? meta.photo_path : null;
+  return { id: claims.sub, email, name: given?.trim() ?? fromEmail(email), photoPath, role };
 });
 
 /**

@@ -15,7 +15,6 @@ export interface NewRunInput {
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
-export const MAX_UPLOADS = 10;
 export const MIN_EXCERPT = 50;
 export const MAX_EXCERPT = 20_000;
 /** What is said in a clip: the agents' only way to know, so it can't be a word or two. */
@@ -111,15 +110,9 @@ function parseSource(raw: unknown): ParseResult<RunSource> {
       if (!url) return { ok: false, error: 'Paste a full website or ad link, like horizonvisa.com.' };
       return { ok: true, value: { kind: 'competitor', input: raw.input, url } };
     }
-    if (raw.input === 'upload') {
-      const name = typeof raw.name === 'string' ? raw.name.trim() : '';
-      if (!name) return { ok: false, error: 'Name the competitor these ads are from.' };
-      if (name.length > MAX_TITLE) return { ok: false, error: 'That name is too long.' };
-      const files = Array.isArray(raw.files) ? raw.files.filter((f): f is string => typeof f === 'string' && f.trim() !== '') : [];
-      if (files.length === 0) return { ok: false, error: 'Add at least one ad to upload.' };
-      if (files.length > MAX_UPLOADS) return { ok: false, error: `Upload up to ${MAX_UPLOADS} ads at a time.` };
-      return { ok: true, value: { kind: 'competitor', input: 'upload', name, files } };
-    }
+    // Uploaded ads were only ever their file names: the tracker never saw them. A
+    // link to their ads in Meta's Ad Library reads the real ones (runs from before keep showing).
+    if (raw.input === 'upload') return { ok: false, error: 'Uploading their ads is gone: paste their website, or the link to their ads in Meta’s Ad Library.' };
     return { ok: false, error: 'Unknown competitor input.' };
   }
 

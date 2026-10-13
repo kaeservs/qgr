@@ -1,13 +1,13 @@
 'use client';
 
-import { ArrowRight, AudioLines, FileText, LoaderCircle, Mic, Newspaper, Paperclip, Radar, Upload, Video, WandSparkles, X as Close } from 'lucide-react';
+import { ArrowRight, AudioLines, FileText, LoaderCircle, Mic, Newspaper, Radar, Video, WandSparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
-import { competitorInputFor, MAX_GUIDANCE, MAX_UPLOADS, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
+import { competitorInputFor, MAX_GUIDANCE, MIN_EXCERPT, MIN_NOTES, normalizeUrl } from '@/lib/run-input';
 import { transcriptText } from '@/lib/transcribe';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { AdsSetting, CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
@@ -19,12 +19,11 @@ import { LinkStatus, useLinkCheck } from './LinkCheck';
 import { useToast } from '../ui/Toast';
 import styles from './home.module.css';
 
-export type StartTab = 'competitor' | 'custom' | 'upload';
+export type StartTab = 'competitor' | 'custom';
 
 const TABS = [
   { key: 'competitor', label: 'Track competitor', icon: Radar },
   { key: 'custom', label: 'Custom run', icon: WandSparkles },
-  { key: 'upload', label: 'Upload ads', icon: Upload },
 ] as const;
 
 const SOURCES = [
@@ -34,29 +33,23 @@ const SOURCES = [
   { key: 'text', label: 'Text', icon: FileText, placeholder: 'Paste the transcript or article' },
 ] as const;
 
-const MAX_FILE_MB = 50;
 
 // What a direction can say, by where the run starts: the agents read it as the team's brief.
 const DIRECTION_EXAMPLE: Record<StartTab, string> = {
   competitor: 'E.g. Look at how they talk about processing times. We want hooks for families whose children are close to 21.',
   custom: 'E.g. This is our founder’s talk at the Dubai seminar. Make ads about the rural projects and lead with the family angle.',
-  upload: 'E.g. These ran on their Instagram this month. Answer the “green card in months” claims honestly, without naming them.',
 };
 
 export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSource = 'sample' }: { initialTab?: StartTab; initialUrl?: string; adsSource?: AdsSetting }) {
   const router = useRouter();
   const toast = useToast();
   const id = useId();
-  const fileInput = useRef<HTMLInputElement>(null);
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const [tab, setTab] = useState<StartTab>(initialTab);
   const [url, setUrl] = useState(initialUrl);
   const [sourceType, setSourceType] = useState<CustomSourceType>('podcast');
   const [excerpt, setExcerpt] = useState('');
-  const [competitorName, setCompetitorName] = useState('');
-  const [files, setFiles] = useState<File[]>([]);
-  const [dragging, setDragging] = useState(false);
   const [title, setTitle] = useState('');
   const [platforms, setPlatforms] = useState<Platform[]>([...PLATFORMS]);
   const [goal, setGoal] = useState<Goal>('consultations');
@@ -96,27 +89,9 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
     }
   }
 
-  function addFiles(list: FileList | null) {
-    if (!list) return;
-    const incoming = [...list];
-    const tooBig = incoming.filter((f) => f.size > MAX_FILE_MB * 1024 * 1024);
-    const wrongType = incoming.filter((f) => !f.type.startsWith('image/') && !f.type.startsWith('video/'));
-    const ok = incoming.filter((f) => !tooBig.includes(f) && !wrongType.includes(f));
-    const merged = [...files, ...ok].slice(0, MAX_UPLOADS);
-    setFiles(merged);
-    if (tooBig.length) setError(`${tooBig[0]?.name} is over ${MAX_FILE_MB} MB.`);
-    else if (wrongType.length) setError('Only images and videos can be uploaded.');
-    else if (files.length + ok.length > MAX_UPLOADS) setError(`Up to ${MAX_UPLOADS} ads at a time.`);
-    else setError(null);
-  }
 
   /** The same rules the server applies, checked first so the person hears about them at once. */
   function buildSource(): RunSource | string {
-    if (tab === 'upload') {
-      if (!competitorName.trim()) return 'Name the competitor these ads are from.';
-      if (files.length === 0) return 'Add at least one ad.';
-      return { kind: 'competitor', input: 'upload', name: competitorName.trim(), files: files.map((f) => f.name) };
-    }
     if (tab === 'custom' && sourceType === 'text') {
       if (excerpt.trim().length < MIN_EXCERPT) return `Paste at least ${MIN_EXCERPT} characters.`;
       return { kind: 'custom', type: 'text', excerpt: excerpt.trim() };
@@ -143,7 +118,6 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
     setError(null);
     setBusy(true);
     try {
-      // Uploaded files go to storage once the backend is connected; for now the run records their names.
       const res = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -237,6 +211,12 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
             ))}
           </div>
         )}
+        {tab === 'custom' && sourceType === 'video' && !clipMode && (
+          <p className="muted small">
+            From a link, the agents read the video’s title and description (on YouTube, the whole description), not what is said in it, and the ads are pictures. For what is said,
+            and ads made from the video itself, upload the clip: it is transcribed on this computer, free.
+          </p>
+        )}
 
         {clipMode ? (
           <div className={styles.clipBlock}>
@@ -295,9 +275,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
           </div>
         ) : (
         <div className={styles.inputRow}>
-          {tab === 'upload' ? (
-            <input className="input" placeholder="Competitor name, e.g. Atlas Residency Group" aria-label="Competitor name" value={competitorName} onChange={(e) => setCompetitorName(e.target.value)} />
-          ) : tab === 'custom' && sourceType === 'text' ? (
+          {tab === 'custom' && sourceType === 'text' ? (
             <textarea className={cx('textarea', styles.excerpt)} placeholder={source.placeholder} aria-label="Text to turn into ads" value={excerpt} onChange={(e) => setExcerpt(e.target.value)} rows={4} />
           ) : (
             <input
@@ -329,48 +307,6 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
           />
         )}
 
-        {tab === 'upload' && (
-          <div
-            className={cx(styles.drop, dragging && styles.dropOn)}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragging(false);
-              addFiles(e.dataTransfer.files);
-            }}
-          >
-            <input ref={fileInput} type="file" accept="image/*,video/*" multiple hidden onChange={(e) => addFiles(e.target.files)} />
-            {files.length === 0 ? (
-              <button type="button" className={styles.dropButton} onClick={() => fileInput.current?.click()}>
-                <Paperclip size={18} aria-hidden />
-                <span>
-                  Drop their ads here, or <span className="link">browse</span>
-                </span>
-                <span className="muted small">Images or videos · up to {MAX_UPLOADS} · {MAX_FILE_MB} MB each</span>
-              </button>
-            ) : (
-              <div className={styles.files}>
-                {files.map((f, i) => (
-                  <span key={`${f.name}-${i}`} className="pill pill-quiet">
-                    {f.name}
-                    <button type="button" className={styles.removeFile} aria-label={`Remove ${f.name}`} onClick={() => setFiles((list) => list.filter((_, j) => j !== i))}>
-                      <Close size={13} aria-hidden />
-                    </button>
-                  </span>
-                ))}
-                {files.length < MAX_UPLOADS && (
-                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => fileInput.current?.click()}>
-                    Add more
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        )}
 
         {error && (
           <p className="error-text" role="alert">

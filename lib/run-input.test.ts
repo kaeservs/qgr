@@ -30,15 +30,11 @@ describe('parseNewRun', () => {
     expect(r).toEqual({ ok: true, value: { source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.com/' }, platforms: ['meta', 'x'], goal: 'consultations' } });
   });
 
-  it('needs a name and at least one file for uploaded ads', () => {
-    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: '', files: ['a.png'] } }).ok).toBe(false);
-    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: 'Atlas', files: [] } }).ok).toBe(false);
-    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: 'Atlas', files: ['a.png'] } }).ok).toBe(true);
-  });
-
-  it('caps uploads at ten files', () => {
-    const files = Array.from({ length: 11 }, (_, i) => `ad-${i}.png`);
-    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: 'Atlas', files } }).ok).toBe(false);
+  it('no longer starts a run from uploaded ads, and says what to paste instead', () => {
+    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: 'Atlas', files: ['a.png'] } })).toEqual({
+      ok: false,
+      error: 'Uploading their ads is gone: paste their website, or the link to their ads in Meta’s Ad Library.',
+    });
   });
 
   it('accepts a custom link and refuses a short pasted text', () => {

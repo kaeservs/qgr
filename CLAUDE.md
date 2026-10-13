@@ -111,6 +111,19 @@ posts that work (Brand memory below).
 - Sign-in is email and password (Supabase Auth): Google sign-in and email links
   both need keys that do not exist yet. Accounts are made by an owner, not by
   sign-up (see Supabase below).
+- Each teammate's Profile (`/profile`, from the sidebar's name or its menu) is
+  theirs alone, through Supabase Auth with their own session: the name
+  (`user_metadata.full_name`), a photo (a 256-pixel square JPEG made in the
+  browser, uploaded by the server as them to the private bucket
+  `profile-photos` at `photos/{user}/{uuid}.jpg`, its path in
+  `user_metadata.photo_path`, shown through a link signed for an hour), the
+  email and the password, and Sign out everywhere. A new email or password
+  asks for the current password first (checked by signing in with it). A new
+  email changes only once the link Supabase sends is followed, which lands on
+  `/auth/confirm` (open to the signed-out; it exchanges the link's code or
+  token); that needs Supabase's emails to reach the address, and the site's
+  `/auth/confirm` in Authentication → URL Configuration. Rules in
+  `lib/profile-input.ts`, tested.
 
 ### Supabase (`supabase/migrations/`)
 
@@ -341,7 +354,8 @@ posts that work (Brand memory below).
   Agents; `set_ads_source`). `agent_begin` hands the choice to the tracker
   alone, and "Real ads?" follows it, so a switch takes effect at the next scan.
 - With Apify, "Plan the scan" names the page of Meta's Ad Library to read: a
-  pasted link to the library as it is; for a website or uploaded ads, a
+  pasted link to the library as it is; for a website (or a run from the
+  uploaded ads the start card once took, which were only ever file names), a
   keyword search for the competitor's name. A link to another library
   (LinkedIn's, X's, Google's) stops the scan and says why: the actor reads
   Meta's only. "Apify: their Meta ads" runs Apify's Facebook Ads Library

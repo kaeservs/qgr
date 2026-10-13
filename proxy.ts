@@ -9,7 +9,7 @@ import { supabaseConfig } from '@/lib/supabase/config';
 // pages, actions and routes check again, and row level security is the last
 // word on what anyone can read.
 
-const OPEN = ['/sign-in'];
+const OPEN = ['/sign-in', '/auth/confirm'];
 
 export async function proxy(request: NextRequest) {
   const supabase = supabaseConfig();

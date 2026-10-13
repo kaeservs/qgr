@@ -143,6 +143,23 @@
   border-top: 1px solid var(--line);
 }
 
+.userLink {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  margin: -4px;
+  padding: 4px;
+  border-radius: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.userLink:hover {
+  background: var(--indigo-50);
+}
+
 .userText {
   flex: 1;
   min-width: 0;

@@ -223,8 +223,8 @@ export default async function RunPage({ params }: Props) {
                   <div className={styles.stageActions}>
                     <GoAheadButton runId={run.id} label={GO_AHEAD[key].again} again />
                     {run.source.kind === 'competitor' && run.source.input === 'upload' ? (
-                      <Link href="/runs/new?type=upload" className="btn btn-quiet btn-sm">
-                        Upload again
+                      <Link href="/runs/new" className="btn btn-quiet btn-sm">
+                        Start from their link
                       </Link>
                     ) : (
                       <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} />

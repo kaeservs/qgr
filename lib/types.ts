@@ -290,6 +290,8 @@ export interface User {
   firstName: string;
   role: string;
   initials: string;
+  /** A link to their profile photo, signed for an hour; none shows their initials. */
+  photoUrl?: string;
 }
 
 /** What every agent reads before it writes. */

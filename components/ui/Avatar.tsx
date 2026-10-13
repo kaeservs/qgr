@@ -11,7 +11,11 @@ function toneFor(name: string) {
   return TONES[h % TONES.length];
 }
 
-export function Avatar({ name, size = 40, brand = false }: { name: string; size?: number; brand?: boolean }) {
+export function Avatar({ name, size = 40, brand = false, src }: { name: string; size?: number; brand?: boolean; src?: string | undefined }) {
+  if (src) {
+    // A plain img: a small signed link that changes every hour.
+    return <img className={cx(styles.avatar, styles.avatarPhoto)} src={src} alt="" width={size} height={size} style={{ width: size, height: size }} />;
+  }
   const initials = name
     .split(/\s+/)
     .filter((w) => /^[A-Za-z0-9]/.test(w))

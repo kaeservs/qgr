@@ -112,6 +112,8 @@ function claude(body: Json, answer: (material: Json, schema: Json) => Json): Jso
   };
 }
 
+const materialOf = (body: Json) => JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n')) as Json;
+
 const trackerAnswer = (material: Json): Json => {
   const ads = material.ads as { id: string }[];
   const ids = ads.map((a) => a.id);
@@ -374,6 +376,53 @@ describe('a competitor run, from their website to three ads', () => {
     // A post in full for each place Meta and LinkedIn post to; X's copy is its post.
     expect(adSet.variants[0]!.posts).toEqual({ facebook: "Variant A's facebook post, in full.", instagram: "Variant A's instagram post, in full.", linkedin: "Variant A's linkedin post, in full." });
     expect(await t.value<number>('select count(*)::int from public.agent_usage where run_id = $1', [runId])).toBe(3);
+  });
+
+  it('hands each agent what the one before it wrote, with the direction and the brand memory, down to the ads', async () => {
+    const page = await readPage(`${siteUrl}/`, { policy: local });
+    const runId = await startRun({ source: { kind: 'competitor', input: 'website', url: 'horizonvisa.example' }, platforms: ['meta', 'linkedin'], goal: 'consultations' }, page);
+    const direction = 'Lead with the family angle. Leave out pricing.';
+    await t.asUser(teammate, async () => {
+      await t.db.query(`select public.set_run_guidance(p_run_id => $1, p_guidance => $2)`, [runId, direction]);
+      await t.db.query(`select public.update_brand_memory(p_topics => $1, p_post_formats => $2, p_picture_style => $3)`, [['EB-5 basics'], JSON.stringify({ linkedin: 'Short paragraphs.' }), 'Warm light.']);
+      await t.db.query(`select public.add_brand_example(p_place => 'linkedin', p_text => 'Three questions to ask before you pick a project.', p_note => 'Saved a lot.')`);
+    });
+
+    const tracker = await runTracker(runId);
+    expect(materialOf(tracker.body)).toMatchObject({ our_brand: { topics: ['EB-5 basics'] }, direction });
+    const hooks = ["Your kids shouldn't age out while you wait.", "The H-1B lottery isn't a plan. This is.", 'What $800K actually buys: a timeline, not a promise.'];
+
+    // The strategist reads the tracker's report as the database stored it, and the team's direction and memory.
+    const strategist = materialOf((await runStrategist(runId)).body);
+    expect(strategist.competitor_report).toMatchObject({ competitor: 'Horizon Visa Partners', summary: 'Age-out urgency runs their longest ads.', insights: expect.arrayContaining(['Video outlasts images.']) });
+    expect((strategist.competitor_report as { winning_hooks: { text: string }[] }).winning_hooks.map((h) => h.text)).toEqual(hooks);
+    expect(strategist.direction).toBe(direction);
+    expect(strategist.posts_that_work).toEqual([expect.objectContaining({ place: 'linkedin', text: 'Three questions to ask before you pick a project.' })]);
+
+    // The Content Agent reads the strategy the strategist wrote, the report it came from, the direction and the memory.
+    const content = materialOf((await runContent(runId)).body);
+    const strategy = content.strategy as { positioning: string; angles: { name: string; why: string; hook: string; based_on_hook: string | null }[] };
+    expect(strategy.positioning).toBe('The EB-5 advisor that shows its working.');
+    expect(strategy.angles.map((a) => [a.name, a.why, a.hook, a.based_on_hook])).toEqual([
+      ['Clarity over hype', 'Their urgency ads keep running; nobody explains the steps.', 'Your EB-5 path, mapped out.', hooks[0]],
+      ['Family first', 'Families decide together.', 'Move together. Plan early.', null],
+      ['Diligence you can check', 'A gap no one covers.', 'Ask for the file.', null],
+    ]);
+    expect((content.competitor_report as { winning_hooks: { text: string }[] }).winning_hooks.map((h) => h.text)).toEqual(hooks);
+    expect(content.direction).toBe(direction);
+    expect(content).toMatchObject({ post_formats: { linkedin: 'Short paragraphs.' }, picture_style: 'Warm light.', brand: { topics: ['EB-5 basics'] } });
+    expect(content.posts_that_work).toEqual([expect.objectContaining({ place: 'linkedin' })]);
+
+    // And it finishes there: the ads hang off the strategy, each on its angle, ready for review.
+    const run = toRun(await dashboardRun(runId));
+    expect(run.status).toBe('review');
+    const stored = toStrategy(await dashboardStrategy(runId));
+    const adSet = toAdSet(await dashboardAdSet(runId));
+    expect(adSet.strategyId).toBe(stored.id);
+    expect(adSet.variants.map((v) => v.angle)).toEqual(stored.angles.map((a) => a.name));
+
+    await t.asUser(teammate, () => t.db.query(`select public.update_brand_memory(p_topics => '{}', p_post_formats => '{}', p_picture_style => '')`));
+    await t.db.query(`update public.brand_examples set removed_at = now()`);
   });
 
   it('reads their real ads through Apify once the team switches, and links each to the library', async () => {
