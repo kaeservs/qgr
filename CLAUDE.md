@@ -445,6 +445,19 @@ posts that work (Brand memory below).
   measured). `agent_begin` hands the strategist the team's recent results; its
   material then carries the best five and weakest three (`our_past_posts`), and
   with none the request is exactly as before.
+- Tests (`?view=tests`, `lib/ab-tests.ts`, pure and tested): every place two
+  or more variants of one ad set went, or go, to for real, the variants side
+  by side with their engagement there (their posts there added up). A variant
+  is marked as leading only when it is ahead of the next best by more than
+  chance would explain at the reach both have had: a two-proportion z-test at
+  95% on engagements per person reached, each having reached at least 100
+  people (`MIN_REACH`). Until then a test says how many people each needs to
+  reach for the gap it shows to count if the rates held (2·1.96²·p(1−p)/(p₁−p₂)²,
+  rounded), or what it waits for (numbers, or a variant still to go out).
+  Computed from the platforms' counts, never by a model; a place that went
+  through a stand-in, failed or was cancelled is no part of a test. On a phone
+  the Posts views scroll within their switch, the current one kept in sight
+  (`ScrollingNav`).
 - Text a client component renders must be the same on the server and in the
   browser: day and month names are spelled out in code (`dayLabel`), because
   Node and Chromium disagree on Intl's short forms (`Mon 28 Sep` against
