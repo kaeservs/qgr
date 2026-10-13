@@ -2,8 +2,9 @@ import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { StartRunCard } from '@/components/home/StartRunCard';
-import type { StartTab } from '@/components/home/StartRunCard';
-import { getTeamSettings } from '@/lib/data';
+import type { StartFromVideo, StartTab } from '@/components/home/StartRunCard';
+import { notesFor } from '@/lib/ai-video';
+import { getAiVideo, getTeamSettings } from '@/lib/data';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import styles from '@/components/runs/runs.module.css';
 
@@ -15,7 +16,10 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const type = typeof params.type === 'string' && (TABS as readonly string[]).includes(params.type) ? (params.type as StartTab) : 'competitor';
   const url = typeof params.url === 'string' ? params.url : '';
-  const settings = await getTeamSettings();
+  const [settings, video] = await Promise.all([getTeamSettings(), typeof params.video === 'string' ? getAiVideo(params.video) : null]);
+  // A finished AI video starts a run as if it were uploaded: the agents read what it shows, in words.
+  const fromVideo: StartFromVideo | undefined =
+    video?.status === 'ready' && video.url ? { url: video.url, name: `${video.title}.mp4`, title: video.title, notes: notesFor(video) } : undefined;
 
   return (
     <div className={`page ${styles.narrow}`}>
@@ -29,7 +33,7 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
           <p className="lead">Start from a competitor, or from your own content.</p>
         </div>
       </header>
-      <StartRunCard initialTab={type} initialUrl={url} adsSource={settings.adsSource} />
+      <StartRunCard initialTab={type} initialUrl={url} adsSource={settings.adsSource} fromVideo={fromVideo} />
       <section className={`card card-pad ${styles.howItWorks}`} aria-labelledby="how">
         <h2 id="how" className="card-title">
           How a run works

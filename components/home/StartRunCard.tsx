@@ -40,26 +40,44 @@ const DIRECTION_EXAMPLE: Record<StartTab, string> = {
   custom: 'E.g. This is our founder’s talk at the Dubai seminar. Make ads about the rural projects and lead with the family angle.',
 };
 
-export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSource = 'sample' }: { initialTab?: StartTab; initialUrl?: string; adsSource?: AdsSetting }) {
+/** A video from the AI video library, to start a run from as if it were uploaded. */
+export interface StartFromVideo {
+  url: string;
+  name: string;
+  title: string;
+  notes: string;
+}
+
+export function StartRunCard({
+  initialTab = 'competitor',
+  initialUrl = '',
+  adsSource = 'sample',
+  fromVideo,
+}: {
+  initialTab?: StartTab;
+  initialUrl?: string;
+  adsSource?: AdsSetting;
+  fromVideo?: StartFromVideo | undefined;
+}) {
   const router = useRouter();
   const toast = useToast();
   const id = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
-  const [tab, setTab] = useState<StartTab>(initialTab);
+  const [tab, setTab] = useState<StartTab>(fromVideo ? 'custom' : initialTab);
   const [url, setUrl] = useState(initialUrl);
-  const [sourceType, setSourceType] = useState<CustomSourceType>('podcast');
+  const [sourceType, setSourceType] = useState<CustomSourceType>(fromVideo ? 'video' : 'podcast');
   const [excerpt, setExcerpt] = useState('');
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(fromVideo?.title ?? '');
   const [platforms, setPlatforms] = useState<Platform[]>([...PLATFORMS]);
   const [goal, setGoal] = useState<Goal>('consultations');
   const [guidance, setGuidance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   // A video is a link to read, or a clip uploaded from here.
-  const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>('link');
+  const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>(fromVideo ? 'upload' : 'link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(fromVideo?.notes ?? '');
   const [transcript, hearAgain] = useClipTranscript(clipStatus);
   const heard = transcript.state === 'done' ? transcriptText(transcript.lines) : '';
   // What was said fills the notes once, if they are empty: the team reads it over before the run starts.
@@ -220,7 +238,7 @@ export function StartRunCard({ initialTab = 'competitor', initialUrl = '', adsSo
 
         {clipMode ? (
           <div className={styles.clipBlock}>
-            <ClipField onStatus={setClipStatus} />
+            <ClipField onStatus={setClipStatus} initial={fromVideo ? { url: fromVideo.url, name: fromVideo.name } : undefined} />
             <label className="field">
               <span className="label">What’s said in the clip?</span>
               <textarea

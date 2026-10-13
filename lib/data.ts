@@ -44,6 +44,8 @@ export const addBrandExample: DataSource['addBrandExample'] = (example) => sourc
 export const removeBrandExample: DataSource['removeBrandExample'] = (id) => source().removeBrandExample(id);
 export const rememberPost: DataSource['rememberPost'] = (postId, place, note) => source().rememberPost(postId, place, note);
 export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source().saveVideoEdit(id, edit);
+export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
+export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
 export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);
