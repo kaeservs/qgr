@@ -278,6 +278,43 @@ describe('toAdSet', () => {
     expect(toAdSet({ id: 's', run_id: 'r', strategy_id: 't', title: 'T', created_at: '2026-10-07T10:00:00Z', ad_variants: [variant('B', { picture_path: path })], runs: null }).variants[0]).not.toHaveProperty('imageUrl');
   });
 
+  it('keeps the pictures made for a variant, newest first, leaving out those past the eight kept', () => {
+    const folder = 'pictures/0d6c5a1e-9b8f-4c3d-a2e1-f0e9d8c7b6a5';
+    const shown = `${folder}/11111111-1a3f-4b5c-8d6e-9f0a1b2c3d4e.jpg`;
+    const older = `${folder}/22222222-1a3f-4b5c-8d6e-9f0a1b2c3d4e.jpg`;
+    const gone = `${folder}/33333333-1a3f-4b5c-8d6e-9f0a1b2c3d4e.jpg`;
+    const signed = (p: string) => (p === gone ? undefined : `https://storage.example/signed/${p.slice(-8)}`);
+    const set = toAdSet(
+      {
+        id: 'set-1',
+        run_id: 'run-1',
+        strategy_id: 'strat-1',
+        title: 'Q4',
+        created_at: '2026-10-07T10:00:00Z',
+        ad_variants: [
+          variant('A', {
+            picture_path: shown,
+            variant_pictures: [
+              { id: 'p-older', path: older, prompt: null, created_at: '2026-10-07T11:00:00Z', removed_at: null },
+              { id: 'p-gone', path: gone, prompt: 'Gone', created_at: '2026-10-07T10:00:00Z', removed_at: '2026-10-08T10:00:00Z' },
+              { id: 'p-shown', path: shown, prompt: 'A harbour at dawn', created_at: '2026-10-07T12:00:00Z', removed_at: null },
+            ],
+          }),
+          variant('B', { variant_pictures: [] }),
+          variant('C'),
+        ],
+        runs: null,
+      },
+      signed,
+    );
+    expect(set.variants[0]?.pictures).toEqual([
+      { id: 'p-shown', url: `https://storage.example/signed/${shown.slice(-8)}`, prompt: 'A harbour at dawn', shown: true, createdAt: '2026-10-07T12:00:00Z' },
+      { id: 'p-older', url: `https://storage.example/signed/${older.slice(-8)}`, shown: false, createdAt: '2026-10-07T11:00:00Z' },
+    ]);
+    expect(set.variants[1]).not.toHaveProperty('pictures');
+    expect(set.variants[2]).not.toHaveProperty('pictures');
+  });
+
   it('reads the run’s clip and each variant’s edit of it, dropping an edit that no longer fits', () => {
     // As the database returns it: plain JSON.
     const edit = JSON.parse(JSON.stringify({ ...defaultEdit(12), aspect: '9:16', keep: [{ start: 1, end: 6 }] })) as { [key: string]: Json };
@@ -320,7 +357,7 @@ describe('copyOf', () => {
 });
 
 describe('toAgents and toUser', () => {
-  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
+  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, pictureModel: 'stand-in' as const, cloudflareAccount: '', scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
 
   it('counts from the data, and shows each agent’s switch as the team set it', () => {
     const agents = toAgents(settings, { competitors: 1, strategies: 2 }, []);

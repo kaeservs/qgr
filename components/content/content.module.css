@@ -503,3 +503,164 @@
   font-size: 11px;
   font-weight: 500;
 }
+
+/* ---------- A variant's picture ---------- */
+
+.pictureDialog {
+  width: min(820px, calc(100vw - 32px));
+}
+
+.pictureLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.pictureNow {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.pictureNow > div {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.pictureForm {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pictureForm textarea {
+  resize: vertical;
+  min-height: 120px;
+}
+
+.pictureAdds p {
+  margin: 0;
+}
+
+.pictureAdds ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.pictureMaking {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--indigo-50);
+  color: var(--indigo-ink);
+  font-size: 13px;
+}
+
+.pictureMaking span {
+  flex: 1;
+  min-width: 180px;
+}
+
+.pictureModel {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--text-2);
+}
+
+.pictureHistory {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.pictureHistoryTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.pictureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pictureChoice {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.pictureChoice img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pictureChoice:hover:not(:disabled) {
+  border-color: var(--indigo-300);
+}
+
+.pictureChoice:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.pictureChoice:disabled {
+  cursor: default;
+}
+
+.pictureChoiceShown {
+  border-color: var(--indigo);
+}
+
+.pictureShownPill {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--indigo);
+  color: #fff;
+}
+
+.pictureMissing {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .pictureLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pictureNow {
+    max-width: 280px;
+  }
+}

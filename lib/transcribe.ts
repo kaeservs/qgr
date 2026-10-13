@@ -1,8 +1,8 @@
-// What is said in an uploaded clip, from Deepgram's speech-to-text. The
-// agents cannot watch a clip, so its words are what they read; a person
-// checks them before the run starts. Deepgram fetches the clip itself from a
-// link the server signs for a few minutes, so the file never passes through
-// the app. Off until DEEPGRAM_API_KEY is set: then the team types what is said.
+// What is said in an uploaded clip, as caption-sized lines in the clip's own
+// seconds. The agents cannot watch a clip, so its words are what they read; a
+// person checks them before the run starts, and the editor turns them into
+// captions. The words are heard in the browser (lib/speech.ts: Whisper, on
+// the team's own computer, free), so nothing here calls a service.
 
 import type { TranscriptLine } from './types';
 
@@ -11,76 +11,80 @@ export const MAX_LINE = 200;
 
 /** Short enough to read as a caption: about two seconds of speech, one sentence at most. */
 const LINE_CHARS = 42;
-const LINE_SECONDS = 4;
+/** Speech runs at about fifteen characters a second: the length given a passage that has no end. */
+const CHARS_PER_SECOND = 15;
 
-export type Transcribed = { ok: true; lines: TranscriptLine[] } | { ok: false; status: number; error: string };
-
-export const transcriptionKey = (): string | null => process.env.DEEPGRAM_API_KEY?.trim() || null;
-
-interface Word {
-  word?: unknown;
-  punctuated_word?: unknown;
-  start?: unknown;
-  end?: unknown;
+/** A timed passage as Whisper hears it: [start, end] in seconds (the last end can be missing). */
+export interface SpeechChunk {
+  timestamp: [number, number | null];
+  text: string;
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
-/**
- * Deepgram's answer as caption-sized lines in the clip's seconds: words are
- * gathered until a sentence ends, the line is long enough to read, or four
- * seconds have passed. Anything malformed is left out.
- */
-export function linesFromDeepgram(json: unknown): TranscriptLine[] {
-  const words = (json as { results?: { channels?: { alternatives?: { words?: Word[] }[] }[] } } | null)?.results?.channels?.[0]?.alternatives?.[0]?.words;
-  if (!Array.isArray(words)) return [];
-  const lines: TranscriptLine[] = [];
-  let text = '';
-  let start = 0;
-  let end = 0;
-  const flush = () => {
-    const t = text.trim();
-    if (t && end > start) lines.push({ start: round(start), end: round(end), text: t.slice(0, MAX_LINE) });
-    text = '';
-  };
-  for (const w of words) {
-    const said = typeof w.punctuated_word === 'string' ? w.punctuated_word : typeof w.word === 'string' ? w.word : '';
-    if (!said || typeof w.start !== 'number' || typeof w.end !== 'number' || !Number.isFinite(w.start) || !Number.isFinite(w.end) || w.end < w.start) continue;
-    if (text && (text.length + said.length + 1 > LINE_CHARS || w.end - start > LINE_SECONDS)) flush();
-    if (!text) start = w.start;
-    text += `${text ? ' ' : ''}${said}`;
-    end = w.end;
-    if (/[.?!]$/.test(said)) flush();
-    if (lines.length >= MAX_LINES) break;
+/** What Whisper writes for a stretch with no speech in it: [Music], (upbeat music), [BLANK_AUDIO]. */
+const NOT_SPEECH = /^\s*(?:[[(][^\])]*[\])]\s*)+$/;
+
+/** A passage's words in lines of at most LINE_CHARS, each ending at a sentence's end when one comes. */
+function split(text: string): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && line.length + word.length + 1 > LINE_CHARS) {
+      lines.push(line);
+      line = '';
+    }
+    line += `${line ? ' ' : ''}${word}`;
+    if (/[.?!]["'”’)]*$/.test(word)) {
+      lines.push(line);
+      line = '';
+    }
   }
-  flush();
+  if (line) lines.push(line);
+  return lines.map((l) => l.slice(0, MAX_LINE));
+}
+
+/**
+ * Whisper's timed passages as caption-sized lines: each passage is split into
+ * lines of at most 42 characters, ending early at a sentence's end, and its
+ * time is shared among them by their length. A passage with no end runs to
+ * the next one, or the clip's end, or as long as its words take to say.
+ * Nothing runs past the clip's end (its sound can outlast its picture).
+ * Bracketed noise ([Music]) and a line said again straight after itself (how
+ * Whisper fills a silence) are left out, as is anything malformed.
+ */
+export function linesFromChunks(chunks: unknown, duration?: number): TranscriptLine[] {
+  if (!Array.isArray(chunks)) return [];
+  const passages = chunks.flatMap((c): { start: number; end: number | null; text: string }[] => {
+    const chunk = c as Partial<SpeechChunk> | null;
+    const ts = chunk?.timestamp;
+    const text = typeof chunk?.text === 'string' ? chunk.text.trim() : '';
+    if (!Array.isArray(ts) || typeof ts[0] !== 'number' || !Number.isFinite(ts[0]) || ts[0] < 0) return [];
+    if (!text || NOT_SPEECH.test(text)) return [];
+    if (duration !== undefined && ts[0] >= duration) return [];
+    const end = typeof ts[1] === 'number' && Number.isFinite(ts[1]) ? ts[1] : null;
+    return [{ start: ts[0], end, text }];
+  });
+
+  const lines: TranscriptLine[] = [];
+  passages.forEach((p, i) => {
+    const next = passages[i + 1]?.start;
+    const said = p.start + p.text.length / CHARS_PER_SECOND;
+    let end = p.end ?? next ?? (duration !== undefined && duration > p.start ? Math.min(duration, said) : said);
+    if (end <= p.start) return;
+    if (duration !== undefined && duration > p.start) end = Math.min(end, duration);
+    const parts = split(p.text);
+    const total = parts.reduce((n, l) => n + l.length, 0);
+    let at = p.start;
+    for (const text of parts) {
+      const until = at + ((end - p.start) * text.length) / total;
+      const previous = lines[lines.length - 1];
+      if (previous?.text !== text && round(until) > round(at)) lines.push({ start: round(at), end: round(until), text });
+      at = until;
+    }
+  });
   return lines.slice(0, MAX_LINES);
 }
 
 /** The words of a transcript as one text, for the run's notes. */
 export const transcriptText = (lines: readonly TranscriptLine[]) => lines.map((l) => l.text).join(' ').replace(/\s+/g, ' ').trim();
-
-/**
- * Asks Deepgram for the words in the clip at `url`. Model improvement is
- * opted out of: the team's clip is not Deepgram's to learn from.
- */
-export async function transcribe(url: string, key: string, send: typeof fetch = fetch): Promise<Transcribed> {
-  const query = new URLSearchParams({ model: 'nova-3', smart_format: 'true', detect_language: 'true', mip_opt_out: 'true' });
-  let res: Response;
-  try {
-    res = await send(`https://api.deepgram.com/v1/listen?${query}`, {
-      method: 'POST',
-      headers: { Authorization: `Token ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(55_000),
-    });
-  } catch {
-    return { ok: false, status: 504, error: 'The transcript took too long. Try again, or type what is said.' };
-  }
-  if (res.status === 401 || res.status === 403) return { ok: false, status: 502, error: 'Deepgram turned the key away: check DEEPGRAM_API_KEY.' };
-  if (!res.ok) return { ok: false, status: 502, error: `Deepgram could not transcribe the clip (${res.status}).` };
-  const lines = linesFromDeepgram(await res.json().catch(() => null));
-  if (lines.length === 0) return { ok: false, status: 422, error: 'No speech was heard in the clip. Type what is said instead.' };
-  return { ok: true, lines };
-}

@@ -1,12 +1,12 @@
 'use client';
 
-import { AudioLines, BookMarked, CircleCheck, CircleDashed, Database, Workflow } from 'lucide-react';
+import { AudioLines, BookMarked, CircleCheck, CircleDashed, Database, ImagePlus, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cx } from '@/lib/cx';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { PLACES } from '@/lib/types';
-import type { Place } from '@/lib/types';
+import type { PictureModel, Place } from '@/lib/types';
 import { PlaceIcon, PlatformIcon } from '../ui/PlatformIcon';
 import styles from './settings.module.css';
 
@@ -37,7 +37,7 @@ export function SettingsForm({
   connections,
   children,
 }: {
-  connections: { supabase: boolean; agents: boolean; transcripts: boolean; posting: Record<Place, PostingState> };
+  connections: { supabase: boolean; agents: boolean; pictures: PictureModel; posting: Record<Place, PostingState> };
   children?: ReactNode;
 }) {
   return (
@@ -88,13 +88,23 @@ export function SettingsForm({
           </li>
           <li>
             <span className={styles.serviceIcon}>
+              <ImagePlus size={18} aria-hidden />
+            </span>
+            <span className={styles.serviceText}>
+              <strong>{connections.pictures === 'cloudflare' ? 'Cloudflare Workers AI' : 'Image model'}</strong>
+              <span className="muted small">Pictures for ads, through n8n: chosen under Agents</span>
+            </span>
+            {connections.pictures === 'cloudflare' ? <Connection on onLabel="FLUX.1 schnell, free" offLabel="" /> : <span className="pill pill-quiet pill-sm">Stand-in</span>}
+          </li>
+          <li>
+            <span className={styles.serviceIcon}>
               <AudioLines size={18} aria-hidden />
             </span>
             <span className={styles.serviceText}>
-              <strong>Deepgram</strong>
-              <span className="muted small">What is said in an uploaded clip</span>
+              <strong>Whisper</strong>
+              <span className="muted small">What is said in an uploaded clip, heard on your own computer</span>
             </span>
-            <Connection on={connections.transcripts} onLabel="Connected" offLabel="Needs a key" />
+            <Connection on onLabel="In the browser, free" offLabel="" />
           </li>
           {PLACES.map((place) => (
             <li key={place}>

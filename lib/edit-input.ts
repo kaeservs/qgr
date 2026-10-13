@@ -8,7 +8,7 @@ import type { BrandMemory, BrandProfile, ExamplePlace, Place, Platform, Platform
 // endpoints, so their input is checked here before it reaches a data source;
 // the database checks the same limits again (save_variant,
 // save_variant_words, update_brand_profile, update_brand_memory,
-// add_brand_example), which is the check that counts.
+// add_brand_example, ask_for_picture), which is the check that counts.
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -33,6 +33,8 @@ export const LIMITS = {
   topic: 80,
   formatNote: 1000,
   pictureStyle: 600,
+  /** With the picture style, all of it fits the image model's 2,048 characters. */
+  picturePrompt: 1200,
   example: 3000,
   exampleNote: 300,
 } as const;
@@ -103,6 +105,14 @@ export function parseBrandMemory(body: unknown): ParseResult<BrandMemory> {
   const pictureStyle = text(body.pictureStyle);
   if (pictureStyle.length > LIMITS.pictureStyle) return { ok: false, error: `Keep the picture style under ${LIMITS.pictureStyle} characters.` };
   return { ok: true, value: { topics, postFormats, pictureStyle } };
+}
+
+/** What a person asks the image model to draw: the scene. The brand's picture style goes with it. */
+export function parsePicturePrompt(body: unknown): ParseResult<string> {
+  const prompt = text(body);
+  if (!prompt) return { ok: false, error: 'Describe the picture first.' };
+  if (prompt.length > LIMITS.picturePrompt) return { ok: false, error: `Keep the picture prompt under ${LIMITS.picturePrompt.toLocaleString('en-US')} characters.` };
+  return { ok: true, value: prompt };
 }
 
 const isExamplePlace = (v: unknown): v is ExamplePlace => typeof v === 'string' && (EXAMPLE_PLACES as readonly string[]).includes(v);

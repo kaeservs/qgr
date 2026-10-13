@@ -158,7 +158,6 @@ export const sampleData: DataSource = {
   getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),
   createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteClipUpload: async () => ({ ok: true, value: null, sample: true }),
-  transcribeClip: async () => ({ ok: false, status: 503, error: 'Sample data keeps no uploads, so there is no clip to transcribe. Type what is said.' }),
 
   getTeamSettings: async () => settings(),
   saveAgentSettings: async (next) => {
@@ -225,7 +224,9 @@ export const sampleData: DataSource = {
     return { ok: true, value: null, sample: true };
   },
   // Sample data has no image model to ask, and keeps no pictures.
-  requestPicture: async () => ({ ok: false, status: 503, error: 'Sample data makes no pictures: there is no image model to ask.' }),
+  askForPicture: async () => ({ ok: false, status: 503, error: 'Sample data makes no pictures: there is no image model to ask.' }),
+  usePicture: async () => ({ ok: true, value: null, sample: true }),
+  stopPicture: async () => ({ ok: true, value: null, sample: true }),
   removePicture: async () => ({ ok: true, value: null, sample: true }),
   reschedulePost: async (postId, at) => {
     const post = postList().find((p) => p.id === postId);

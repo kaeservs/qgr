@@ -28,7 +28,6 @@ import type {
   StageKey,
   Strategy,
   TeamSettings,
-  TranscriptLine,
   User,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
@@ -125,8 +124,6 @@ export interface DataSource {
   createClipUpload(extension: ClipExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes an uploaded clip that no run uses: one cut again or taken away before the run started. */
   deleteClipUpload(path: string): Promise<Saved>;
-  /** What is said in an uploaded clip, line by line, from a speech-to-text service. */
-  transcribeClip(path: string): Promise<Saved<{ lines: TranscriptLine[] }>>;
 
   getTeamSettings(): Promise<TeamSettings>;
   saveAgentSettings(settings: AgentSettings): Promise<Saved>;
@@ -140,9 +137,13 @@ export interface DataSource {
   /** Records a post of an approved variant; one to send now is handed to the publisher at once. */
   schedulePost(post: NewPost): Promise<Saved<{ id: string }>>;
   cancelPost(postId: string): Promise<Saved>;
-  /** Asks the image model for a picture for a variant; n8n's "QGR · Pictures" makes it. */
-  requestPicture(variantId: string): Promise<Saved>;
-  /** Takes a variant's picture away, or stops one being made: the design is drawn again. */
+  /** Asks the image model for a picture for a variant, from the prompt given (kept as its prompt); n8n's "QGR · Pictures" makes it. */
+  askForPicture(variantId: string, prompt: string): Promise<Saved>;
+  /** Shows one of the pictures made for a variant before, stopping one being made. */
+  usePicture(variantId: string, pictureId: string): Promise<Saved>;
+  /** Stops a picture being made; the variant keeps what it shows. */
+  stopPicture(variantId: string): Promise<Saved>;
+  /** Goes back to the drawn design, stopping any picture being made. The pictures stay to choose again. */
   removePicture(variantId: string): Promise<Saved>;
   /** Moves a post none of whose places has started going out: to a wall time in the team's zone, or now (null). Returns the new time. */
   reschedulePost(postId: string, at: string | null): Promise<Saved<{ at: string }>>;

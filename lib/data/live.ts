@@ -9,7 +9,6 @@ import { picturesConfig, pipelineConfig, publisherConfig } from '../supabase/con
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
-import { transcribe, transcriptionKey } from '../transcribe';
 import {
   toActivity,
   toAdSet,
@@ -46,8 +45,11 @@ const COMPETITOR =
   'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
-const AD_SET =
-  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
+const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit';
+const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}), runs!ad_sets_run_id_fkey(media_path, media)` as const;
+/** The studio's ad set: each variant with the pictures made for it, to choose again. */
+const AD_SET_STUDIO =
+  `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, variant_pictures!variant_pictures_variant_id_fkey(id, path, prompt, created_at, removed_at)), runs!ad_sets_run_id_fkey(media_path, media)` as const;
 const POST =
   'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title)), brand_examples!brand_examples_post_id_fkey(place, removed_at)';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
@@ -58,8 +60,6 @@ const POST_BUCKET = 'post-media';
 const PICTURE_BUCKET = 'ad-pictures';
 /** Long enough to read a page and post from it. */
 const PICTURE_SECONDS = 60 * 60;
-/** Long enough for Deepgram to fetch a clip, no longer. */
-const TRANSCRIBE_SECONDS = 15 * 60;
 /** Long enough for a working session in the studio; a reload signs a fresh one. */
 const PLAY_SECONDS = 6 * 60 * 60;
 
@@ -127,6 +127,24 @@ const adSets = cache(async () => {
     for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
   }
   return data.map((row) => toAdSet(row, (path) => links.get(path)));
+});
+
+// The studio's set and its title both ask for it; one query serves them. Every
+// picture it shows or keeps is signed in the one call.
+const adSetById = cache(async (id: string) => {
+  if (!UUID.test(id)) return null;
+  const supabase = await db();
+  const { data, error } = await supabase.from('ad_sets').select(AD_SET_STUDIO).eq('id', id).maybeSingle();
+  if (error) readFailed('the ad set', error);
+  if (!data) return null;
+  const paths = data.ad_variants.flatMap((v) => [...(v.picture_path ? [v.picture_path] : []), ...v.variant_pictures.filter((p) => p.removed_at === null).map((p) => p.path)]);
+  const links = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data: signed, error: signError } = await supabase.storage.from(PICTURE_BUCKET).createSignedUrls([...new Set(paths)], PICTURE_SECONDS);
+    if (signError) console.error('Signing ad pictures failed', signError);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+  }
+  return toAdSet(data, (path) => links.get(path));
 });
 
 // A page and its title both ask for the run; one query serves them.
@@ -207,7 +225,7 @@ export const liveData: DataSource = {
   getStrategy: async (id) => (await strategies()).find((s) => s.id === id) ?? null,
   getStrategyForCompetitor: async (competitorId) => (await strategies()).find((s) => s.competitorIds.includes(competitorId)) ?? null,
   getAdSets: () => adSets(),
-  getAdSet: async (id) => (await adSets()).find((a) => a.id === id) ?? null,
+  getAdSet: (id) => adSetById(id),
   getAgents: async () => {
     const [settings, c, s, a] = await Promise.all([teamSettings(), competitors(), strategies(), adSets()]);
     return toAgents(settings, { competitors: c.filter((x) => x.tracked).length, strategies: s.length }, a.filter((set) => set.status === 'review'));
@@ -317,18 +335,6 @@ export const liveData: DataSource = {
     return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That clip is in use or already gone.' };
   },
 
-  transcribeClip: async (path) => {
-    const key = transcriptionKey();
-    if (!key) return { ok: false, status: 503, error: 'Transcripts aren’t connected yet (DEEPGRAM_API_KEY), so type what is said.' };
-    const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, TRANSCRIBE_SECONDS);
-    if (error) {
-      console.error('Signing a clip link for its transcript failed', error);
-      return { ok: false, status: 404, error: 'That clip can’t be found.' };
-    }
-    const result = await transcribe(data.signedUrl, key);
-    return result.ok ? { ok: true, value: { lines: result.lines }, sample: false } : result;
-  },
-
   getTeamSettings: () => teamSettings(),
 
   saveAgentSettings: async (settings) => {
@@ -347,6 +353,11 @@ export const liveData: DataSource = {
     if (picturesError) return refused(picturesError, 'The pictures switch could not be saved. The rest was.');
     const { error: adsError } = await supabase.rpc('set_ads_source', { p_source: settings.adsSource });
     if (adsError) return refused(adsError, 'Where the tracker reads ads could not be saved. The rest was.');
+    const { error: modelError } = await supabase.rpc('set_pictures_model', {
+      p_model: settings.pictureModel,
+      ...(settings.cloudflareAccount ? { p_account: settings.cloudflareAccount } : {}),
+    });
+    if (modelError) return refused(modelError, 'The image model could not be saved. The rest was.');
     return { ok: true, value: null, sample: false };
   },
 
@@ -414,22 +425,30 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
-  requestPicture: async (variantId) => {
-    const { error } = await (await db()).rpc('request_picture', { p_variant_id: variantId });
+  askForPicture: async (variantId, prompt) => {
+    const { error } = await (await db()).rpc('ask_for_picture', { p_variant_id: variantId, p_prompt: prompt });
     if (error) return refused(error, 'The picture could not be asked for.');
     const pictures = picturesConfig();
     if (pictures) await pingQueue(pictures);
     return { ok: true, value: null, sample: false };
   },
 
+  usePicture: async (variantId, pictureId) => {
+    const { error } = await (await db()).rpc('use_picture', { p_variant_id: variantId, p_picture_id: pictureId });
+    if (error) return refused(error, 'That picture could not be used.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  stopPicture: async (variantId) => {
+    const { error } = await (await db()).rpc('stop_picture', { p_variant_id: variantId });
+    if (error) return refused(error, 'The picture could not be stopped.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  // The picture stays with the variant's others, to choose again: no file is removed.
   removePicture: async (variantId) => {
-    const supabase = await db();
-    const { data: path, error } = await supabase.rpc('remove_picture', { p_variant_id: variantId });
+    const { error } = await (await db()).rpc('remove_picture', { p_variant_id: variantId });
     if (error) return refused(error, 'The picture could not be taken away.');
-    if (path) {
-      const { error: removeError } = await supabase.storage.from(PICTURE_BUCKET).remove([path]);
-      if (removeError) console.error('Removing a picture taken away failed', removeError);
-    }
     return { ok: true, value: null, sample: false };
   },
 

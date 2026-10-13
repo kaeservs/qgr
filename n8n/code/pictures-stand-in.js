@@ -1,15 +1,15 @@
-// STAND-IN for the image model. Nothing is drawn: it answers as the real
-// steps will when no picture could be made, marked stand_in, so the ask ends,
-// the studio says no picture was made and the branded design is drawn as
-// before.
+// STAND-IN for an image model: the way taken while the team's pictures are
+// set to the stand-in (Settings, Agents), as they are until Cloudflare Workers
+// AI is chosen there. Nothing is drawn: it answers as the real steps do when
+// no picture could be made, marked stand_in, so the ask ends, the studio says
+// no picture was made, and the variant keeps what it shows.
 //
-// To connect an image model (ChatGPT's images API or Higgsfield), replace this
-// node with the real steps (the sticky note beside it lists them): send the
-// item's prompt, upload what comes back to the private bucket ad-pictures at
-// the item's path (a .png path: a model that answers JPEG or WebP uploads to
-// the same path ending .jpg or .webp), and keep the output the same:
+// The real way ("Real pictures?" true) is Cloudflare's FLUX.1 schnell: write
+// the prompt, ask Cloudflare, read the picture, upload it to the private
+// bucket ad-pictures at the item's path (ending .jpg, .png or .webp for what
+// came back), and answer in the same shape:
 //   { ok: true, variant_id, path, stand_in: false }
-// or, when the model made nothing:
+// or, when no picture was made:
 //   { ok: false, variant_id, error }
 return $input.all().map(function (item) {
   const ask = item.json;

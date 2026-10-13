@@ -20,13 +20,21 @@ type Json = Record<string, unknown>;
 type Items = { json: Json }[];
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** A Code node over all its input items, as n8n runs it. */
-function step(file: string, items: unknown[], swap: Record<string, string> = {}): Json[] {
+/**
+ * A Code node over all its input items, as n8n runs it. `earlier` stands in
+ * for the nodes before it that a script reads by name, each item paired with
+ * the input item at the same place, as n8n pairs them.
+ */
+function step(file: string, items: unknown[], swap: Record<string, string> = {}, earlier: Record<string, unknown[]> = {}): Json[] {
   let code = readFileSync(join(here, 'code', file), 'utf8');
   for (const [key, value] of Object.entries(swap)) code = code.replaceAll(key, value);
   const all = items.map((json) => ({ json }));
   const $input = { first: () => all[0], all: () => all };
-  return (inN8n(code, $input, () => null) as Items).map((i) => i.json);
+  const $ = (name: string) => {
+    const out = (earlier[name] ?? []).map((json) => ({ json }));
+    return { all: () => out, first: () => out[0], itemMatching: (i: number) => out[i] };
+  };
+  return (inN8n(code, $input, $) as Items).map((i) => i.json);
 }
 
 const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' } as const;
@@ -226,7 +234,8 @@ describe('a picture, from the studio to the image model and back', () => {
         `select json_build_object('id', s.id, 'run_id', s.run_id, 'strategy_id', s.strategy_id, 'title', s.title, 'created_at', s.created_at, 'runs', null,
           'ad_variants', (select json_agg(json_build_object('id', v.id, 'label', v.label, 'angle', v.angle, 'creative_text', v.creative_text, 'creative_style', v.creative_style,
             'image_prompt', v.image_prompt, 'picture_path', v.picture_path, 'picture_status', v.picture_status, 'picture_error', v.picture_error,
-            'picture_requested_at', v.picture_requested_at, 'copy', v.copy, 'warnings', v.warnings, 'approved_at', v.approved_at, 'video_edit', v.video_edit)) from public.ad_variants v where v.ad_set_id = s.id)
+            'picture_requested_at', v.picture_requested_at, 'copy', v.copy, 'warnings', v.warnings, 'approved_at', v.approved_at, 'video_edit', v.video_edit,
+            'variant_pictures', coalesce((select json_agg(json_build_object('id', p.id, 'path', p.path, 'prompt', p.prompt, 'created_at', p.created_at, 'removed_at', p.removed_at)) from public.variant_pictures p where p.variant_id = v.id), '[]'::json))) from public.ad_variants v where v.ad_set_id = s.id)
         ) from public.ad_sets s where s.id = $1`,
         [setId],
       ),
@@ -264,7 +273,7 @@ describe('a picture, from the studio to the image model and back', () => {
     expect(await makePictures(standIn)).toEqual({ removed: [null] });
     const drawn = await studio(setId);
     expect(drawn).not.toHaveProperty('imageUrl');
-    expect(drawn.picture).toEqual({ status: 'none', note: expect.stringMatching(/image model is not connected yet/) });
+    expect(drawn.picture).toEqual({ status: 'none', note: expect.stringMatching(/pictures are set to the stand-in/) });
     // The next minute finds nothing.
     expect(await makePictures(standIn)).toEqual({ removed: [] });
 
@@ -289,5 +298,95 @@ describe('a picture, from the studio to the image model and back', () => {
     await t.asUser(member, () => t.db.query(`select public.request_picture($1)`, [variantId]));
     await makePictures((ask) => ({ ok: false, variant_id: ask.variant_id, error: 'The image model refused the prompt (400).' }));
     expect(await studio(setId)).toMatchObject({ imageUrl: `https://storage.example/signed/${path}`, picture: { status: 'failed', note: 'The image model refused the prompt (400).' } });
+  });
+
+  // The first bytes of real files, in base64, as Cloudflare answers them.
+  const JPEG = '/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==';
+  const PNG = 'iVBORw0KGgoAAAAAAAAAAA==';
+  const WEBP = 'UklGRh4AAABXRUJQVlA4IAAAAAAAAAAAAAA=';
+  const GIF = 'R0lGODlhAAAAAAAAAAAAAA==';
+  const ACCOUNT = '0123456789abcdef0123456789abcdef';
+  /** "Real pictures?": Cloudflare, with the account it runs on. */
+  const real = (ask: Json) => ask.model === 'cloudflare' && /^[0-9a-f]{32}$/.test(String(ask.account ?? ''));
+  /** Cloudflare's answer to each written prompt, read as "Read the picture" reads it. */
+  const readPictures = (asks: Json[], answer: (ask: Json) => Json) => {
+    const written = step('pictures-write-prompt.js', asks);
+    return step('pictures-read-image.js', written.map(answer), {}, { 'Write the prompt': written });
+  };
+
+  it('makes a real picture on Cloudflare from a person’s prompt and the brand’s look, and keeps it to choose again', async () => {
+    const { setId, variantId } = await adSet();
+    await t.asUser(member, async () => {
+      await t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, 'Warm evening light, deep indigo and gold accents')`);
+      await t.db.query(`select public.set_pictures_model('cloudflare', $1)`, [ACCOUNT]);
+      await t.db.query(`select public.ask_for_picture($1, 'A quiet harbour at dawn, boats at rest')`, [variantId]);
+    });
+
+    const due = await t.asService(() => t.value<unknown[]>(`select public.picture_take_due(p_limit => 5)`));
+    const asks = step('shared-items.js', [{ data: due }]).filter((a) => a.variant_id === variantId);
+    expect(asks.every(real)).toBe(true);
+    const [written] = step('pictures-write-prompt.js', asks);
+    expect(written).toMatchObject({ variant_id: variantId, url: `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell` });
+    expect((written!.body as { prompt: string }).prompt).toBe(
+      'A quiet harbour at dawn, boats at rest. Picture style: Warm evening light, deep indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.',
+    );
+
+    // Cloudflare answers a JPEG: the path takes its extension, and it is uploaded there.
+    const [made] = step('pictures-read-image.js', [{ statusCode: 200, body: { success: true, result: { image: JPEG } } }], {}, { 'Write the prompt': [written] });
+    expect(made).toMatchObject({ ok: true, variant_id: variantId, mime: 'image/jpeg', image: JPEG });
+    expect(made!.path).toMatch(new RegExp(`^pictures/${variantId}/[0-9a-f-]{36}\\.jpg$`));
+    expect(made!.file).toBe(String(made!.path).split('/').pop());
+    await t.asService(() => t.db.query(`insert into storage.objects (bucket_id, name) values ('ad-pictures', $1)`, [made!.path]));
+    const [uploaded] = step('pictures-uploaded.js', [{ statusCode: 200, body: { Key: `ad-pictures/${String(made!.path)}` } }], {}, { 'Read the picture': [made] });
+    expect(uploaded).toEqual({ ok: true, variant_id: variantId, path: made!.path, stand_in: false });
+
+    const finished = await t.asService(() => t.value<{ remove_picture: string | null }>(`select public.picture_finish($1, $2, false)`, [variantId, made!.path]));
+    expect(finished).toEqual({ remove_picture: null });
+    const shown = await studio(setId);
+    expect(shown).toMatchObject({ imageUrl: `https://storage.example/signed/${String(made!.path)}`, picturePrompt: 'A quiet harbour at dawn, boats at rest' });
+    expect(shown.pictures).toEqual([expect.objectContaining({ shown: true, prompt: 'A quiet harbour at dawn, boats at rest' })]);
+
+    await t.asUser(member, async () => {
+      await t.db.query(`select public.set_pictures_model('stand-in')`);
+      await t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, null)`);
+    });
+  });
+
+  it('keeps every prompt to what FLUX takes, never shortening the style or the rules', () => {
+    const style = 'Soft daylight. '.repeat(40).trim();
+    const [long] = step('pictures-write-prompt.js', [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A wide harbour scene with boats and gulls '.repeat(80), look: style }]);
+    const prompt = (long!.body as { prompt: string }).prompt;
+    expect(prompt.length).toBeLessThanOrEqual(2048);
+    expect(prompt).toContain(`Picture style: ${style}`);
+    expect(prompt.endsWith('No real or identifiable people. No flags.')).toBe(true);
+    expect(prompt.startsWith('A wide harbour scene')).toBe(true);
+    // Without a picture style, the scene and the rules.
+    const [plain] = step('pictures-write-prompt.js', [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: '  A desk   lamp at night ', look: null }]);
+    expect((plain!.body as { prompt: string }).prompt).toBe('A desk lamp at night. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.');
+  });
+
+  it('reads what Cloudflare answers into a picture of the right kind, or a reason a person can act on', () => {
+    const asks = [{ variant_id: 'v1', label: 'A', path: 'pictures/v1/p1.png', account: ACCOUNT, prompt: 'A harbour', look: null }];
+    const answer = (res: Json) => readPictures(asks, () => res)[0]!;
+    expect(answer({ statusCode: 200, body: { success: true, result: { image: PNG } } })).toMatchObject({ ok: true, path: 'pictures/v1/p1.png', mime: 'image/png', file: 'p1.png' });
+    expect(answer({ statusCode: 200, body: { success: true, result: { image: `data:image/webp;base64,${WEBP}` } } })).toMatchObject({ ok: true, path: 'pictures/v1/p1.webp', mime: 'image/webp', image: WEBP });
+    expect(answer({ statusCode: 200, body: { success: true, result: { image: GIF } } })).toEqual({ ok: false, variant_id: 'v1', error: 'Cloudflare answered with something that is not a JPEG, PNG or WebP picture.' });
+    expect(answer({ statusCode: 200, body: { success: true, result: {} } })).toMatchObject({ ok: false, error: 'Cloudflare answered without a picture.' });
+    expect(answer({ statusCode: 200, body: { success: true, result: { image: 'A'.repeat(14_000_001) } } })).toMatchObject({ ok: false, error: 'The picture is over 10 MB, more than Storage keeps.' });
+    expect(answer({ statusCode: 429, body: { success: false, errors: [{ code: 4006, message: 'you have used up your daily free allocation of 10,000 neurons' }] } }).error).toMatch(/free pictures for today are used up.*00:00 UTC/);
+    expect(answer({ statusCode: 401, body: { success: false, errors: [{ code: 10000, message: 'Authentication error' }] } }).error).toMatch(/refused the API token.*Cloudflare Workers AI/);
+    expect(answer({ statusCode: 404, body: { success: false, errors: [{ code: 7003, message: 'Could not route to /accounts/x/ai/run' }] } }).error).toMatch(/no account with that ID.*Settings, Agents/);
+    expect(answer({ statusCode: 500, body: { success: false, errors: [{ code: 3030, message: 'Internal error' }] } }).error).toBe('Cloudflare could not make the picture (500): Internal error');
+    expect(answer({ error: { message: 'getaddrinfo ENOTFOUND api.cloudflare.com' } }).error).toBe('Cloudflare could not be asked: getaddrinfo ENOTFOUND api.cloudflare.com');
+    // A step that never ran hands its input on: it has no credential yet.
+    expect(readPictures(asks, (written) => written)[0]!.error).toMatch(/attach the "Cloudflare Workers AI" credential/);
+  });
+
+  it('says why a picture that was made could not be stored', () => {
+    const made = [{ ok: true, variant_id: 'v1', path: 'pictures/v1/p1.jpg', mime: 'image/jpeg', file: 'p1.jpg', image: JPEG }];
+    expect(step('pictures-uploaded.js', [{ statusCode: 400, body: { statusCode: '409', error: 'Duplicate', message: 'The resource already exists' } }], {}, { 'Read the picture': made })).toEqual([
+      { ok: false, variant_id: 'v1', error: 'The picture was made but could not be stored (400): The resource already exists' },
+    ]);
+    expect(step('pictures-uploaded.js', [{}], {}, { 'Read the picture': made })[0]).toMatchObject({ ok: false, error: 'The picture was made but could not be stored (no answer): no answer' });
   });
 });

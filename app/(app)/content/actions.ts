@@ -1,8 +1,8 @@
 'use server';
 
-import { approveVariant, removePicture, requestPicture, saveVariant, saveVideoEdit } from '@/lib/data';
+import { approveVariant, askForPicture, removePicture, saveVariant, saveVideoEdit, stopPicture, usePicture } from '@/lib/data';
 import type { Saved } from '@/lib/data';
-import { isRecordId, parseVariantEdit } from '@/lib/edit-input';
+import { isRecordId, parsePicturePrompt, parseVariantEdit } from '@/lib/edit-input';
 import { checkTeam } from '@/lib/session';
 import { parseVideoEdit } from '@/lib/video/edit';
 
@@ -40,15 +40,33 @@ export async function saveVideoEditAction(variantId: unknown, edit: unknown): Pr
   return saveVideoEdit(variantId, parsed.value);
 }
 
-/** Asks the image model for a picture for a variant, or for another one. */
-export async function requestPictureAction(variantId: unknown): Promise<Saved> {
+/** Asks the image model for a picture for a variant from a prompt, which becomes the variant's picture prompt. */
+export async function askForPictureAction(variantId: unknown, prompt: unknown): Promise<Saved> {
   const team = await checkTeam();
   if (!team.ok) return team;
   if (!isRecordId(variantId)) return GONE;
-  return requestPicture(variantId);
+  const parsed = parsePicturePrompt(prompt);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return askForPicture(variantId, parsed.value);
 }
 
-/** Takes a variant's picture away, or stops one being made: the design is drawn again. */
+/** Shows a picture made for the variant before. */
+export async function usePictureAction(variantId: unknown, pictureId: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(variantId) || !isRecordId(pictureId)) return GONE;
+  return usePicture(variantId, pictureId);
+}
+
+/** Stops a picture being made; the variant keeps what it shows. */
+export async function stopPictureAction(variantId: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(variantId)) return GONE;
+  return stopPicture(variantId);
+}
+
+/** Goes back to the drawn design, stopping any picture being made. The pictures stay to choose again. */
 export async function removePictureAction(variantId: unknown): Promise<Saved> {
   const team = await checkTeam();
   if (!team.ok) return team;

@@ -47,7 +47,6 @@ export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source()
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
 export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);
-export const transcribeClip: DataSource['transcribeClip'] = (path) => source().transcribeClip(path);
 
 export const getTeamSettings: DataSource['getTeamSettings'] = () => source().getTeamSettings();
 export const saveAgentSettings: DataSource['saveAgentSettings'] = (settings) => source().saveAgentSettings(settings);
@@ -59,7 +58,9 @@ export const getPosts: DataSource['getPosts'] = () => source().getPosts();
 export const schedulePost: DataSource['schedulePost'] = (post) => source().schedulePost(post);
 export const cancelPost: DataSource['cancelPost'] = (id) => source().cancelPost(id);
 export const reschedulePost: DataSource['reschedulePost'] = (id, at) => source().reschedulePost(id, at);
-export const requestPicture: DataSource['requestPicture'] = (id) => source().requestPicture(id);
+export const askForPicture: DataSource['askForPicture'] = (id, prompt) => source().askForPicture(id, prompt);
+export const usePicture: DataSource['usePicture'] = (id, pictureId) => source().usePicture(id, pictureId);
+export const stopPicture: DataSource['stopPicture'] = (id) => source().stopPicture(id);
 export const removePicture: DataSource['removePicture'] = (id) => source().removePicture(id);
 export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
 export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);

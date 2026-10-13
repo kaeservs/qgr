@@ -5,7 +5,6 @@ import { SettingsForm } from '@/components/settings/SettingsForm';
 import type { PostingState } from '@/components/settings/SettingsForm';
 import { getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
 import { pipelineConfig } from '@/lib/supabase/config';
-import { transcriptionKey } from '@/lib/transcribe';
 import { PLACES } from '@/lib/types';
 import type { Place, Post } from '@/lib/types';
 
@@ -35,7 +34,7 @@ export default async function SettingsPage() {
         </div>
       </header>
       <SettingsForm
-        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, transcripts: transcriptionKey() !== null, posting: postingStates(posts) }}
+        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, pictures: settings.pictureModel, posting: postingStates(posts) }}
       >
         <AgentSettingsForm settings={agents} />
         <PagesForm pages={pages} />

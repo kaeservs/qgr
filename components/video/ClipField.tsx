@@ -15,10 +15,10 @@ import { ClipCutter } from './ClipCutter';
 import type { Cut } from './ClipCutter';
 import styles from './video.module.css';
 
-/** Where the clip is, for the form around it. */
-export type ClipStatus = { state: 'empty' } | { state: 'working'; label: string } | { state: 'ready'; clip: Clip; sample: boolean } | { state: 'failed'; error: string };
+/** Where the clip is, for the form around it. Ready, it carries the file that was uploaded, for its words to be heard. */
+export type ClipStatus = { state: 'empty' } | { state: 'working'; label: string } | { state: 'ready'; clip: Clip; sample: boolean; file: Blob } | { state: 'failed'; error: string };
 
-type Job = { stage: 'preparing' | 'uploading'; progress: number } | { stage: 'ready'; clip: Clip; sample: boolean } | { stage: 'failed'; error: string };
+type Job = { stage: 'preparing' | 'uploading'; progress: number } | { stage: 'ready'; clip: Clip; sample: boolean; file: Blob } | { stage: 'failed'; error: string };
 
 interface Picked {
   file: File;
@@ -41,7 +41,7 @@ const isWhole = (keep: readonly Part[], duration: number) => keep.length === 1 &
 
 function describe(job: Job | null): ClipStatus {
   if (!job) return { state: 'empty' };
-  if (job.stage === 'ready') return { state: 'ready', clip: job.clip, sample: job.sample };
+  if (job.stage === 'ready') return { state: 'ready', clip: job.clip, sample: job.sample, file: job.file };
   if (job.stage === 'failed') return { state: 'failed', error: job.error };
   const pct = Math.round(job.progress * 100);
   return { state: 'working', label: job.stage === 'preparing' ? `Preparing the clip… ${pct}%` : `Uploading the clip… ${pct}%` };
@@ -152,7 +152,7 @@ export function ClipField({ onStatus }: { onStatus: (status: ClipStatus) => void
     report({ stage: 'uploading', progress: 0 });
     const up = await uploadClip(blob, (share) => report({ stage: 'uploading', progress: share }), signal);
     if (!up.sample) uploaded.current = up.path;
-    report({ stage: 'ready', sample: up.sample, clip: { path: up.path, name: file.name, duration, width: size.width, height: size.height, size: blob.size } });
+    report({ stage: 'ready', sample: up.sample, file: blob, clip: { path: up.path, name: file.name, duration, width: size.width, height: size.height, size: blob.size } });
   }
 
   function start(cut: Cut) {

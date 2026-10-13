@@ -1,17 +1,17 @@
 'use client';
 
-import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, ImageOff, ImagePlus, LoaderCircle, Lock, MousePointerClick, Pencil, RefreshCw, RotateCcw, Send, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, ImagePlus, LoaderCircle, Lock, MousePointerClick, Pencil, RotateCcw, Send, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { approveVariantAction, removePictureAction, requestPictureAction, saveVariantAction } from '@/app/(app)/content/actions';
+import { approveVariantAction, saveVariantAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import { PLATFORM_LABEL, PLATFORM_OF, postText } from '@/lib/platforms';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone } from '@/lib/schedule';
 import { PLACES } from '@/lib/types';
-import type { AdSet, Clip, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
+import type { AdSet, Clip, PictureModel, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
 import { defaultEdit } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
 import { PublishDialog } from '../posts/PublishDialog';
@@ -20,6 +20,8 @@ import { StatusPill } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { VideoEditor } from '../video/VideoEditor';
 import type { SavedVideo } from '../video/VideoEditor';
+import { PictureDialog } from './PictureDialog';
+import type { PictureChange } from './PictureDialog';
 import { POST_PREVIEW } from './PostPreviews';
 import { PREVIEW } from './Previews';
 import type { AdBrand } from './Previews';
@@ -60,23 +62,42 @@ function postState(posts: readonly Post[], variantId: string): { waiting: Post |
   return { waiting: waiting ?? null, posted: mine.some((p) => p.targets.some((t) => t.status === 'posted')) };
 }
 
-/** An ask for a picture that has waited this long was lost: the database lets it be asked again. */
-const PICTURE_RETRY_MS = 10 * 60_000;
-
-/** What a fresh read can move on: the picture, an ask's progress, and the approval a new picture takes back. */
-const serverPart = (v: Variant): string => JSON.stringify([v.imageUrl ?? null, v.picture ?? null, !!v.approved]);
+/** What a fresh read can move on: the picture, an ask's progress, the pictures kept, and the approval a new picture takes back. */
+const serverPart = (v: Variant): string =>
+  JSON.stringify([v.imageUrl ?? null, v.picture ?? null, v.picturePrompt ?? null, (v.pictures ?? []).map((p) => [p.id, p.shown]), !!v.approved]);
 
 /** The server's word on a variant's picture, and on its approval, which a new picture takes back. */
 function withServerPicture(v: Variant, server: Variant | undefined): Variant {
   if (!server) return v;
-  const { imageUrl: _image, picture: _picture, picturePrompt: _prompt, approved: _approved, ...rest } = v;
+  const { imageUrl: _image, picture: _picture, picturePrompt: _prompt, pictures: _pictures, approved: _approved, ...rest } = v;
   return {
     ...rest,
     ...(server.imageUrl ? { imageUrl: server.imageUrl } : {}),
     ...(server.picture ? { picture: server.picture } : {}),
     ...(server.picturePrompt ? { picturePrompt: server.picturePrompt } : {}),
+    ...(server.pictures ? { pictures: server.pictures } : {}),
     ...(server.approved ? { approved: true } : {}),
   };
+}
+
+/** A variant as a person's change to its picture leaves it, until the page reads it again. */
+function withPictureChange(v: Variant, change: PictureChange): Variant {
+  const { imageUrl: _image, picture: _picture, approved: _approved, ...rest } = v;
+  const keep = { ...(v.imageUrl ? { imageUrl: v.imageUrl } : {}), ...(v.approved ? { approved: true } : {}) };
+  const shownAs = (url: string | null) => (v.pictures ? { pictures: v.pictures.map((p) => ({ ...p, shown: url !== null && p.url === url })) } : {});
+  switch (change.kind) {
+    case 'asked':
+      return { ...rest, ...keep, picturePrompt: change.prompt, picture: { status: 'making', askedAt: new Date().toISOString() } };
+    case 'stopped':
+      return { ...rest, ...keep };
+    case 'used': {
+      const same = !!change.choice.url && change.choice.url === v.imageUrl;
+      // Another picture takes the approval back: the ad has changed.
+      return { ...rest, ...(change.choice.url ? { imageUrl: change.choice.url } : {}), ...(same && v.approved ? { approved: true } : {}), ...shownAs(change.choice.url ?? null) };
+    }
+    case 'design':
+      return { ...rest, ...(!v.imageUrl && v.approved ? { approved: true } : {}), ...shownAs(null) };
+  }
 }
 
 function asText(copy: PlatformCopy): string {
@@ -102,6 +123,7 @@ export function AdStudio({
   clip,
   posts,
   publishing,
+  pictures,
 }: {
   adSet: AdSet;
   strategy: Strategy | null;
@@ -113,10 +135,13 @@ export function AdStudio({
   posts: Post[];
   /** The team's zone, for posting times, and the Pages posts go to. */
   publishing: { timeZone: string; pages: PostPages };
+  /** What every picture keeps to (the brand's picture style), what makes them, and whether this is the sample data. */
+  pictures: { style: string; model: PictureModel; sample: boolean };
 }) {
   const toast = useToast();
   const router = useRouter();
   const [postOf, setPostOf] = useState<string | null>(null);
+  const [pictureOf, setPictureOf] = useState<string | null>(null);
   // Ads on each platform the run asked for; posts on each place those platforms post to.
   const places = PLACES.filter((p) => platforms.includes(PLATFORM_OF[p]));
   const [view, setView] = useState<View>({ kind: 'ad', platform: platforms[0] ?? 'meta' });
@@ -125,11 +150,12 @@ export function AdStudio({
   // The last version the server holds, for Reset and for knowing what changed.
   const [saved, setSaved] = useState(() => new Map(adSet.variants.map((v) => [v.id, v])));
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'saving' | 'approving' | 'asking' | 'dropping' | null>(null);
+  const [busy, setBusy] = useState<'saving' | 'approving' | null>(null);
   const [videoOf, setVideoOf] = useState<string | null>(null);
   const selected = variants.find((v) => v.id === selectedId);
   const editingVideo = variants.find((v) => v.id === videoOf);
   const posting = variants.find((v) => v.id === postOf);
+  const picturing = variants.find((v) => v.id === pictureOf);
   // A variant waiting to post can't change: what goes out is what was approved.
   const locked = selected ? postState(posts, selected.id).waiting : null;
   // One object for every variant with no edit, so previews don't redraw for nothing.
@@ -167,32 +193,14 @@ export function AdStudio({
     setSaved((map) => new Map([...map].map(([id, v]) => [id, take(v)])));
   }, [adSet]);
 
-  async function askPicture(v: Variant) {
-    setBusy('asking');
-    const result = await requestPictureAction(v.id);
-    setBusy(null);
-    if (!result.ok) return toast(result.error, 'info');
-    update(v.id, (x) => ({ ...x, picture: { status: 'making', askedAt: new Date().toISOString() } }));
-    toast(`Making a picture for variant ${v.label}`);
-    router.refresh();
-  }
-
-  async function dropPicture(v: Variant) {
-    setBusy('dropping');
-    const result = await removePictureAction(v.id);
-    setBusy(null);
-    if (!result.ok) return toast(result.error, 'info');
-    // A picture taken away takes the approval back: the ad has changed.
-    const apply = (x: Variant): Variant => {
-      const { imageUrl: _image, picture: _picture, ...rest } = x;
-      return x.imageUrl ? unapproved(rest) : rest;
-    };
-    update(v.id, apply);
+  /** A person changed a variant's picture in its dialog: shown at once, then read again from the server. */
+  function pictureChanged(id: string, change: PictureChange) {
+    const apply = (v: Variant) => withPictureChange(v, change);
+    update(id, apply);
     setSaved((map) => {
-      const was = map.get(v.id);
-      return was ? new Map(map).set(v.id, apply(was)) : map;
+      const was = map.get(id);
+      return was ? new Map(map).set(id, apply(was)) : map;
     });
-    toast(result.sample ? 'Back to the design, for this session' : `Variant ${v.label} is back to the drawn design`);
     router.refresh();
   }
 
@@ -242,7 +250,7 @@ export function AdStudio({
 
   // Escape leaves a field first, then the variant (saving it). While the video editor is open, Escape is its own.
   useEffect(() => {
-    if (!selectedId || videoOf || postOf) return;
+    if (!selectedId || videoOf || postOf || pictureOf) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const active = document.activeElement;
@@ -388,14 +396,11 @@ export function AdStudio({
                   Edit video
                 </button>
               )}
-              {!clip && selected.picturePrompt && (
-                <PictureButtons
-                  variant={selected}
-                  disabled={busy !== null || locked !== null}
-                  busy={busy === 'asking' || busy === 'dropping' ? busy : null}
-                  onAsk={() => void askPicture(selected)}
-                  onDrop={() => void dropPicture(selected)}
-                />
+              {!clip && (
+                <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => setPictureOf(selected.id)}>
+                  {selected.picture?.status === 'making' ? <LoaderCircle size={15} className="spin" aria-hidden /> : <ImagePlus size={15} aria-hidden />}
+                  {selected.picture?.status === 'making' ? 'Making a picture…' : 'Picture…'}
+                </button>
               )}
               <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} aria-busy={busy === 'saving'} onClick={() => void leave()}>
                 Done
@@ -487,7 +492,7 @@ export function AdStudio({
                   <p>The picture could not be made: {v.picture.note ?? 'the image model did not answer.'}</p>
                 </div>
               )}
-              {v.picture?.status === 'none' && v.picture.note && !v.imageUrl && <p className={cx('muted small', styles.pictureNote)}>{v.picture.note}</p>}
+              {v.picture?.status === 'none' && v.picture.note && <p className={cx('muted small', styles.pictureNote)}>{v.picture.note}</p>}
               {flags.length > 0 && (
                 <div className={styles.flags} role="note">
                   <TriangleAlert size={15} aria-hidden />
@@ -563,6 +568,18 @@ export function AdStudio({
         />
       )}
 
+      {picturing && (
+        <PictureDialog
+          variant={picturing}
+          pictureStyle={pictures.style}
+          model={pictures.model}
+          sample={pictures.sample}
+          waitingToPost={postState(posts, picturing.id).waiting !== null}
+          onChange={(change) => pictureChanged(picturing.id, change)}
+          onClose={() => setPictureOf(null)}
+        />
+      )}
+
       {editingVideo && clip && (
         <VideoEditor
           variant={editingVideo}
@@ -576,45 +593,5 @@ export function AdStudio({
         />
       )}
     </div>
-  );
-}
-
-/** Ask for a picture, another one, or go back to the drawn design. While one is being made, say so; after ten minutes it may be asked for again. */
-function PictureButtons({
-  variant,
-  disabled,
-  busy,
-  onAsk,
-  onDrop,
-}: {
-  variant: Variant;
-  disabled: boolean;
-  /** Which of the two is being sent. */
-  busy: 'asking' | 'dropping' | null;
-  onAsk: () => void;
-  onDrop: () => void;
-}) {
-  const making = variant.picture?.status === 'making';
-  const stale = making && !!variant.picture?.askedAt && Date.now() - Date.parse(variant.picture.askedAt) > PICTURE_RETRY_MS;
-  return (
-    <>
-      {making && !stale ? (
-        <button type="button" className="btn btn-ghost btn-sm" disabled>
-          <LoaderCircle size={15} className="spin" aria-hidden />
-          Making a picture…
-        </button>
-      ) : (
-        <button type="button" className="btn btn-ghost btn-sm" disabled={disabled} aria-busy={busy === 'asking'} onClick={onAsk} title={`From the prompt: ${variant.picturePrompt ?? ''}`}>
-          {variant.imageUrl || stale ? <RefreshCw size={15} aria-hidden /> : <ImagePlus size={15} aria-hidden />}
-          {stale ? 'Ask again' : variant.imageUrl ? 'Try another picture' : 'Make a picture'}
-        </button>
-      )}
-      {(variant.imageUrl || making) && (
-        <button type="button" className="btn btn-quiet btn-sm" disabled={disabled} aria-busy={busy === 'dropping'} onClick={onDrop}>
-          <ImageOff size={15} aria-hidden />
-          {variant.imageUrl ? 'Use the design' : 'Stop'}
-        </button>
-      )}
-    </>
   );
 }

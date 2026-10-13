@@ -4,43 +4,69 @@ import { useEffect, useRef, useState } from 'react';
 import type { TranscriptLine } from '@/lib/types';
 import type { ClipStatus } from './ClipField';
 
-export type TranscriptState = { state: 'idle' } | { state: 'working' } | { state: 'done'; lines: TranscriptLine[] } | { state: 'failed'; error: string };
+export type TranscriptState =
+  | { state: 'idle' }
+  /** The speech model coming in, the first time only: the share so far, or null while unknown. */
+  | { state: 'loading'; share: number | null }
+  /** The clip being heard: the share so far, or null while unknown. */
+  | { state: 'working'; share: number | null }
+  | { state: 'done'; lines: TranscriptLine[] }
+  /** Why not; retry when another try could help (the model's download, not a silent clip). */
+  | { state: 'failed'; error: string; retry: boolean };
 
 /**
- * What is said in the clip, asked for once it has uploaded (/api/transcribe,
- * Deepgram). A clip the sample data kept in the browser has nothing stored
- * to transcribe; a failure leaves the team to type, as before.
+ * What is said in the clip, heard on this computer once the clip is ready
+ * (lib/speech.ts, Whisper in the browser): free, and the clip's sound goes
+ * nowhere. The sample data's clips are heard too, since nothing is stored.
+ * A failure leaves the team to type, as before.
  */
-export function useClipTranscript(clip: ClipStatus): TranscriptState {
+export function useClipTranscript(clip: ClipStatus): [TranscriptState, () => void] {
   const [state, setState] = useState<TranscriptState>({ state: 'idle' });
+  // Raised to hear the same clip again after a failure.
+  const [attempt, setAttempt] = useState(0);
   const asked = useRef<string | null>(null);
-  const path = clip.state === 'ready' && !clip.sample ? clip.clip.path : null;
+  const key = clip.state === 'ready' ? clip.clip.path : null;
+  const file = clip.state === 'ready' ? clip.file : null;
+  const length = clip.state === 'ready' ? clip.clip.duration : 0;
 
   useEffect(() => {
-    if (!path) {
+    if (!key || !file) {
       asked.current = null;
       setState({ state: 'idle' });
       return;
     }
-    if (asked.current === path) return;
-    asked.current = path;
+    const ask = `${key}#${attempt}`;
+    if (asked.current === ask) return;
+    asked.current = ask;
     const controller = new AbortController();
-    setState({ state: 'working' });
-    void fetch('/api/transcribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), signal: controller.signal })
-      .then(async (res) => {
-        const body = (await res.json().catch(() => null)) as { lines?: TranscriptLine[]; error?: string } | null;
-        if (asked.current !== path) return;
-        if (res.ok && body?.lines) setState({ state: 'done', lines: body.lines });
-        else setState({ state: 'failed', error: body?.error ?? 'The clip could not be transcribed. Type what is said.' });
-      })
+    setState({ state: 'working', share: null });
+    // Loaded when a clip is heard: most visits to the page never need it.
+    import('@/lib/speech')
+      .then(({ hear, SpeechError }) =>
+        hear(
+          file,
+          length,
+          (h) => {
+            if (asked.current === ask) setState(h.stage === 'loading' ? { state: 'loading', share: h.share } : { state: 'working', share: h.share });
+          },
+          controller.signal,
+        )
+          .then((lines) => {
+            if (asked.current === ask) setState({ state: 'done', lines });
+          })
+          .catch((err: unknown) => {
+            if (controller.signal.aborted || asked.current !== ask) return;
+            setState(err instanceof SpeechError ? { state: 'failed', error: err.message, retry: err.retry } : { state: 'failed', error: 'The clip could not be heard here. Type what is said.', retry: true });
+          }),
+      )
       .catch(() => {
-        if (!controller.signal.aborted && asked.current === path) setState({ state: 'failed', error: 'The clip could not be transcribed. Type what is said.' });
+        if (!controller.signal.aborted && asked.current === ask) setState({ state: 'failed', error: 'The clip could not be heard here. Type what is said.', retry: true });
       });
     return () => {
       controller.abort();
-      if (asked.current === path) asked.current = null;
+      if (asked.current === ask) asked.current = null;
     };
-  }, [path]);
+  }, [key, file, length, attempt]);
 
-  return state;
+  return [state, () => setAttempt((n) => n + 1)];
 }
