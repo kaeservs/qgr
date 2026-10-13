@@ -1015,6 +1015,28 @@ export const posts: Post[] = [
     ],
   },
   {
+    // B on LinkedIn too, where A went first: with p-3 an A/B test on LinkedIn.
+    id: 'p-6',
+    variantId: 'v-ns-b',
+    variantLabel: 'B',
+    adSetId: 'a-northstar',
+    adSetTitle: 'Webinar season',
+    angle: 'Costs, plainly',
+    scheduledFor: '2026-10-02T14:00:00Z',
+    createdAt: '2026-10-01T09:20:00Z',
+    targets: [
+      {
+        place: 'linkedin',
+        text: 'What EB-5 really costs, line by line: the investment, the fees and the timelines, in a free live session.',
+        media: 'image',
+        status: 'posted',
+        postedAt: '2026-10-02T14:00:15Z',
+        standIn: false,
+        results: { reach: 2600, views: 3400, reactions: 41, comments: 9, shares: 6, clicks: 22, at: '2026-10-07T06:00:00Z' },
+      },
+    ],
+  },
+  {
     id: 'p-4',
     variantId: 'v-ns-b',
     variantLabel: 'B',

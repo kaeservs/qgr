@@ -29,7 +29,7 @@ describe('a post’s numbers', () => {
 describe('what worked', () => {
   it('lists only places that went out for real and have numbers, newest first', () => {
     const list = measured(posts);
-    expect(list.map((m) => `${m.post.id}:${m.place}`)).toEqual(['p-5:linkedin', 'p-4:instagram', 'p-4:facebook', 'p-3:linkedin', 'p-3:facebook']);
+    expect(list.map((m) => `${m.post.id}:${m.place}`)).toEqual(['p-5:linkedin', 'p-6:linkedin', 'p-4:instagram', 'p-4:facebook', 'p-3:linkedin', 'p-3:facebook']);
   });
 
   it('adds the places up by angle, best engagement first', () => {
@@ -39,6 +39,6 @@ describe('what worked', () => {
     expect(live).toMatchObject({ places: 2, reach: 2800, engagements: 211, best: 'linkedin' });
     expect(live.rate).toBeCloseTo(211 / 2800, 6);
     // Instagram gives no clicks for a feed post: what it gives still counts.
-    expect(angles.find((a) => a.angle === 'Costs, plainly')).toMatchObject({ places: 2, reach: 5360, engagements: 339, best: 'facebook' });
+    expect(angles.find((a) => a.angle === 'Costs, plainly')).toMatchObject({ places: 3, reach: 7960, engagements: 417, best: 'facebook' });
   });
 });

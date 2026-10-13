@@ -15,8 +15,10 @@ Quantum Global Residency.
 Approve a variant and post it to the Facebook Page, Instagram and the LinkedIn
 Page, now or at a time you pick; the Posts page shows how each one went, a
 calendar of what goes out when, and what worked: each post's reach and
-engagement, added up by angle. The strategist reads the same results before it
-plans the next push. The
+engagement, added up by angle, and A/B tests, where variants of the same ads
+posted to the same place are side by side and one is marked as leading only
+once it is ahead by more than chance would explain. The strategist reads the
+same results before it plans the next push. The
 tracker scans the competitors you track on a schedule (Settings, Agents), and
 the strategist and the Content Agent can be switched off so a run waits for
 your go-ahead before them.
