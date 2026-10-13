@@ -25,8 +25,9 @@ const here = dirname(fileURLToPath(import.meta.url));
  * for the nodes before it that a script reads by name, each item paired with
  * the input item at the same place, as n8n pairs them.
  */
-function step(file: string, items: unknown[], swap: Record<string, string> = {}, earlier: Record<string, unknown[]> = {}): Json[] {
-  let code = readFileSync(join(here, 'code', file), 'utf8');
+function step(file: string | string[], items: unknown[], swap: Record<string, string> = {}, earlier: Record<string, unknown[]> = {}): Json[] {
+  // Several files make one script, as the build joins them: shared helpers first.
+  let code = (Array.isArray(file) ? file : [file]).map((f) => readFileSync(join(here, 'code', f), 'utf8')).join('\n');
   for (const [key, value] of Object.entries(swap)) code = code.replaceAll(key, value);
   const all = items.map((json) => ({ json }));
   const $input = { first: () => all[0], all: () => all };
@@ -38,6 +39,8 @@ function step(file: string, items: unknown[], swap: Record<string, string> = {},
 }
 
 const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' } as const;
+/** The LinkedIn steps' scripts each start with the shared reasons, as the build joins them. */
+const LINKEDIN = ['shared-linkedin-refusal.js'];
 
 let t: TestDatabase;
 let member = '';
@@ -169,6 +172,266 @@ describe('a post, from the dashboard to the stand-ins', () => {
   });
 });
 
+describe('posting for real', () => {
+  const STORAGE = 'https://tcinsdexwvzpznqlcpww.supabase.co/storage/v1';
+  const signed = (path: string) => ({ statusCode: 200, body: { signedURL: `/object/sign/post-media/${path}?token=t` } });
+  const item = (fields: Json = {}): Json => ({ post_id: 'p1', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/u/f.jpg', media_kind: 'image', live: true, page: { id: '1234567890', name: 'Quantum Global' }, ...fields });
+  /** "With its link", after the file was signed (or not), for the places going out for real. */
+  const ready = (items: Json[], answers: Json[]) => step('publisher-ready.js', answers, { __STORAGE__: STORAGE }, { 'Post for real?': items });
+
+  it('goes out on Facebook for real, and is recorded with its link', async () => {
+    const { variantId } = await approvedVariant();
+    await t.asUser(member, async () => {
+      await t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '', '', '', '')`);
+      await t.db.query(`select public.set_post_for_real('facebook', true)`);
+    });
+    const media = `posts/${member}/${crypto.randomUUID()}.jpg`;
+    await t.asUser(member, () => t.db.query(`insert into storage.objects (bucket_id, name) values ('post-media', $1)`, [media]));
+    const postId = await t.asUser(member, () => t.value<string>(`select public.schedule_post($1, $2::jsonb)`, [variantId, JSON.stringify([{ place: 'facebook', media_path: media, media_kind: 'image' }])]));
+
+    const due = await t.asService(() => t.value<unknown[]>(`select public.publisher_take_due(p_limit => 10)`));
+    const items = step('shared-items.js', [{ data: due }]).filter((d) => d.post_id === postId);
+    expect(items).toEqual([expect.objectContaining({ place: 'facebook', live: true, media_path: media })]);
+
+    const [ok] = ready(items, [signed(media)]);
+    expect(ok).toEqual({ ok: true, post_id: postId, place: 'facebook', text: copy.meta.text, media_kind: 'image', media_url: `${STORAGE}/object/sign/post-media/${media}?token=t`, page: { id: '1234567890', name: 'Quantum Global' } });
+    const [plan] = step('publisher-facebook-plan.js', [ok]);
+    expect(plan).toEqual({
+      post_id: postId,
+      place: 'facebook',
+      page_id: '1234567890',
+      kind: 'image',
+      url: 'https://graph.facebook.com/v25.0/1234567890/photos',
+      body: { url: ok!.media_url, message: copy.meta.text, published: true },
+    });
+    const [answer] = step('publisher-facebook-answer.js', [{ statusCode: 200, body: { id: '555', post_id: '1234567890_555' } }], {}, { 'Plan the Facebook post': [plan] });
+    expect(answer).toEqual({ post_id: postId, place: 'facebook', ok: true, remote_id: '1234567890_555', remote_url: 'https://www.facebook.com/1234567890_555', stand_in: false });
+
+    const finished = await t.asService(() =>
+      t.value<{ remove_media: string | null }>(`select public.publisher_finish($1, $2, $3, $4, $5)`, [answer!.post_id, answer!.place, answer!.remote_id, answer!.remote_url, answer!.stand_in]),
+    );
+    expect(finished.remove_media).toBe(media);
+    expect(await t.value<{ status: string; stand_in: boolean; remote_url: string }>(`select to_jsonb(x) from (select status, stand_in, remote_url from public.post_targets where post_id = $1) x`, [postId])).toEqual({
+      status: 'posted',
+      stand_in: false,
+      remote_url: 'https://www.facebook.com/1234567890_555',
+    });
+    // Posted for real, it is read for results.
+    const toRead = await t.asService(() => t.value<{ post_id: string }[]>(`select public.results_take_due(p_limit => 50)`));
+    expect(toRead.some((r) => r.post_id === postId)).toBe(true);
+    await t.asUser(member, () => t.db.query(`select public.set_post_for_real('facebook', false)`));
+  });
+
+  it('stops a place that cannot go out before anything is sent', () => {
+    expect(ready([item({ page: { id: null, name: null } })], [{}])[0]).toEqual({ ok: false, post_id: 'p1', place: 'facebook', error: 'No Facebook Page is set in Settings, Where posts go.', unknown: false });
+    expect(ready([item({ place: 'instagram', page: { id: null } })], [{}])[0]!.error).toBe('No Instagram account is set in Settings, Where posts go.');
+    expect(ready([item()], [{ statusCode: 400, body: { error: 'not_found' } }])[0]).toMatchObject({ ok: false, error: 'The file could not be made ready for Facebook (400). Nothing went out: try again.' });
+    expect(ready([item({ place: 'instagram', media_path: null, media_kind: null })], [{}])[0]!.error).toBe('Instagram needs a picture or a video, and this post has none.');
+    // Words alone go to Facebook and LinkedIn; a link Storage gives whole is kept as it is.
+    expect(ready([item({ media_path: null, media_kind: null })], [{}])[0]).toMatchObject({ ok: true, media_url: null });
+    expect(ready([item()], [{ statusCode: 200, body: { signedURL: 'https://cdn.example/f.jpg?t=1' } }])[0]).toMatchObject({ media_url: 'https://cdn.example/f.jpg?t=1' });
+  });
+
+  it('posts a video or words alone to Facebook, and reads every answer it can give', () => {
+    const [video] = step('publisher-facebook-plan.js', [{ ...item({ media_kind: 'video' }), media_url: 'https://s/v.mp4' }]);
+    expect(video).toMatchObject({ kind: 'video', url: 'https://graph-video.facebook.com/v25.0/1234567890/videos', body: { file_url: 'https://s/v.mp4', description: 'Plan your EB-5 path.', published: true } });
+    const [text] = step('publisher-facebook-plan.js', [{ ...item(), media_url: null }]);
+    expect(text).toMatchObject({ kind: 'text', url: 'https://graph.facebook.com/v25.0/1234567890/feed', body: { message: 'Plan your EB-5 path.', published: true } });
+
+    const read = (res: Json, plan: Json = text!) => step('publisher-facebook-answer.js', [res], {}, { 'Plan the Facebook post': [plan] })[0]!;
+    expect(read({ statusCode: 200, body: { id: '777' } }, video)).toMatchObject({ ok: true, remote_id: '777', remote_url: 'https://www.facebook.com/1234567890/videos/777' });
+    expect(read({ statusCode: 200, body: { id: '1234567890_888' } })).toMatchObject({ ok: true, remote_id: '1234567890_888', remote_url: 'https://www.facebook.com/1234567890_888' });
+    // Never asked: the step had no credential and handed its input on.
+    expect(read(text!)).toMatchObject({ ok: false, unknown: false, error: expect.stringMatching(/attach the “Facebook Graph API” credential/) });
+    expect(read({ error: { message: 'getaddrinfo ENOTFOUND graph.facebook.com' } })).toMatchObject({ ok: false, unknown: false });
+    // Sent, and the answer lost: it may have gone out.
+    expect(read({ error: { message: 'timeout of 120000ms exceeded' } })).toMatchObject({ ok: false, unknown: true, error: expect.stringMatching(/Check the Page/) });
+    expect(read({ statusCode: 500, body: { error: { message: 'An unknown error has occurred.', code: 1 } } })).toMatchObject({ ok: false, unknown: true });
+    expect(read({ statusCode: 200, body: {} })).toMatchObject({ ok: false, unknown: true });
+    // Refused: nothing went out, and why.
+    expect(read({ statusCode: 400, body: { error: { message: 'Error validating access token', code: 190 } } }).error).toMatch(/token has expired or was revoked/);
+    expect(read({ statusCode: 403, body: { error: { message: '(#200) Requires pages_manage_posts', code: 200 } } }).error).toMatch(/needs pages_manage_posts/);
+    expect(read({ statusCode: 400, body: { error: { message: '(#506) Duplicate status message', code: 506 } } }).error).toBe('Facebook refused it as a duplicate of a recent post.');
+    expect(read({ statusCode: 400, body: { error: { message: 'Invalid parameter', code: 100, error_user_msg: 'The picture is too small.' } } })).toMatchObject({ ok: false, unknown: false, error: 'Facebook refused it (400, code 100): The picture is too small.' });
+  });
+
+  it('prepares an Instagram post, waits for it, and publishes it', () => {
+    const [picture] = step('publisher-instagram-plan.js', [{ ...item({ place: 'instagram', page: { id: '17841400000000000' } }), media_url: 'https://s/p.jpg' }]);
+    expect(picture).toEqual({ post_id: 'p1', place: 'instagram', account: '17841400000000000', kind: 'image', url: 'https://graph.facebook.com/v25.0/17841400000000000/media', body: { image_url: 'https://s/p.jpg', caption: 'Plan your EB-5 path.' }, wait: 10 });
+    const [reel] = step('publisher-instagram-plan.js', [{ ...item({ place: 'instagram', media_kind: 'video', page: { id: '17841400000000000' } }), media_url: 'https://s/v.mp4' }]);
+    expect(reel).toMatchObject({ kind: 'video', wait: 60, body: { media_type: 'REELS', video_url: 'https://s/v.mp4', caption: 'Plan your EB-5 path.', share_to_feed: true } });
+
+    const container = (res: Json) => step('publisher-instagram-container.js', [res], {}, { 'Plan the Instagram post': [picture] })[0]!;
+    const box = container({ statusCode: 200, body: { id: '9001' } });
+    expect(box).toEqual({
+      ok: true,
+      post_id: 'p1',
+      place: 'instagram',
+      kind: 'image',
+      wait: 10,
+      tries: 0,
+      creation_id: '9001',
+      status_url: 'https://graph.facebook.com/v25.0/9001?fields=status_code,status',
+      publish_url: 'https://graph.facebook.com/v25.0/17841400000000000/media_publish',
+    });
+    expect(container(picture!).error).toMatch(/attach the “Facebook Graph API” credential/);
+    expect(container({ statusCode: 400, body: { error: { message: 'Insufficient permission', code: 10 } } }).error).toMatch(/instagram_content_publish/);
+    expect(container({ error: { message: 'timeout' } })).toMatchObject({ ok: false, unknown: false });
+
+    // Checked after the wait ("Give Instagram time" hands on what it was given).
+    const check = (res: Json, waited: Json = box) => step('publisher-instagram-ready.js', [res], {}, { 'Give Instagram time': [waited] })[0]!;
+    const readyNow = (status: Json) => check({ statusCode: 200, body: status });
+    const published = readyNow({ status_code: 'FINISHED' });
+    expect(published).toEqual({ post_id: 'p1', place: 'instagram', ok: true, creation_id: '9001', publish_url: box.publish_url });
+    expect(readyNow({ status_code: 'ERROR', status: 'Error: Media upload has failed with error code 2207026' })).toMatchObject({ ok: false, unknown: false, error: expect.stringMatching(/could not use the picture \(Error: Media upload has failed/) });
+    expect(readyNow({ status_code: 'EXPIRED' })).toMatchObject({ ok: false, unknown: false });
+    expect(readyNow({ status_code: 'PUBLISHED' })).toMatchObject({ ok: false, unknown: true });
+    expect(check({ statusCode: 400, body: { error: { message: 'Invalid OAuth access token', code: 190 } } })).toMatchObject({ ok: false, unknown: false, error: expect.stringMatching(/would not say whether the picture was ready \(400, code 190\): Invalid OAuth/) });
+    // Still preparing, or no answer: a minute more and ask again, five times at most, as Meta asks.
+    let waited: Json = box;
+    for (const tries of [1, 2, 3, 4]) {
+      const res = tries === 2 ? { error: { message: 'socket hang up' } } : { statusCode: 200, body: { status_code: 'IN_PROGRESS' } };
+      waited = check(res, waited);
+      expect(waited).toEqual({ ...box, ok: false, again: true, tries, wait: 60 });
+    }
+    expect(check({ statusCode: 200, body: { status_code: 'IN_PROGRESS' } }, waited)).toEqual({
+      post_id: 'p1',
+      place: 'instagram',
+      ok: false,
+      unknown: false,
+      error: 'Instagram was still preparing the picture after five minutes. Nothing went out: try again later.',
+    });
+    expect(check({ statusCode: 200, body: { status_code: 'FINISHED' } }, waited)).toMatchObject({ ok: true, creation_id: '9001' });
+
+    const answer = (pub: Json, link: Json = {}) => step('publisher-instagram-answer.js', [link], {}, { 'Publish, wait or stop?': [published], 'Instagram: publish': [pub] })[0]!;
+    expect(answer({ statusCode: 200, body: { id: '17900000000000001' } }, { statusCode: 200, body: { permalink: 'https://www.instagram.com/p/AbC123/' } })).toEqual({
+      post_id: 'p1',
+      place: 'instagram',
+      ok: true,
+      remote_id: '17900000000000001',
+      remote_url: 'https://www.instagram.com/p/AbC123/',
+      stand_in: false,
+    });
+    // Published, with no link given: recorded all the same.
+    expect(answer({ statusCode: 200, body: { id: '17900000000000002' } }, { statusCode: 400, body: {} })).toMatchObject({ ok: true, remote_url: null });
+    expect(answer({ error: { message: 'socket hang up' } })).toMatchObject({ ok: false, unknown: true });
+    expect(answer({ statusCode: 502, body: {} })).toMatchObject({ ok: false, unknown: true });
+    expect(answer({ statusCode: 400, body: { error: { message: 'Media ID is not available', code: 9007, error_subcode: 2207027 } } })).toMatchObject({ ok: false, unknown: false, error: expect.stringMatching(/not finished preparing it/) });
+    expect(answer({ statusCode: 400, body: { error: { message: 'limit', code: 9, error_subcode: 2207042 } } }).error).toMatch(/100 posts a day/);
+  });
+
+  it('uploads to LinkedIn and posts as the Page, its words as written', () => {
+    const [plan] = step('publisher-linkedin-plan.js', [{ ...item({ place: 'linkedin', text: 'EB-5 (2026): #invest_now, ask [us] @QGR', page: { id: '98765' } }), media_url: 'https://s/p.jpg' }]);
+    expect(plan).toEqual({
+      ok: true,
+      post_id: 'p1',
+      place: 'linkedin',
+      owner: 'urn:li:organization:98765',
+      kind: 'image',
+      version: '202609',
+      media_url: 'https://s/p.jpg',
+      post: {
+        author: 'urn:li:organization:98765',
+        commentary: 'EB-5 \\(2026\\): \\#invest\\_now, ask \\[us\\] \\@QGR',
+        visibility: 'PUBLIC',
+        distribution: { feedDistribution: 'MAIN_FEED', targetEntities: [], thirdPartyDistributionChannels: [] },
+        lifecycleState: 'PUBLISHED',
+        isReshareDisabledByAuthor: false,
+      },
+    });
+    expect(step('publisher-linkedin-plan.js', [{ ...item({ place: 'linkedin', page: { id: '98765' } }), media_url: null }])[0]).toMatchObject({ kind: 'none' });
+
+    const start = { statusCode: 200, body: { value: { uploadUrl: 'https://www.linkedin.com/dms-uploads/abc', image: 'urn:li:image:C4E10AQ' } } };
+    const picture = (startRes: Json, put: Json) => step([...LINKEDIN, 'publisher-linkedin-picture.js'], [put], {}, { 'Plan the LinkedIn post': [plan], 'LinkedIn: start the picture': [startRes] })[0]!;
+    expect(picture(start, { statusCode: 201, body: '' })).toEqual({ ok: true, post_id: 'p1', place: 'linkedin', version: '202609', post: { ...(plan!.post as Json), content: { media: { id: 'urn:li:image:C4E10AQ' } } } });
+    expect(picture(plan!, {}).error).toMatch(/attach the “LinkedIn Community Management” credential/);
+    expect(picture({ statusCode: 403, body: { message: 'Not enough permissions to access: images.initializeUpload', status: 403 } }, {}).error).toMatch(/needs LinkedIn’s approval for the Community Management API/);
+    expect(picture(start, { statusCode: 500 })).toMatchObject({ ok: false, unknown: false, error: 'The picture could not be sent to LinkedIn (500). Nothing went out: try again.' });
+
+    const answer = (res: Json) => step([...LINKEDIN, 'publisher-linkedin-answer.js'], [res], {}, { 'Ready to post?': [picture(start, { statusCode: 201, body: '' })] })[0]!;
+    expect(answer({ statusCode: 201, headers: { 'x-restli-id': 'urn:li:share:7123' }, body: '' })).toEqual({
+      post_id: 'p1',
+      place: 'linkedin',
+      ok: true,
+      remote_id: 'urn:li:share:7123',
+      remote_url: 'https://www.linkedin.com/feed/update/urn:li:share:7123',
+      stand_in: false,
+    });
+    expect(answer({ statusCode: 201, headers: {}, body: '' })).toMatchObject({ ok: false, unknown: true });
+    expect(answer({ statusCode: 401, body: { message: 'Invalid access token' } }).error).toMatch(/reconnect the “LinkedIn Community Management” credential/);
+    expect(answer({ statusCode: 422, body: { message: 'ERROR :: /commentary :: is too long' } })).toMatchObject({ ok: false, unknown: false, error: 'LinkedIn would not post it (422): ERROR :: /commentary :: is too long' });
+    expect(answer({ statusCode: 426, body: { message: 'Requested version 202509 is not active' } }).error).toMatch(/move VERSION on in “Plan the LinkedIn post” \(QGR · Publisher\) and “Plan the read” \(QGR · Post results\)/);
+    expect(answer({ statusCode: 504, body: {} })).toMatchObject({ ok: false, unknown: true });
+    expect(answer({ error: { message: 'read ECONNRESET' } })).toMatchObject({ ok: false, unknown: true });
+  });
+
+  it('sends a video to LinkedIn in the parts it asks for, in order', () => {
+    const [plan] = step('publisher-linkedin-plan.js', [{ ...item({ place: 'linkedin', media_kind: 'video', page: { id: '98765' } }), media_url: 'https://s/v.mp4' }]);
+    // Its size, from Storage's answer to a request for the first byte.
+    const size = (res: Json) => step([...LINKEDIN, 'publisher-linkedin-size.js'], [res], {}, { 'Plan the LinkedIn post': [plan] })[0]!;
+    expect(size({ statusCode: 206, headers: { 'content-range': 'bytes 0-0/6000001' }, data: 'x' })).toEqual({ ok: true, post_id: 'p1', place: 'linkedin', size: 6000001 });
+    // Storage that does not read parts would send the whole file for every part: stop first.
+    expect(size({ statusCode: 200, headers: {}, data: '…' })).toMatchObject({ ok: false, unknown: false, error: 'The video could not be read from Storage in parts (200). Nothing went out: try again.' });
+    expect(size({ error: { message: 'getaddrinfo ENOTFOUND' } })).toMatchObject({ ok: false, error: expect.stringMatching(/in parts \(getaddrinfo ENOTFOUND\)/) });
+
+    const start = {
+      statusCode: 200,
+      body: {
+        value: {
+          video: 'urn:li:video:C5F10AQ',
+          uploadToken: 'tok',
+          uploadInstructions: [
+            { uploadUrl: 'https://up/1', firstByte: 0, lastByte: 4194303 },
+            { uploadUrl: 'https://up/2', firstByte: 4194304, lastByte: 6000000 },
+          ],
+        },
+      },
+    };
+    const parts = step([...LINKEDIN, 'publisher-linkedin-parts.js'], [start], {}, { 'Plan the LinkedIn post': [plan] });
+    expect(parts).toEqual([
+      { ok: true, post_id: 'p1', place: 'linkedin', part: 0, parts: 2, media_url: 'https://s/v.mp4', range: 'bytes=0-4194303', upload_url: 'https://up/1', video: 'urn:li:video:C5F10AQ', upload_token: 'tok' },
+      { ok: true, post_id: 'p1', place: 'linkedin', part: 1, parts: 2, media_url: 'https://s/v.mp4', range: 'bytes=4194304-6000000', upload_url: 'https://up/2', video: 'urn:li:video:C5F10AQ', upload_token: 'tok' },
+    ]);
+    expect(step([...LINKEDIN, 'publisher-linkedin-parts.js'], [{ statusCode: 403, body: { message: 'denied' } }], {}, { 'Plan the LinkedIn post': [plan] })).toEqual([
+      expect.objectContaining({ ok: false, unknown: false, error: expect.stringMatching(/would not let the app take the video/) }),
+    ]);
+
+    // The parts come back in any order; their ETags are listed in the parts' order.
+    const gather = (answers: Json[]) => step([...LINKEDIN, 'publisher-linkedin-gather.js'], answers, {}, { 'One item per part': [parts[1], parts[0]] });
+    expect(gather([{ statusCode: 200, headers: { etag: '"/ama/two"' } }, { statusCode: 200, headers: { etag: '/ama/one' } }])).toEqual([
+      { ok: true, post_id: 'p1', place: 'linkedin', video: 'urn:li:video:C5F10AQ', upload_token: 'tok', etags: ['/ama/one', '/ama/two'] },
+    ]);
+    expect(gather([{ statusCode: 200, headers: { etag: '"/ama/two"' } }, { statusCode: 500, headers: {} }])).toEqual([
+      expect.objectContaining({ ok: false, unknown: false, error: 'Part 1 of 2 could not be sent to LinkedIn (500). Nothing went out: try again.' }),
+    ]);
+
+    const [done] = gather([{ statusCode: 200, headers: { etag: '"/ama/two"' } }, { statusCode: 200, headers: { etag: '/ama/one' } }]);
+    const video = (res: Json) => step([...LINKEDIN, 'publisher-linkedin-video.js'], [res], {}, { 'Plan the LinkedIn post': [plan], 'Gather the parts': [done] })[0]!;
+    const post = { ...(plan!.post as Json), content: { media: { id: 'urn:li:video:C5F10AQ' } } };
+    const sent = video({ statusCode: 200, body: '' });
+    expect(sent).toEqual({ ok: true, post_id: 'p1', place: 'linkedin', version: '202609', video: 'urn:li:video:C5F10AQ', post, tries: 0, wait: 20 });
+    expect(video({ statusCode: 400, body: { message: 'Upload incomplete' } })).toMatchObject({ ok: false, unknown: false, error: 'LinkedIn would not finish the video (400): Upload incomplete' });
+
+    // The post names the video only once LinkedIn has processed it.
+    const check = (res: Json, waited: Json = sent) => step([...LINKEDIN, 'publisher-linkedin-ready.js'], [res], {}, { 'Give LinkedIn time': [waited] })[0]!;
+    expect(check({ statusCode: 200, body: { status: 'AVAILABLE', id: 'urn:li:video:C5F10AQ' } })).toEqual({ ok: true, post_id: 'p1', place: 'linkedin', version: '202609', post });
+    expect(check({ statusCode: 200, body: { status: 'PROCESSING_FAILED', processingFailureReason: 'Video is too short' } })).toMatchObject({ ok: false, unknown: false, error: 'LinkedIn could not process the video (Video is too short). Nothing went out.' });
+    expect(check({ statusCode: 403, body: { message: 'Not enough permissions to access: videos.GET' } }).error).toMatch(/would not let the app say whether the video is ready/);
+    let waited: Json = sent;
+    for (const tries of [1, 2, 3, 4]) {
+      waited = check(tries === 3 ? { statusCode: 503, body: {} } : { statusCode: 200, body: { status: 'PROCESSING' } }, waited);
+      expect(waited).toEqual({ ...sent, ok: false, again: true, tries, wait: 60 });
+    }
+    expect(check({ statusCode: 200, body: { status: 'PROCESSING' } }, waited)).toEqual({
+      ok: false,
+      post_id: 'p1',
+      place: 'linkedin',
+      unknown: false,
+      error: 'LinkedIn was still processing the video after five minutes. Nothing went out: try again later.',
+    });
+  });
+});
+
 describe('results, from the platforms back to the dashboard', () => {
   /** The dashboard's view of a post, read as a teammate. */
   const dashboardPost = (postId: string) =>
@@ -184,6 +447,7 @@ describe('results, from the platforms back to the dashboard', () => {
 
   it('reads a real post, records what the platform gave, and shows it with its rate', async () => {
     const { variantId } = await approvedVariant();
+    await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('', '', '', '', '98765', 'Quantum Global Residency')`));
     const postId = await t.asUser(member, () => t.value<string>(`select public.schedule_post($1, '[{"place":"linkedin"}]'::jsonb)`, [variantId]));
     await t.asService(() => t.value(`select public.publisher_take_due()`));
     // As the real LinkedIn step will record it, once the keys are in.
@@ -193,18 +457,107 @@ describe('results, from the platforms back to the dashboard', () => {
     const items = step('shared-items.js', [{ data: due }]).filter((i) => i.post_id === postId);
     expect(items).toEqual([expect.objectContaining({ place: 'linkedin', remote_id: 'urn:li:share:7123' })]);
 
-    // The stand-in reads nothing, and nothing is recorded.
-    const [standIn] = step('results-stand-in.js', items, { __PLACE_NAME__: 'LinkedIn' });
-    expect(standIn).toEqual({ ok: true, post_id: postId, place: 'linkedin', results: null, stand_in: true });
     expect((await dashboardPost(postId)).targets[0]!.results).toBeUndefined();
 
-    // The real step's answer, in the shape the stand-in documents.
+    // "Plan the read", LinkedIn's answer (as its docs show it), "Read the numbers".
+    const [plan] = step('results-plan.js', items);
+    expect(plan).toEqual({
+      post_id: postId,
+      place: 'linkedin',
+      kind: 'linkedin',
+      version: '202609',
+      url: 'https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=urn%3Ali%3Aorganization%3A98765&shares=List(urn%3Ali%3Ashare%3A7123)',
+    });
+    const statistics = { uniqueImpressionsCount: 940, shareCount: 3, engagement: 0.0819, clickCount: 29, likeCount: 38, impressionCount: 1320, commentCount: 7 };
+    const [read] = step([...LINKEDIN, 'results-read.js'], [{ statusCode: 200, body: { elements: [{ totalShareStatistics: statistics, share: 'urn:li:share:7123', organizationalEntity: 'urn:li:organization:98765' }] } }], {}, { 'Plan the read': [plan] });
     const numbers = { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29 };
-    await t.asService(() => t.db.query(`select public.results_record($1, 'linkedin', $2::jsonb)`, [postId, JSON.stringify(numbers)]));
+    expect(read).toEqual({ post_id: postId, place: 'linkedin', ok: true, results: numbers });
+    await t.asService(() => t.db.query(`select public.results_record($1, $2, $3::jsonb)`, [read!.post_id, read!.place, JSON.stringify(read!.results)]));
     const target = (await dashboardPost(postId)).targets[0]!;
     expect(target.results).toMatchObject(numbers);
     expect(formatRate(engagementRate(target.results!)!)).toBe('8.2%');
     expect(target.url).toBe('https://www.linkedin.com/feed/update/urn:li:share:7123');
+  });
+});
+
+describe('reading the numbers', () => {
+  const due = (fields: Json): Json => ({ post_id: 'p1', place: 'facebook', remote_id: '1234567890_555', media_kind: 'image', posted_at: '2026-10-08T13:00:12+00:00', page: { id: '1234567890' }, ...fields });
+  const read = (item: Json, res: Json) => {
+    const [plan] = step('results-plan.js', [item]);
+    return step([...LINKEDIN, 'results-read.js'], [res], {}, { 'Plan the read': [plan] })[0]!;
+  };
+  const lifetime = (name: string, value: unknown) => ({ name, period: 'lifetime', values: [{ value }] });
+
+  it('asks each platform for a post’s numbers in one request', () => {
+    expect(step('results-plan.js', [due({})])[0]).toMatchObject({
+      kind: 'facebook-post',
+      url: 'https://graph.facebook.com/v25.0/1234567890_555?fields=shares,comments.limit(0).summary(true),reactions.limit(0).summary(true),insights.metric(post_media_view,post_total_media_view_unique,post_clicks)',
+    });
+    expect(step('results-plan.js', [due({ remote_id: '777', media_kind: 'video' })])[0]).toMatchObject({ kind: 'facebook-video', url: 'https://graph.facebook.com/v25.0/777/video_insights' });
+    expect(step('results-plan.js', [due({ place: 'instagram', remote_id: '17900000000000001' })])[0]).toMatchObject({
+      kind: 'instagram',
+      url: 'https://graph.facebook.com/v25.0/17900000000000001/insights?metric=reach,views,likes,comments,shares',
+    });
+    expect(step('results-plan.js', [due({ place: 'linkedin', remote_id: 'urn:li:ugcPost:7124', page: { id: '98765' } })])[0]!.url).toBe(
+      'https://api.linkedin.com/rest/organizationalEntityShareStatistics?q=organizationalEntity&organizationalEntity=urn%3Ali%3Aorganization%3A98765&ugcPosts=List(urn%3Ali%3AugcPost%3A7124)',
+    );
+  });
+
+  it('reads every number by its name, and leaves out what a platform does not give', () => {
+    const post = read(due({}), {
+      statusCode: 200,
+      body: {
+        id: '1234567890_555',
+        comments: { data: [], summary: { order: 'ranked', total_count: 7, can_comment: true } },
+        reactions: { data: [], summary: { total_count: 38, viewer_reaction: 'NONE' } },
+        shares: { count: 3 },
+        insights: { data: [lifetime('post_clicks', 29), lifetime('post_media_view', 1320), lifetime('post_total_media_view_unique', 940)] },
+      },
+    });
+    expect(post).toEqual({ post_id: 'p1', place: 'facebook', ok: true, results: { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29 } });
+    // Nobody shared it: Facebook leaves shares out. A metric it no longer gives is null.
+    expect(read(due({}), { statusCode: 200, body: { comments: { summary: { total_count: 0 } }, reactions: { summary: { total_count: 2 } }, insights: { data: [lifetime('post_media_view', 40)] } } }).results).toEqual({
+      reach: null,
+      views: 40,
+      reactions: 2,
+      comments: 0,
+      shares: 0,
+      clicks: null,
+    });
+    const video = read(due({ remote_id: '777', media_kind: 'video' }), {
+      statusCode: 200,
+      body: {
+        data: [
+          lifetime('total_video_views', 1500),
+          lifetime('total_video_views_unique', 1100),
+          lifetime('total_video_reactions_by_type_total', { like: 30, love: 5 }),
+          lifetime('total_video_stories_by_action_type', { share: 4, like: 30, comment: 6 }),
+          lifetime('total_video_avg_time_watched', 8200),
+        ],
+      },
+    });
+    expect(video.results).toEqual({ reach: 1100, views: 1500, reactions: 35, comments: 6, shares: 4, clicks: null });
+    // Newer answers give the value as a total.
+    const instagram = read(due({ place: 'instagram', remote_id: '1790' }), {
+      statusCode: 200,
+      body: { data: [lifetime('reach', 800), { name: 'views', period: 'lifetime', total_value: { value: 1200 } }, lifetime('likes', 51), lifetime('comments', 4), lifetime('shares', 2)] },
+    });
+    expect(instagram.results).toEqual({ reach: 800, views: 1200, reactions: 51, comments: 4, shares: 2, clicks: null });
+  });
+
+  it('says why a platform gave no numbers, so the ones before are kept', () => {
+    const facebook = due({});
+    expect(read(facebook, facebook).error).toBe('Facebook was not asked: attach the “Facebook Graph API” credential to “Meta: its numbers” in n8n.');
+    expect(read(due({ place: 'linkedin', remote_id: 'urn:li:share:1', page: { id: '9' } }), {}).error).toMatch(/“LinkedIn Community Management” credential to “LinkedIn: its numbers”/);
+    expect(read(facebook, { error: { message: 'getaddrinfo EAI_AGAIN graph.facebook.com' } }).error).toMatch(/could not be asked for the numbers \(getaddrinfo EAI_AGAIN/);
+    expect(read(facebook, { statusCode: 400, body: { error: { message: 'Invalid OAuth access token.', code: 190 } } }).error).toMatch(/token has expired or was revoked/);
+    expect(read(due({ place: 'instagram' }), { statusCode: 403, body: { error: { message: '(#10) Application does not have permission', code: 10 } } }).error).toMatch(/needs instagram_manage_insights/);
+    expect(read(facebook, { statusCode: 400, body: { error: { message: '(#100) The value must be a valid insights metric', code: 100 } } }).error).toBe(
+      'Facebook no longer gives one of the numbers asked for ((#100) The value must be a valid insights metric): the metrics in “Plan the read” need updating.',
+    );
+    const linkedin = due({ place: 'linkedin', remote_id: 'urn:li:share:1', page: { id: '9' } });
+    expect(read(linkedin, { statusCode: 403, body: { message: 'Not enough permissions to access: organizationalEntityShareStatistics.FINDER-organizationalEntity' } }).error).toMatch(/would not let the app give the numbers/);
+    expect(read(linkedin, { statusCode: 200, body: { elements: [] } })).toEqual({ post_id: 'p1', place: 'linkedin', ok: false, error: 'LinkedIn gave no numbers for this post. They are read again in six hours.' });
   });
 });
 

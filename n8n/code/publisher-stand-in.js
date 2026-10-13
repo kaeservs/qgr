@@ -1,10 +1,10 @@
-// STAND-IN for posting to __PLACE_NAME__. Nothing is posted anywhere: it
-// answers as the real step will, so a post can be followed from the
-// dashboard to here and back, and marks the result stand_in so the dashboard
-// says nothing went out.
+// STAND-IN for posting to __PLACE_NAME__, the way taken while __PLACE_NAME__ is
+// not switched to post for real (Settings, Where posts go). Nothing is posted
+// anywhere: it answers as the real steps do, so a post can be followed from
+// the dashboard to here and back, and marks the result stand_in so the
+// dashboard says nothing went out.
 //
-// To connect __PLACE_NAME__, replace this node with the real steps (the
-// sticky note beside it lists them), keeping the output the same:
+// The real steps (on "Post for real?"'s true side) answer in the same shape:
 //   { ok: true, post_id, place, remote_id, remote_url, stand_in: false }
 // or, when it did not go out:
 //   { ok: false, post_id, place, error, unknown }

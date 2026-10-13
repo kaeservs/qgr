@@ -45,14 +45,15 @@ post results and pictures). The app
 reads a run's link itself when the run starts (a competitor's site, or a
 podcast, blog or video page) and the agents work from what it read.
 
-Placeholders for now, each to be swapped for the real thing with the same
-output: competitor ads (sample ads until the tracker is switched to Apify),
-ad pictures (an image model, ChatGPT's or Higgsfield's), and the posting
-itself. Until the Meta and LinkedIn keys are in
-n8n, a post goes all the way through the publisher to a stand-in that posts
-nothing, and the Posts page says so; a picture asked for goes through "QGR ·
-Pictures" to a stand-in that makes none, and the studio says so and keeps the
-drawn design. Not built: paid ads, and posting to X (its API is paid).
+Each part that needs a key has a stand-in until the key is in, and the
+dashboard says which is which: competitor ads are sample ads until the tracker
+is switched to Apify; pictures come from a stand-in that makes none until
+Cloudflare Workers AI is chosen; and each place posts through a stand-in that
+posts nothing until it is switched to post for real in Settings, Where posts
+go. Switched on, the publisher's real steps post to the Facebook Page,
+Instagram and the LinkedIn Page, and "QGR · Post results" reads each post's
+numbers every six hours. Not built: paid ads, and posting to X (its API is
+paid).
 
 ## Run it
 
@@ -75,13 +76,29 @@ n8n's "QGR webhook secret" credential. Posts, scans and pictures need the "QGR
 Pictures" workflows published in n8n. A clip's transcript needs nothing: it is
 made in the browser.
 
-To post for real, in n8n: a Meta app whose Page access token can publish to
-the Facebook Page and its Instagram professional account (`pages_manage_posts`,
-`pages_read_engagement`, `instagram_basic`, `instagram_content_publish`), and a
-LinkedIn app with the Community Management API (`w_organization_social`) for
-the LinkedIn Page. Then replace each stand-in in "QGR · Publisher" and "QGR ·
-Post results" with the steps its note lists, and put the Pages' IDs in
-Settings, Where posts go. To make pictures for real (free): in Cloudflare, copy
+To post for real:
+
+1. **Facebook and Instagram.** A Meta app, and a Page access token that does
+   not expire (a System User's, in Meta Business Suite) with
+   `pages_show_list`, `pages_manage_posts`, `pages_read_engagement` and
+   `pages_read_user_content` for the Page, and `instagram_basic`,
+   `instagram_content_publish` and `instagram_manage_insights` for its
+   Instagram professional account, which must be linked to the Page. In n8n,
+   create a **Facebook Graph API** credential holding the token and attach it
+   to "Facebook: post" and the four Instagram steps in "QGR · Publisher", and
+   to "Meta: its numbers" in "QGR · Post results".
+2. **LinkedIn.** A LinkedIn app approved for the Community Management API
+   (`w_organization_social`, `r_organization_social`, `rw_organization_admin`),
+   connected by an admin of the Page. In n8n, create a **LinkedIn Community
+   Management** credential (LinkedIn Community Management OAuth2 API) and
+   attach it to every LinkedIn step in "QGR · Publisher" and to "LinkedIn: its
+   numbers" in "QGR · Post results".
+3. In Settings, Where posts go: the Pages' IDs, then switch each place to
+   **Post for real**. Until a place is switched on, its posts go through its
+   stand-in and nothing is published; switched on without its credential, a
+   post fails and says why.
+
+To make pictures for real (free): in Cloudflare, copy
 the account ID and create an API token from the Workers AI template; in n8n,
 create a Bearer Auth credential named "Cloudflare Workers AI" holding the token
 and attach it to "Cloudflare: FLUX.1 schnell" in "QGR · Pictures"; then in

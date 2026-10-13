@@ -222,3 +222,37 @@
     flex-wrap: wrap;
   }
 }
+
+/* A place's switch for posting for real, and the question before it goes on. */
+.forReal {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.forRealAsk {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--gold-50);
+  border: 1px solid var(--gold-100);
+  color: var(--gold-ink);
+  font-size: 13px;
+}
+
+.forRealAsk > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.forRealAsk p {
+  margin: 0;
+}
+
+.forRealButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}

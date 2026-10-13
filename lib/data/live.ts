@@ -375,6 +375,12 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
+  setPostForReal: async (place, on) => {
+    const { error } = await (await db()).rpc('set_post_for_real', { p_place: place, p_on: on });
+    if (error) return refused(error, 'The switch could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
   setCompetitorTracked: async (competitorId, tracked) => {
     const { error } = await (await db()).rpc('set_competitor_tracked', { p_competitor_id: competitorId, p_tracked: tracked });
     if (error) return refused(error, 'The competitor could not be changed.');

@@ -11,8 +11,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
+/** One script, or several joined into one (shared helpers first), as a JSON string. */
 const code = (file, swap = {}) => {
-  let src = readFileSync(join(here, 'code', file), 'utf8');
+  let src = (Array.isArray(file) ? file : [file]).map((f) => readFileSync(join(here, 'code', f), 'utf8')).join('\n');
   for (const [k, v] of Object.entries(swap)) src = src.replaceAll(k, v);
   return JSON.stringify(src);
 };
@@ -438,6 +439,115 @@ export default workflow('qgr-run-pipeline', 'QGR · Run pipeline')
 const placeNode = (varName, place, label) =>
   codeNode(varName, `${label} (stand-in)`, code('publisher-stand-in.js', { __PLACE_NAME__: label }), `{ ok: true, post_id: 'post-id', place: '${place}', remote_id: null, remote_url: null, stand_in: true }`);
 
+const GRAPH = 'https://graph.facebook.com/v25.0';
+const LINKEDIN_REST = 'https://api.linkedin.com/rest';
+/** LinkedIn's reasons in plain words, put before each LinkedIn step's script. */
+const LINKEDIN = 'shared-linkedin-refusal.js';
+const LINKEDIN_HEADERS = [
+  ['LinkedIn-Version', `expr('{{ $("Plan the LinkedIn post").item.json.version }}')`],
+  ['X-Restli-Protocol-Version', "'2.0.0'"],
+];
+
+/**
+ * A request to a platform, or to Storage for a file, whose whole answer
+ * (status, headers, body) the next script reads. It never stops the run: a
+ * refusal is an answer like any other, and a step that cannot start (its
+ * credential not attached yet) hands its input on, which the next script reads
+ * as "not asked". The platforms' credentials are attached by hand in n8n once
+ * they exist: a node naming one that does not exist fails every run, the
+ * stand-ins' too. A file is read without `neverError`, so an error page is
+ * never sent on as the file.
+ */
+const callNode = (varName, name, o) => `
+const ${varName} = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: ${JSON.stringify(name)},
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: '${o.method}',
+      url: ${o.url},${o.auth ? `
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: '${o.auth}',` : ''}${o.headers ? `
+      sendHeaders: true,
+      headerParameters: { parameters: [${o.headers.map(([k, v]) => `{ name: '${k}', value: ${v} }`).join(', ')}] },` : ''}${o.json ? `
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr(${JSON.stringify(o.json)}),` : ''}${o.binary ? `
+      sendBody: true,
+      contentType: 'binaryData',
+      inputDataFieldName: 'data',` : ''}
+      options: { timeout: ${o.timeout ?? 60000}, response: { response: ${o.file ? "{ responseFormat: 'file', outputPropertyName: 'data' }" : o.text ? "{ fullResponse: true, neverError: true, responseFormat: 'text', outputPropertyName: 'data' }" : '{ fullResponse: true, neverError: true }'} } },
+    },${o.credentials ? `
+    credentials: ${o.credentials},` : ''}
+  },
+  output: [${o.output}],
+});`;
+
+/** A switch on expressions that come out true or false, one output each, in order. */
+const routeNode = (varName, name, routes) => `
+const ${varName} = switchCase({
+  version: 3.4,
+  config: {
+    name: ${JSON.stringify(name)},
+    parameters: {
+      mode: 'rules',
+      rules: {
+        values: [
+${routes.map(([key, expression]) => `          { outputKey: '${key}', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 }, conditions: [{ leftValue: expr(${JSON.stringify(expression)}), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }], combinator: 'and' } },`).join('\n')}
+        ],
+      },
+      options: {},
+    },
+  },
+});`;
+
+/** Which place a post goes to: Facebook, Instagram or LinkedIn, in that order. */
+const placeSwitch = (varName, name) => `
+const ${varName} = switchCase({
+  version: 3.4,
+  config: {
+    name: ${JSON.stringify(name)},
+    parameters: {
+      mode: 'rules',
+      rules: {
+        values: [
+${['facebook', 'instagram', 'linkedin'].map((place) => `          { outputKey: '${place}', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: '${place}', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },`).join('\n')}
+        ],
+      },
+      options: {},
+    },
+  },
+});`;
+
+/**
+ * A pause before asking whether a platform has prepared a file. Every item
+ * waits as long as the longest asks (n8n waits once for them all), never less
+ * than ten seconds. Under 65 seconds n8n keeps the run in memory.
+ */
+const waitNode = (varName, name) => `
+const ${varName} = node({
+  type: 'n8n-nodes-base.wait',
+  version: 1.1,
+  config: {
+    name: ${JSON.stringify(name)},
+    parameters: {
+      resume: 'timeInterval',
+      amount: expr('{{ $input.all().reduce((most, item) => Math.max(most, Number(item.json.wait) || 0), 10) }}'),
+      unit: 'seconds',
+    },
+  },
+  output: [{}],
+});`;
+
+const publishOrWait = [
+  ['publish', '{{ $json.ok === true }}'],
+  ['wait', '{{ $json.again === true }}'],
+  ['stop', '{{ $json.ok !== true && $json.again !== true }}'],
+];
+
 const publisher = `${IMPORTS}
 
 const everyMinute = trigger({
@@ -466,29 +576,183 @@ const postNow = trigger({
   },
   output: [{ body: {} }],
 });
-${rpcNode('takeDue', 'Take the posts that are due', 'publisher_take_due', '{{ JSON.stringify({ p_limit: 10 }) }}', `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' } }`, "\n    executeOnce: true,")}
-${codeNode('eachPlace', 'One item per place', code('shared-items.js'), `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' } }`)}
-
-const wherePost = switchCase({
-  version: 3.4,
-  config: {
-    name: 'Which place?',
-    parameters: {
-      mode: 'rules',
-      rules: {
-        values: [
-          { outputKey: 'facebook', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'facebook', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-          { outputKey: 'instagram', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'instagram', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-          { outputKey: 'linkedin', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'linkedin', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-        ],
-      },
-      options: {},
-    },
-  },
-});
+${rpcNode('takeDue', 'Take the posts that are due', 'publisher_take_due', '{{ JSON.stringify({ p_limit: 10 }) }}', `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' }, live: false }`, "\n    executeOnce: true,")}
+${codeNode('eachPlace', 'One item per place', code('shared-items.js'), `{ post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_path: 'posts/user/file.jpg', media_kind: 'image', page: { id: '1234567890', name: 'Quantum Global' }, live: false }`)}
+${ifTrue('forReal', 'Post for real?', '{{ $json.live === true }}')}
+${placeSwitch('wherePost', 'Which place?')}
 ${placeNode('facebook', 'facebook', 'Facebook')}
 ${placeNode('instagram', 'instagram', 'Instagram')}
 ${placeNode('linkedin', 'linkedin', 'LinkedIn')}
+
+// ---- for real: the file signed for an hour, so the platform (or n8n, for
+// LinkedIn) can fetch it from the private bucket without a key.
+${callNode('sign', 'Sign the file', {
+  method: 'POST',
+  url: `expr('${SUPABASE_STORAGE}/object/sign/post-media/{{ $json.media_path }}')`,
+  auth: 'supabaseApi',
+  json: '{{ JSON.stringify({ expiresIn: 3600 }) }}',
+  timeout: 30000,
+  credentials: "{ supabaseApi: newCredential('Supabase QGR') }",
+  output: "{ statusCode: 200, body: { signedURL: '/object/sign/post-media/posts/user/file.jpg?token=token' } }",
+})}
+${codeNode('withLink', 'With its link', code('publisher-ready.js', { __STORAGE__: SUPABASE_STORAGE }), `{ ok: true, post_id: 'post-id', place: 'facebook', text: 'Plan your EB-5 path.', media_kind: 'image', media_url: '${SUPABASE_STORAGE}/object/sign/post-media/posts/user/file.jpg?token=token', page: { id: '1234567890', name: 'Quantum Global' } }`)}
+${isOk('readyToSend', 'Ready to send?')}
+${placeSwitch('whereReal', 'Which place, for real?')}
+
+// ---- Facebook: one request, with the Page's access token.
+${codeNode('planFacebook', 'Plan the Facebook post', code('publisher-facebook-plan.js'), `{ post_id: 'post-id', place: 'facebook', page_id: '1234567890', kind: 'image', url: '${GRAPH}/1234567890/photos', body: { url: 'https://example.com/file.jpg', message: 'Plan your EB-5 path.', published: true } }`)}
+${callNode('facebookPost', 'Facebook: post', {
+  method: 'POST',
+  url: "expr('{{ $json.url }}')",
+  auth: 'facebookGraphApi',
+  json: '{{ JSON.stringify($json.body) }}',
+  timeout: 300000,
+  output: "{ statusCode: 200, body: { id: '555', post_id: '1234567890_555' } }",
+})}
+${codeNode('facebookAnswer', "Read Facebook's answer", code('publisher-facebook-answer.js'), `{ ok: true, post_id: 'post-id', place: 'facebook', remote_id: '1234567890_555', remote_url: 'https://www.facebook.com/1234567890_555', stand_in: false }`)}
+
+// ---- Instagram: a container, checked until it is ready, then published.
+${codeNode('planInstagram', 'Plan the Instagram post', code('publisher-instagram-plan.js'), `{ post_id: 'post-id', place: 'instagram', account: '17841400000000000', kind: 'image', url: '${GRAPH}/17841400000000000/media', body: { image_url: 'https://example.com/file.jpg', caption: 'Plan your EB-5 path.' }, wait: 10 }`)}
+${callNode('container', 'Instagram: make the container', {
+  method: 'POST',
+  url: "expr('{{ $json.url }}')",
+  auth: 'facebookGraphApi',
+  json: '{{ JSON.stringify($json.body) }}',
+  timeout: 120000,
+  output: "{ statusCode: 200, body: { id: '9001' } }",
+})}
+${codeNode('readContainer', 'Read the container', code('publisher-instagram-container.js'), `{ ok: true, post_id: 'post-id', place: 'instagram', kind: 'image', wait: 10, tries: 0, creation_id: '9001', status_url: '${GRAPH}/9001?fields=status_code,status', publish_url: '${GRAPH}/17841400000000000/media_publish' }`)}
+${isOk('containerMade', 'Container made?')}
+${waitNode('instagramWait', 'Give Instagram time')}
+${callNode('instagramStatus', 'Instagram: is it ready?', {
+  method: 'GET',
+  url: "expr('{{ $json.status_url }}')",
+  auth: 'facebookGraphApi',
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { status_code: 'FINISHED', id: '9001' } }",
+})}
+${codeNode('instagramReady', 'Ready to publish?', code('publisher-instagram-ready.js'), `{ post_id: 'post-id', place: 'instagram', ok: true, creation_id: '9001', publish_url: '${GRAPH}/17841400000000000/media_publish' }`)}
+${routeNode('instagramNext', 'Publish, wait or stop?', publishOrWait)}
+${callNode('instagramPublish', 'Instagram: publish', {
+  method: 'POST',
+  url: "expr('{{ $json.publish_url }}')",
+  auth: 'facebookGraphApi',
+  json: '{{ JSON.stringify({ creation_id: $json.creation_id }) }}',
+  timeout: 120000,
+  output: "{ statusCode: 200, body: { id: '17900000000000001' } }",
+})}
+${callNode('instagramLink', 'Instagram: its link', {
+  method: 'GET',
+  url: `expr('${GRAPH}/{{ $json.body && $json.body.id }}?fields=permalink')`,
+  auth: 'facebookGraphApi',
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { permalink: 'https://www.instagram.com/p/AbC123/', id: '17900000000000001' } }",
+})}
+${codeNode('instagramAnswer', "Read Instagram's answer", code('publisher-instagram-answer.js'), `{ ok: true, post_id: 'post-id', place: 'instagram', remote_id: '17900000000000001', remote_url: 'https://www.instagram.com/p/AbC123/', stand_in: false }`)}
+
+// ---- LinkedIn: the picture or the video uploaded first, then the post names it.
+${codeNode('planLinkedin', 'Plan the LinkedIn post', code('publisher-linkedin-plan.js'), `{ ok: true, post_id: 'post-id', place: 'linkedin', owner: 'urn:li:organization:98765', kind: 'image', version: '202609', media_url: 'https://example.com/file.jpg', post: { author: 'urn:li:organization:98765', commentary: 'Plan your EB-5 path.', visibility: 'PUBLIC', lifecycleState: 'PUBLISHED' } }`)}
+${routeNode('linkedinUpload', 'Which LinkedIn upload?', [
+  ['picture', '{{ $json.kind === "image" }}'],
+  ['video', '{{ $json.kind === "video" }}'],
+  ['words', '{{ $json.kind !== "image" && $json.kind !== "video" }}'],
+])}
+${callNode('startPicture', 'LinkedIn: start the picture', {
+  method: 'POST',
+  url: `'${LINKEDIN_REST}/images?action=initializeUpload'`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: LINKEDIN_HEADERS,
+  json: '{{ JSON.stringify({ initializeUploadRequest: { owner: $json.owner } }) }}',
+  output: "{ statusCode: 200, body: { value: { uploadUrl: 'https://www.linkedin.com/dms-uploads/abc', image: 'urn:li:image:C4E10AQ' } } }",
+})}
+${ifTrue('pictureStarted', 'Picture started?', '{{ $json.statusCode >= 200 && $json.statusCode < 300 && !!($json.body && $json.body.value && $json.body.value.uploadUrl) }}')}
+${callNode('getPicture', 'Get the picture', {
+  method: 'GET',
+  url: `expr('{{ $("Plan the LinkedIn post").item.json.media_url }}')`,
+  file: true,
+  output: '{}',
+})}
+${callNode('sendPicture', 'LinkedIn: send the picture', {
+  method: 'PUT',
+  url: `expr('{{ $("LinkedIn: start the picture").item.json.body.value.uploadUrl }}')`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  binary: true,
+  timeout: 120000,
+  output: "{ statusCode: 201, body: '' }",
+})}
+${codeNode('pictureSent', 'Picture sent?', code([LINKEDIN, 'publisher-linkedin-picture.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', version: '202609', post: { author: 'urn:li:organization:98765', content: { media: { id: 'urn:li:image:C4E10AQ' } } } }`)}
+${callNode('videoSize', "Find the video's size", {
+  method: 'GET',
+  url: "expr('{{ $json.media_url }}')",
+  headers: [['Range', "'bytes=0-0'"]],
+  text: true,
+  timeout: 30000,
+  output: "{ statusCode: 206, headers: { 'content-range': 'bytes 0-0/6000001' }, data: 'x' }",
+})}
+${codeNode('sizeRead', 'How big is the video?', code([LINKEDIN, 'publisher-linkedin-size.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', size: 6000001 }`)}
+${isOk('sizeKnown', 'Size known?')}
+${callNode('startVideo', 'LinkedIn: start the video', {
+  method: 'POST',
+  url: `'${LINKEDIN_REST}/videos?action=initializeUpload'`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: LINKEDIN_HEADERS,
+  json: '{{ JSON.stringify({ initializeUploadRequest: { owner: $("Plan the LinkedIn post").item.json.owner, fileSizeBytes: $json.size, uploadCaptions: false, uploadThumbnail: false } }) }}',
+  output: "{ statusCode: 200, body: { value: { video: 'urn:li:video:C5F10AQ', uploadToken: '', uploadInstructions: [{ uploadUrl: 'https://www.linkedin.com/dms-uploads/abc', firstByte: 0, lastByte: 6000000 }] } } }",
+})}
+${codeNode('eachPart', 'One item per part', code([LINKEDIN, 'publisher-linkedin-parts.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', part: 0, parts: 1, media_url: 'https://example.com/file.mp4', range: 'bytes=0-6000000', upload_url: 'https://www.linkedin.com/dms-uploads/abc', video: 'urn:li:video:C5F10AQ', upload_token: '' }`)}
+${isOk('partsToSend', 'Parts to send?')}
+${callNode('getPart', 'Get the part', {
+  method: 'GET',
+  url: "expr('{{ $json.media_url }}')",
+  headers: [['Range', "expr('{{ $json.range }}')"]],
+  file: true,
+  timeout: 120000,
+  output: '{}',
+})}
+${callNode('sendPart', 'LinkedIn: send the part', {
+  method: 'PUT',
+  url: `expr('{{ $("One item per part").item.json.upload_url }}')`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: [['Content-Type', "'application/octet-stream'"]],
+  binary: true,
+  timeout: 120000,
+  output: "{ statusCode: 200, headers: { etag: '/ama/one' }, body: '' }",
+})}
+${codeNode('gatherParts', 'Gather the parts', code([LINKEDIN, 'publisher-linkedin-gather.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', video: 'urn:li:video:C5F10AQ', upload_token: '', etags: ['/ama/one'] }`)}
+${isOk('partsSent', 'Parts sent?')}
+${callNode('finishVideo', 'LinkedIn: finish the video', {
+  method: 'POST',
+  url: `'${LINKEDIN_REST}/videos?action=finalizeUpload'`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: LINKEDIN_HEADERS,
+  json: '{{ JSON.stringify({ finalizeUploadRequest: { video: $json.video, uploadToken: $json.upload_token, uploadedPartIds: $json.etags } }) }}',
+  output: "{ statusCode: 200, body: '' }",
+})}
+${codeNode('videoSent', 'Video sent?', code([LINKEDIN, 'publisher-linkedin-video.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', version: '202609', video: 'urn:li:video:C5F10AQ', post: { author: 'urn:li:organization:98765', content: { media: { id: 'urn:li:video:C5F10AQ' } } }, tries: 0, wait: 20 }`)}
+${isOk('videoTaken', 'Video taken?')}
+${waitNode('linkedinWait', 'Give LinkedIn time')}
+${callNode('videoStatus', 'LinkedIn: is the video ready?', {
+  method: 'GET',
+  url: `expr('${LINKEDIN_REST}/videos/{{ encodeURIComponent($json.video) }}')`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: [['LinkedIn-Version', "expr('{{ $json.version }}')"], ['X-Restli-Protocol-Version', "'2.0.0'"]],
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { status: 'AVAILABLE', id: 'urn:li:video:C5F10AQ' } }",
+})}
+${codeNode('videoReady', 'Video ready?', code([LINKEDIN, 'publisher-linkedin-ready.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', version: '202609', post: { author: 'urn:li:organization:98765', content: { media: { id: 'urn:li:video:C5F10AQ' } } } }`)}
+${routeNode('linkedinNext', 'Post, wait or stop?', publishOrWait)}
+${isOk('readyToPost', 'Ready to post?')}
+${callNode('linkedinPost', 'LinkedIn: post', {
+  method: 'POST',
+  url: `'${LINKEDIN_REST}/posts'`,
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: [['LinkedIn-Version', "expr('{{ $json.version }}')"], ['X-Restli-Protocol-Version', "'2.0.0'"]],
+  json: '{{ JSON.stringify($json.post) }}',
+  output: "{ statusCode: 201, headers: { 'x-restli-id': 'urn:li:share:7123' }, body: '' }",
+})}
+${codeNode('linkedinAnswer', "Read LinkedIn's answer", code([LINKEDIN, 'publisher-linkedin-answer.js']), `{ ok: true, post_id: 'post-id', place: 'linkedin', remote_id: 'urn:li:share:7123', remote_url: 'https://www.linkedin.com/feed/update/urn:li:share:7123', stand_in: false }`)}
+
+// ---- every place's answer, stand-in or real, is recorded the same way.
 ${isOk('wentOut', 'Did it go out?')}
 ${rpcNode('finish', 'Record it posted', 'publisher_finish', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_remote_id: $json.remote_id, p_remote_url: $json.remote_url, p_stand_in: $json.stand_in === true }) }}', `{ remove_media: 'posts/user/file.jpg' }`)}
 ${rpcNode('fail', 'Record why it did not', 'publisher_fail', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_error: $json.error, p_unknown: $json.unknown === true }) }}', '{}')}
@@ -529,17 +793,20 @@ const removeFile = node({
   output: [{}],
 });
 
-const noteFlow = sticky('## Posting\\nEvery minute, and at once when the dashboard sends a post now, the database hands over the places that are due (**publisher_take_due**, never the same one twice). Each goes to its place, and the result is recorded. A file goes from Storage once no post needs it: the platform keeps its own copy. A send cut off halfway is marked *check the Page* and never sent again by itself.', [everyMinute, postNow, takeDue, eachPlace], { color: 4 });
-const noteStandIns = sticky('## Stand-ins until the keys are in\\nThese three post nothing and say so. Each is replaced by real steps with the same output (see the note in its code):\\n- **Facebook**: POST /{page-id}/photos (url, message) or /{page-id}/videos (file_url, description) with a Page access token.\\n- **Instagram**: POST /{ig-user-id}/media (image_url or video_url with media_type REELS, caption), wait for status FINISHED, then POST /{ig-user-id}/media_publish.\\n- **LinkedIn**: initializeUpload on /rest/images or /rest/videos, PUT the file, then POST /rest/posts as urn:li:organization:{id}.\\nThe file goes to Meta as a link Storage signs for a few minutes; LinkedIn is sent the bytes.', [facebook, instagram, linkedin], { color: 3 });
+const noteFlow = sticky('## Posting\\nEvery minute, and at once when the dashboard sends a post now, the database hands over the places that are due (**publisher_take_due**, never the same one twice). **Post for real?** follows each place\\'s switch in Settings, Where posts go: off, the place\\'s stand-in answers and nothing goes out; on, the file is signed for an hour so the platform can fetch it, and the place\\'s own steps post it. The result is recorded either way. A file goes from Storage once no post needs it: the platform keeps its own copy. A send cut off halfway is marked *check the Page* and never sent again by itself.', [everyMinute, postNow, takeDue, eachPlace, forReal], { color: 4 });
+const noteStandIns = sticky('## Stand-ins\\nThe way taken while a place is not switched to post for real (Settings, Where posts go). They post nothing and say so: the dashboard shows the post as a stand-in, and nothing is read for results. They answer in the shape the real steps do.', [wherePost, facebook, instagram, linkedin], { color: 3 });
+const noteFacebook = sticky('## Facebook\\nOne request to the Page (Graph API v25.0): a picture to /photos, a video to /videos on graph-video, or the words alone to /feed. Meta fetches the file from the signed link.\\n\\nThe token: a **Facebook Graph API** credential holding a Page access token with pages_manage_posts, pages_read_engagement and pages_show_list (a System User\\'s token in Meta Business Suite does not expire). Attach it to **Facebook: post** and to the four Instagram steps. Until then those steps do not run and the post says why.', [planFacebook, facebookPost, facebookAnswer], { color: 5 });
+const noteInstagram = sticky('## Instagram\\nA container is made from the file (a picture, or a video as a Reel), checked after ten seconds (a minute for a video) and then once a minute for five minutes at most, as Meta asks, and published once it is FINISHED. The account set in Settings is the Instagram professional account\\'s id, linked to the Page; the token also needs instagram_basic and instagram_content_publish. Instagram takes 100 posts a day through its API.', [planInstagram, container, readContainer, containerMade, instagramWait, instagramStatus, instagramReady, instagramNext, instagramPublish, instagramLink, instagramAnswer], { color: 5 });
+const noteLinkedin = sticky('## LinkedIn\\nThe picture or the video is uploaded first (a video in the parts LinkedIn asks for, read from Storage a part at a time, then checked once a minute until LinkedIn has processed it), then the post names it, as the Page (urn:li:organization). API version 202609, pinned: LinkedIn keeps one a year. The words are escaped for LinkedIn\\'s little text format, so they read as written.\\n\\nThe token: a **LinkedIn Community Management** credential (LinkedIn Community Management OAuth2 API) from an app LinkedIn has approved for the Community Management API, connected by an admin of the Page (w_organization_social, r_organization_social). Attach it to every LinkedIn step.', [planLinkedin, linkedinUpload, startPicture, pictureStarted, getPicture, sendPicture, pictureSent, videoSize, sizeRead, sizeKnown, startVideo, eachPart, partsToSend, getPart, sendPart, gatherParts, partsSent, finishVideo, videoSent, videoTaken, linkedinWait, videoStatus, videoReady, linkedinNext, readyToPost, linkedinPost, linkedinAnswer], { color: 5 });
 
 export default workflow('qgr-publisher', 'QGR · Publisher')
   .add(everyMinute)
   .to(takeDue)
   .to(eachPlace)
-  .to(wherePost
+  .to(forReal.onTrue(sign).onFalse(wherePost
     .onCase(0, facebook)
     .onCase(1, instagram)
-    .onCase(2, linkedin))
+    .onCase(2, linkedin)))
   .add(postNow)
   .to(takeDue)
   .add(facebook)
@@ -548,8 +815,70 @@ export default workflow('qgr-publisher', 'QGR · Publisher')
   .to(wentOut)
   .add(linkedin)
   .to(wentOut)
+  .add(sign)
+  .to(withLink)
+  .to(readyToSend.onTrue(whereReal
+    .onCase(0, planFacebook)
+    .onCase(1, planInstagram)
+    .onCase(2, planLinkedin)).onFalse(wentOut))
+  .add(planFacebook)
+  .to(facebookPost)
+  .to(facebookAnswer)
+  .to(wentOut)
+  .add(planInstagram)
+  .to(container)
+  .to(readContainer)
+  .to(containerMade.onTrue(instagramWait).onFalse(wentOut))
+  .add(instagramWait)
+  .to(instagramStatus)
+  .to(instagramReady)
+  .to(instagramNext
+    .onCase(0, instagramPublish)
+    .onCase(1, instagramWait)
+    .onCase(2, wentOut))
+  .add(instagramPublish)
+  .to(instagramLink)
+  .to(instagramAnswer)
+  .to(wentOut)
+  .add(planLinkedin)
+  .to(linkedinUpload
+    .onCase(0, startPicture)
+    .onCase(1, videoSize)
+    .onCase(2, readyToPost))
+  .add(startPicture)
+  .to(pictureStarted.onTrue(getPicture).onFalse(pictureSent))
+  .add(getPicture)
+  .to(sendPicture)
+  .to(pictureSent)
+  .to(readyToPost.onTrue(linkedinPost).onFalse(wentOut))
+  .add(videoSize)
+  .to(sizeRead)
+  .to(sizeKnown.onTrue(startVideo).onFalse(wentOut))
+  .add(startVideo)
+  .to(eachPart)
+  .to(partsToSend.onTrue(getPart).onFalse(wentOut))
+  .add(getPart)
+  .to(sendPart)
+  .to(gatherParts)
+  .to(partsSent.onTrue(finishVideo).onFalse(wentOut))
+  .add(finishVideo)
+  .to(videoSent)
+  .to(videoTaken.onTrue(linkedinWait).onFalse(wentOut))
+  .add(linkedinWait)
+  .to(videoStatus)
+  .to(videoReady)
+  .to(linkedinNext
+    .onCase(0, readyToPost)
+    .onCase(1, linkedinWait)
+    .onCase(2, wentOut))
+  .add(linkedinPost)
+  .to(linkedinAnswer)
+  .to(wentOut)
   .add(noteFlow)
-  .add(noteStandIns);
+  .add(noteStandIns)
+  .add(noteFacebook)
+  .add(noteInstagram)
+  .add(noteLinkedin);
 `;
 
 // ---------------------------------------------------------------- scheduled scans
@@ -606,9 +935,6 @@ export default workflow('qgr-scheduled-scans', 'QGR · Scheduled scans')
 
 // ---------------------------------------------------------------- post results
 
-const resultsNode = (varName, place, label) =>
-  codeNode(varName, `${label} results (stand-in)`, code('results-stand-in.js', { __PLACE_NAME__: label }), `{ ok: true, post_id: 'post-id', place: '${place}', results: null, stand_in: true }`);
-
 const results = `${IMPORTS}
 
 const everySixHours = trigger({
@@ -622,51 +948,45 @@ const everySixHours = trigger({
 });
 ${rpcNode('takeDue', 'Take the posts to read', 'results_take_due', '{{ JSON.stringify({ p_limit: 50 }) }}', `{ post_id: 'post-id', place: 'facebook', remote_id: '1234567890_987654321', media_kind: 'image', posted_at: '2026-10-08T13:00:12+00:00', page: { id: '1234567890' } }`, "\n    executeOnce: true,")}
 ${codeNode('eachPlace', 'One item per place', code('shared-items.js'), `{ post_id: 'post-id', place: 'facebook', remote_id: '1234567890_987654321', media_kind: 'image', posted_at: '2026-10-08T13:00:12+00:00', page: { id: '1234567890' } }`)}
-
-const whichPlace = switchCase({
-  version: 3.4,
-  config: {
-    name: 'Which place?',
-    parameters: {
-      mode: 'rules',
-      rules: {
-        values: [
-          { outputKey: 'facebook', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'facebook', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-          { outputKey: 'instagram', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'instagram', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-          { outputKey: 'linkedin', conditions: { options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 }, conditions: [{ leftValue: expr('{{ $json.place }}'), rightValue: 'linkedin', operator: { type: 'string', operation: 'equals' } }], combinator: 'and' } },
-        ],
-      },
-      options: {},
-    },
-  },
-});
-${resultsNode('facebook', 'facebook', 'Facebook')}
-${resultsNode('instagram', 'instagram', 'Instagram')}
-${resultsNode('linkedin', 'linkedin', 'LinkedIn')}
+${codeNode('planRead', 'Plan the read', code('results-plan.js'), `{ post_id: 'post-id', place: 'facebook', kind: 'facebook-post', url: '${GRAPH}/1234567890_987654321?fields=shares' }`)}
+${ifTrue('toLinkedin', 'LinkedIn?', '{{ $json.place === "linkedin" }}')}
+${callNode('metaNumbers', 'Meta: its numbers', {
+  method: 'GET',
+  url: "expr('{{ $json.url }}')",
+  auth: 'facebookGraphApi',
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { shares: { count: 3 }, comments: { summary: { total_count: 7 } }, reactions: { summary: { total_count: 38 } }, insights: { data: [{ name: 'post_media_view', period: 'lifetime', values: [{ value: 1320 }] }] } } }",
+})}
+${callNode('linkedinNumbers', 'LinkedIn: its numbers', {
+  method: 'GET',
+  url: "expr('{{ $json.url }}')",
+  auth: 'linkedInCommunityManagementOAuth2Api',
+  headers: [['LinkedIn-Version', "expr('{{ $json.version }}')"], ['X-Restli-Protocol-Version', "'2.0.0'"]],
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { elements: [{ totalShareStatistics: { uniqueImpressionsCount: 940, impressionCount: 1320, likeCount: 38, commentCount: 7, shareCount: 3, clickCount: 29 } }] } }",
+})}
+${codeNode('readNumbers', 'Read the numbers', code([LINKEDIN, 'results-read.js']), `{ ok: true, post_id: 'post-id', place: 'facebook', results: { reach: 940, views: 1320, reactions: 38, comments: 7, shares: 3, clicks: 29 } }`)}
 ${ifTrue('gotNumbers', 'Numbers back?', '{{ $json.ok === true && $json.results !== null && typeof $json.results === "object" }}')}
 ${ifTrue('refused', 'Refused?', '{{ $json.ok === false }}')}
 ${rpcNode('record', 'Record the numbers', 'results_record', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_results: $json.results }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 ${rpcNode('recordWhy', 'Record why not', 'results_fail', '{{ JSON.stringify({ p_post_id: $json.post_id, p_place: $json.place, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 
-const noteFlow = sticky('## Results\\nEvery six hours the database hands over the posts that went out for real in the last four weeks and were not read in the last six hours (**results_take_due**). Each place is asked for its numbers, which are recorded as counts (**results_record**). If a platform refuses, the reason is kept beside the last numbers (**results_fail**). A stand-in post has none: nothing was posted.', [everySixHours, takeDue, eachPlace], { color: 4 });
-const noteStandIns = sticky('## Stand-ins until the keys are in\\nThese read nothing. Each is replaced by a request with the same output, using the same tokens as the publisher (check the metric names against each platform\\'s current docs):\\n- **Facebook**: the post\\'s insights (reach, views, reactions, clicks) and its comments and shares.\\n- **Instagram**: the media\\'s insights (reach, views, likes, comments, shares). A feed post has no clicks: null.\\n- **LinkedIn**: organizationalEntityShareStatistics for the share (unique impressions, impressions, likes, comments, shares, clicks).', [facebook, instagram, linkedin], { color: 3 });
+const noteFlow = sticky('## Results\\nEvery six hours the database hands over the posts that went out for real in the last four weeks and were not read in the last six hours (**results_take_due**). Each is asked for its numbers, which are recorded as counts (**results_record**). If a platform refuses, the reason is kept beside the last numbers (**results_fail**). A stand-in post has none: nothing was posted.', [everySixHours, takeDue, eachPlace], { color: 4 });
+const noteReaders = sticky('## One request a post\\n**Plan the read** names it: on Facebook a post\\'s shares, comments, reactions and insights (post_media_view, post_total_media_view_unique, post_clicks), or a video\\'s video insights; on Instagram the media\\'s insights (reach, views, likes, comments, shares); on LinkedIn the post\\'s organizationalEntityShareStatistics. **Read the numbers** takes each by its name, and leaves a number the platform does not give empty.\\n\\nThe same tokens as the publisher: the **Facebook Graph API** credential on **Meta: its numbers** (with pages_read_engagement, pages_read_user_content and instagram_manage_insights), the **LinkedIn Community Management** credential on **LinkedIn: its numbers** (with rw_organization_admin). Until then each read says why, and nothing is recorded.', [planRead, toLinkedin, metaNumbers, linkedinNumbers, readNumbers], { color: 5 });
 
 export default workflow('qgr-post-results', 'QGR · Post results')
   .add(everySixHours)
   .to(takeDue)
   .to(eachPlace)
-  .to(whichPlace
-    .onCase(0, facebook)
-    .onCase(1, instagram)
-    .onCase(2, linkedin))
-  .add(facebook)
+  .to(planRead)
+  .to(toLinkedin.onTrue(linkedinNumbers).onFalse(metaNumbers))
+  .add(linkedinNumbers)
+  .to(readNumbers)
   .to(gotNumbers.onTrue(record).onFalse(refused.onTrue(recordWhy)))
-  .add(instagram)
-  .to(gotNumbers)
-  .add(linkedin)
-  .to(gotNumbers)
+  .add(metaNumbers)
+  .to(readNumbers)
   .add(noteFlow)
-  .add(noteStandIns);
+  .add(noteReaders);
 `;
 
 // ---------------------------------------------------------------- pictures

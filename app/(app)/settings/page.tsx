@@ -10,21 +10,22 @@ import type { Place, Post } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Settings' };
 
-/** How each place last went, from the posts themselves: the dashboard can't see n8n's credentials. */
-function postingStates(posts: Post[]): Record<Place, PostingState> {
+/**
+ * How each place posts: for real when its switch is on, and whether the last
+ * post went out; otherwise through its stand-in. The dashboard can't see n8n's
+ * credentials, so a place that is on but never went out says not tried yet.
+ */
+function postingStates(posts: Post[], forReal: Record<Place, boolean>): Record<Place, PostingState> {
   const last = (place: Place) =>
     posts
-      .flatMap((p) => p.targets.filter((t) => t.place === place && t.status === 'posted' && t.postedAt))
+      .flatMap((p) => p.targets.filter((t) => t.place === place && t.status === 'posted' && !t.standIn && t.postedAt))
       .sort((a, b) => (b.postedAt ?? '').localeCompare(a.postedAt ?? ''))[0];
-  return Object.fromEntries(PLACES.map((place) => {
-    const t = last(place);
-    return [place, !t ? 'untried' : t.standIn ? 'stand-in' : 'live'];
-  })) as Record<Place, PostingState>;
+  return Object.fromEntries(PLACES.map((place) => [place, !forReal[place] ? 'stand-in' : last(place) ? 'live' : 'untried'])) as Record<Place, PostingState>;
 }
 
 export default async function SettingsPage() {
   const [settings, posts] = await Promise.all([getTeamSettings(), getPosts()]);
-  const { pages, ...agents } = settings;
+  const { pages, postForReal, ...agents } = settings;
   return (
     <div className="page">
       <header className="page-head">
@@ -34,10 +35,10 @@ export default async function SettingsPage() {
         </div>
       </header>
       <SettingsForm
-        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, pictures: settings.pictureModel, posting: postingStates(posts) }}
+        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, pictures: settings.pictureModel, posting: postingStates(posts, settings.postForReal) }}
       >
         <AgentSettingsForm settings={agents} />
-        <PagesForm pages={pages} />
+        <PagesForm pages={pages} postForReal={postForReal} />
       </SettingsForm>
     </div>
   );
