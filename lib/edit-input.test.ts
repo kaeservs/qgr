@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { isRecordId, parseBrandExample, parseBrandMemory, parseBrandProfile, parseVariantEdit } from './edit-input';
+import { isRecordId, parseBrandExample, parseBrandMemory, parseBrandProfile, parsePicturePrompt, parseVariantEdit } from './edit-input';
+import { parseAgentSettings } from './post-input';
 
 describe('parseVariantEdit', () => {
   const copy = { meta: { text: ' Talk to an advisor. ', headline: 'Plan ahead', description: 'Free call', cta: 'Book now' }, x: { text: 'Plan ahead.', headline: 'EB-5' } };
@@ -86,6 +87,34 @@ describe('parseBrandExample', () => {
     expect(parseBrandExample({ place: 'x', text: 'A post.', note: ' ' })).toEqual({ ok: true, value: { place: 'x', text: 'A post.' } });
     expect(parseBrandExample({ place: 'tiktok', text: 'A post.' })).toEqual({ ok: false, error: 'Say where the post ran.' });
     expect(parseBrandExample({ place: 'x', text: ' ' })).toEqual({ ok: false, error: 'Paste the post.' });
+  });
+});
+
+describe('parsePicturePrompt', () => {
+  it('keeps the scene, trimmed, up to what fits the image model with the picture style', () => {
+    expect(parsePicturePrompt('  A harbour at dawn  ')).toEqual({ ok: true, value: 'A harbour at dawn' });
+    expect(parsePicturePrompt('   ')).toEqual({ ok: false, error: 'Describe the picture first.' });
+    expect(parsePicturePrompt(42)).toMatchObject({ ok: false });
+    expect(parsePicturePrompt('x'.repeat(1200))).toMatchObject({ ok: true });
+    expect(parsePicturePrompt('x'.repeat(1201))).toEqual({ ok: false, error: 'Keep the picture prompt under 1,200 characters.' });
+  });
+});
+
+describe('parseAgentSettings: pictures', () => {
+  const base = { timeZone: 'America/New_York', strategistAuto: true, contentAuto: true, picturesAuto: false, adsSource: 'sample', scanEvery: 'off', scanDay: 1, scanHour: 9 };
+
+  it('takes the stand-in or Cloudflare with its account, lowercased', () => {
+    expect(parseAgentSettings({ ...base, pictureModel: 'stand-in', cloudflareAccount: '' })).toMatchObject({ ok: true, value: { pictureModel: 'stand-in', cloudflareAccount: '' } });
+    expect(parseAgentSettings({ ...base, pictureModel: 'cloudflare', cloudflareAccount: ' 0123456789ABCDEF0123456789abcdef ' })).toMatchObject({
+      ok: true,
+      value: { pictureModel: 'cloudflare', cloudflareAccount: '0123456789abcdef0123456789abcdef' },
+    });
+  });
+
+  it('refuses another model, Cloudflare without an account, and an account that is not one', () => {
+    expect(parseAgentSettings({ ...base, pictureModel: 'midjourney', cloudflareAccount: '' })).toEqual({ ok: false, error: 'Say what makes the pictures.' });
+    expect(parseAgentSettings({ ...base, pictureModel: 'cloudflare', cloudflareAccount: '' })).toEqual({ ok: false, error: 'Cloudflare Workers AI needs your Cloudflare account ID.' });
+    expect(parseAgentSettings({ ...base, pictureModel: 'stand-in', cloudflareAccount: 'my-account' })).toMatchObject({ ok: false, error: expect.stringMatching(/32 characters/) });
   });
 });
 

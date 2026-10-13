@@ -8,7 +8,7 @@ import { CLIP_PATH, runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
-import { EXAMPLE_PLACES, GOALS, PLACES, PLATFORMS } from '../types';
+import { EXAMPLE_PLACES, GOALS, PICTURE_MODELS, PLACES, PLATFORMS } from '../types';
 import { PLACE_LABEL } from '../post-input';
 import type {
   ActivityItem,
@@ -32,6 +32,7 @@ import type {
   Notice,
   PageRead,
   PageSummary,
+  PictureChoice,
   Place,
   Platform,
   PlatformCopy,
@@ -159,6 +160,8 @@ export interface AdSetRow {
     warnings: string[];
     approved_at: string | null;
     video_edit: Json | null;
+    /** Read for the studio only: the pictures made for it, marked once past the eight kept. */
+    variant_pictures?: { id: string; path: string; prompt: string | null; created_at: string; removed_at: string | null }[];
   }[];
   runs: One<{ media_path: string | null; media: Json | null }>;
 }
@@ -455,6 +458,17 @@ function pictureOf(v: AdSetRow['ad_variants'][number]): VariantPicture | null {
   return { status, ...(v.picture_error ? { note: v.picture_error } : {}), ...(status === 'making' && v.picture_requested_at ? { askedAt: v.picture_requested_at } : {}) };
 }
 
+/** The pictures kept for a variant to choose again, newest first. */
+function picturesOf(v: AdSetRow['ad_variants'][number], pictureUrl: (path: string) => string | undefined): PictureChoice[] {
+  return (v.variant_pictures ?? [])
+    .filter((p) => p.removed_at === null)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
+    .map((p) => {
+      const url = pictureUrl(p.path);
+      return { id: p.id, ...(url ? { url } : {}), ...(p.prompt ? { prompt: p.prompt } : {}), shown: p.path === v.picture_path, createdAt: p.created_at };
+    });
+}
+
 /**
  * An ad set as the studio shows it. `pictureUrl` turns a picture's path in
  * Storage into a link the viewer may open; the bucket is private.
@@ -470,6 +484,7 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
       const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
       const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
       const picture = pictureOf(v);
+      const pictures = picturesOf(v, pictureUrl);
       return [
         {
           id: v.id,
@@ -483,6 +498,7 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
           ...(imageUrl ? { imageUrl } : {}),
           ...(v.image_prompt?.trim() ? { picturePrompt: v.image_prompt.trim() } : {}),
           ...(picture ? { picture } : {}),
+          ...(pictures.length > 0 ? { pictures } : {}),
           ...(edit?.ok ? { videoEdit: edit.value } : {}),
         },
       ];
@@ -599,6 +615,8 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
     contentAuto: row.content_auto,
     picturesAuto: row.pictures_auto,
     adsSource: isOneOf(ADS_SETTINGS, row.ads_source) ? row.ads_source : 'sample',
+    pictureModel: isOneOf(PICTURE_MODELS, row.pictures_model) ? row.pictures_model : 'stand-in',
+    cloudflareAccount: row.cloudflare_account ?? '',
     scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
     scanDay: row.scan_day,
     scanHour: row.scan_hour,

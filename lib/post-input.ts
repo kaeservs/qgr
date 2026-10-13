@@ -61,6 +61,8 @@ export function parseNewPost(raw: unknown): ParseResult<NewPost> {
 }
 
 const SCAN_EVERY: readonly ScanEvery[] = ['off', 'day', 'week'];
+/** As the Cloudflare dashboard shows it, beside Workers AI. */
+const CLOUDFLARE_ACCOUNT = /^[0-9a-f]{32}$/;
 const isWhole = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
 
 export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
@@ -68,6 +70,10 @@ export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
   if (typeof raw.strategistAuto !== 'boolean' || typeof raw.contentAuto !== 'boolean') return { ok: false, error: 'Say which agents start by themselves.' };
   if (typeof raw.picturesAuto !== 'boolean') return { ok: false, error: 'Say whether new ads get pictures.' };
   if (raw.adsSource !== 'sample' && raw.adsSource !== 'apify') return { ok: false, error: 'Say where the tracker reads competitors’ ads.' };
+  if (raw.pictureModel !== 'stand-in' && raw.pictureModel !== 'cloudflare') return { ok: false, error: 'Say what makes the pictures.' };
+  const cloudflareAccount = text(raw.cloudflareAccount).toLowerCase();
+  if (cloudflareAccount && !CLOUDFLARE_ACCOUNT.test(cloudflareAccount)) return { ok: false, error: 'A Cloudflare account ID is 32 characters, 0-9 and a-f. Copy it from the Cloudflare dashboard.' };
+  if (raw.pictureModel === 'cloudflare' && !cloudflareAccount) return { ok: false, error: 'Cloudflare Workers AI needs your Cloudflare account ID.' };
   if (!SCAN_EVERY.includes(raw.scanEvery as ScanEvery)) return { ok: false, error: 'Scans run every day, every week, or only when you ask.' };
   if (!isWhole(raw.scanDay, 1, 7) || !isWhole(raw.scanHour, 0, 23)) return { ok: false, error: 'Pick a day and an hour for scans.' };
   const timeZone = text(raw.timeZone);
@@ -79,6 +85,8 @@ export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
       contentAuto: raw.contentAuto,
       picturesAuto: raw.picturesAuto,
       adsSource: raw.adsSource,
+      pictureModel: raw.pictureModel,
+      cloudflareAccount,
       scanEvery: raw.scanEvery as ScanEvery,
       scanDay: raw.scanDay,
       scanHour: raw.scanHour,

@@ -147,6 +147,10 @@ export type AdSource = 'apify' | 'placeholder' | 'upload';
 /** Where the Competitor Tracker reads a competitor's ads: sample ads, or their real ones in Meta's Ad Library through Apify. */
 export type AdsSetting = 'sample' | 'apify';
 
+/** What makes the ads' pictures: the stand-in, which makes none, or Cloudflare Workers AI's FLUX.1 schnell. */
+export const PICTURE_MODELS = ['stand-in', 'cloudflare'] as const;
+export type PictureModel = (typeof PICTURE_MODELS)[number];
+
 export interface Competitor {
   id: string;
   name: string;
@@ -229,6 +233,8 @@ export interface Variant {
   picturePrompt?: string;
   /** A picture asked for and not made yet, or the last ask that failed; and why, or that nothing was made. */
   picture?: VariantPicture;
+  /** The pictures made for it, newest first, kept to choose from again (eight at most). Read in the studio only. */
+  pictures?: PictureChoice[];
   /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
   videoEdit?: VideoEdit;
 }
@@ -236,9 +242,21 @@ export interface Variant {
 export interface VariantPicture {
   /** making: asked for, waiting for the image model; failed: the last ask failed; none: nothing pending. */
   status: 'none' | 'making' | 'failed';
-  /** Why it failed, or that nothing was made (the image model is not connected yet). */
+  /** Why it failed, or what became of the last ask (nothing made by the stand-in; kept while the variant waits to post). */
   note?: string;
   askedAt?: string;
+}
+
+/** A picture an image model made for a variant, kept to choose again. */
+export interface PictureChoice {
+  id: string;
+  /** A link the viewer may open: absent when it could not be signed. */
+  url?: string;
+  /** What the image model was asked to draw. */
+  prompt?: string;
+  /** The variant shows this one. */
+  shown: boolean;
+  createdAt: string;
 }
 
 export interface AdSet {
@@ -412,6 +430,10 @@ export interface AgentSettings {
   picturesAuto: boolean;
   /** Where the Competitor Tracker reads competitors' ads. */
   adsSource: AdsSetting;
+  /** What makes the ads' pictures. */
+  pictureModel: PictureModel;
+  /** The Cloudflare account Workers AI runs on: 32 characters, or empty. Its token is in n8n. */
+  cloudflareAccount: string;
   scanEvery: ScanEvery;
   /** ISO weekday, Monday = 1. */
   scanDay: number;

@@ -6,7 +6,7 @@ import { saveAgentSettingsAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
 import { hourLabel, SCAN_EVERY_LABEL, TIME_ZONES, WEEKDAYS, zoneLabel } from '@/lib/schedule';
-import type { AdsSetting, AgentSettings, ScanEvery } from '@/lib/types';
+import type { AdsSetting, AgentSettings, PictureModel, ScanEvery } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
@@ -112,14 +112,42 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
       </div>
       <p className="muted small">Off: the run waits on its page until someone gives the go-ahead. A run someone starts by hand always starts.</p>
 
+      <label className="field">
+        <span className="label">Pictures: what makes them</span>
+        <select className="input" value={form.pictureModel} onChange={(e) => set('pictureModel', e.target.value as PictureModel)}>
+          <option value="stand-in">The stand-in: no pictures, the ads use the drawn design</option>
+          <option value="cloudflare">Cloudflare Workers AI: FLUX.1 schnell, free each day</option>
+        </select>
+        <span className="muted small">
+          {form.pictureModel === 'cloudflare'
+            ? 'About 170 pictures a day on Cloudflare’s free allowance (10,000 neurons, reset at 00:00 UTC). On Cloudflare’s free plan nothing is ever charged: past the allowance a picture fails and says so until the next day. Every prompt carries your picture style from Brand memory. It needs the API token in n8n’s “Cloudflare Workers AI” credential.'
+            : 'No picture is made, and the studio says so. Switch to Cloudflare Workers AI once its token is in n8n.'}
+        </span>
+      </label>
+      {form.pictureModel === 'cloudflare' && (
+        <label className="field">
+          <span className="label">Cloudflare account ID</span>
+          <input
+            className="input"
+            value={form.cloudflareAccount}
+            onChange={(e) => set('cloudflareAccount', e.target.value.trim())}
+            placeholder="32 characters, 0-9 and a-f"
+            spellCheck={false}
+            autoComplete="off"
+            maxLength={40}
+          />
+          <span className="muted small">In the Cloudflare dashboard under Workers AI, “Use REST API” (it is also in the address bar after dash.cloudflare.com/). Only the ID goes here: the token stays in n8n.</span>
+        </label>
+      )}
+
       <div className={styles.switchRow}>
         <span>
           <strong>Pictures</strong>
-          <span className="muted small"> an image model makes one for every new ad</span>
+          <span className="muted small"> made for every new ad</span>
         </span>
         <Toggle checked={form.picturesAuto} label="Make a picture for every new ad" onChange={(on) => set('picturesAuto', on)} />
       </div>
-      <p className="muted small">Off: a picture is made only when someone asks for one in the studio. Either way, until the image model’s key is in n8n, none is made and the design is drawn.</p>
+      <p className="muted small">Off: a picture is made only when someone asks for one in the studio, from the prompt they write or the one the Content Agent wrote.</p>
 
       <label className="field">
         <span className="label">Time zone</span>

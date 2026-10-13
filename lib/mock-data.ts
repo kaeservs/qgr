@@ -460,6 +460,15 @@ export const adSets: AdSet[] = [
         picturePrompt: 'A city skyline at sunset across still water, the sun low and gold between the towers, the sky deep indigo above. No words, no people, no flags.',
         // Drawn for the sample data and marked so: there is no image model to ask.
         imageUrl: SAMPLE_PICTURE_URL,
+        pictures: [
+          {
+            id: 'pic-q4-a',
+            url: SAMPLE_PICTURE_URL,
+            prompt: 'A city skyline at sunset across still water, the sun low and gold between the towers, the sky deep indigo above. No words, no people, no flags.',
+            shown: true,
+            createdAt: '2026-10-06T10:02:00Z',
+          },
+        ],
         copy: {
           meta: {
             text: "EB-5 shouldn't feel like a maze. See the six steps to a U.S. Green Card, with independent due diligence at each one.",
@@ -928,6 +937,8 @@ export const settings: TeamSettings = {
   contentAuto: true,
   picturesAuto: false,
   adsSource: 'sample',
+  pictureModel: 'stand-in',
+  cloudflareAccount: '',
   scanEvery: 'week',
   scanDay: 1,
   scanHour: 9,

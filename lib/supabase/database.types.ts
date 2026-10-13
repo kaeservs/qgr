@@ -819,6 +819,7 @@ export type Database = {
       team_settings: {
         Row: {
           ads_source: string
+          cloudflare_account: string | null
           content_auto: boolean
           facebook_page_id: string | null
           facebook_page_name: string | null
@@ -829,6 +830,7 @@ export type Database = {
           linkedin_org_id: string | null
           linkedin_page_name: string | null
           pictures_auto: boolean
+          pictures_model: string
           scan_changed_at: string
           scan_day: number
           scan_every: string
@@ -840,6 +842,7 @@ export type Database = {
         }
         Insert: {
           ads_source?: string
+          cloudflare_account?: string | null
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -850,6 +853,7 @@ export type Database = {
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
+          pictures_model?: string
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -861,6 +865,7 @@ export type Database = {
         }
         Update: {
           ads_source?: string
+          cloudflare_account?: string | null
           content_auto?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
@@ -871,6 +876,7 @@ export type Database = {
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
+          pictures_model?: string
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -881,6 +887,41 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      variant_pictures: {
+        Row: {
+          created_at: string
+          id: string
+          path: string
+          prompt: string | null
+          removed_at: string | null
+          variant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          path: string
+          prompt?: string | null
+          removed_at?: string | null
+          variant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          path?: string
+          prompt?: string | null
+          removed_at?: string | null
+          variant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "variant_pictures_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "ad_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -918,6 +959,10 @@ export type Database = {
       }
       agent_name: { Args: { p_stage: string }; Returns: string }
       approve_variant: { Args: { p_variant_id: string }; Returns: undefined }
+      ask_for_picture: {
+        Args: { p_prompt: string; p_variant_id: string }
+        Returns: undefined
+      }
       assert_stage_running: {
         Args: { p_run_id: string; p_stage: string }
         Returns: undefined
@@ -960,6 +1005,7 @@ export type Database = {
         Returns: boolean
       }
       place_name: { Args: { p_place: string }; Returns: string }
+      prune_pictures: { Args: { p_variant_id: string }; Returns: string }
       publisher_fail: {
         Args: {
           p_error: string
@@ -1065,6 +1111,10 @@ export type Database = {
         Returns: undefined
       }
       set_pictures_auto: { Args: { p_on: boolean }; Returns: undefined }
+      set_pictures_model: {
+        Args: { p_account?: string; p_model: string }
+        Returns: undefined
+      }
       set_run_guidance: {
         Args: { p_guidance: string; p_run_id: string }
         Returns: undefined
@@ -1087,6 +1137,7 @@ export type Database = {
         }
         Returns: string
       }
+      stop_picture: { Args: { p_variant_id: string }; Returns: undefined }
       unapproved: {
         Args: {
           p_run: string
@@ -1136,6 +1187,10 @@ export type Database = {
           p_linkedin_org_id: string
           p_linkedin_page_name: string
         }
+        Returns: undefined
+      }
+      use_picture: {
+        Args: { p_picture_id: string; p_variant_id: string }
         Returns: undefined
       }
     }

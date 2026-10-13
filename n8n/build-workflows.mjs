@@ -671,7 +671,9 @@ export default workflow('qgr-post-results', 'QGR · Post results')
 
 // ---------------------------------------------------------------- pictures
 
-const pictureAsk = `{ variant_id: 'variant-id', label: 'A', prompt: 'A calm skyline at dusk, indigo and gold. No words, no people, no flags.', style: 'arcs', path: 'pictures/variant-id/picture-id.png' }`;
+const pictureAsk = `{ variant_id: 'variant-id', label: 'A', prompt: 'A calm skyline at dusk, indigo and gold. No words, no people, no flags.', style: 'arcs', look: 'Warm natural light, indigo and gold accents.', model: 'stand-in', account: null, path: 'pictures/variant-id/picture-id.png' }`;
+/** Cloudflare Workers AI's FLUX.1 schnell, on the account the team names in Settings. */
+const CLOUDFLARE_AI = 'https://api.cloudflare.com/client/v4/accounts';
 
 const pictures = `${IMPORTS}
 
@@ -705,6 +707,83 @@ ${rpcNode('takeDue', 'Take the pictures asked for', 'picture_take_due', '{{ JSON
 ${codeNode('eachAsk', 'One item per picture', code('shared-items.js'), pictureAsk)}
 ${codeNode('imageModel', 'Image model (stand-in)', code('pictures-stand-in.js'), `{ ok: true, variant_id: 'variant-id', path: null, stand_in: true }`)}
 ${isOk('made', 'Made?')}
+
+const realPictures = ifElse({
+  version: 2.3,
+  config: {
+    name: 'Real pictures?',
+    parameters: {
+      conditions: {
+        options: { caseSensitive: true, leftValue: '', typeValidation: 'loose', version: 2 },
+        conditions: [{ leftValue: expr('{{ $json.model === "cloudflare" && /^[0-9a-f]{32}$/.test($json.account || "") }}'), rightValue: true, operator: { type: 'boolean', operation: 'true', singleValue: true } }],
+        combinator: 'and',
+      },
+    },
+  },
+});
+${codeNode('writePrompt', 'Write the prompt', code('pictures-write-prompt.js'), `{ variant_id: 'variant-id', label: 'A', path: 'pictures/variant-id/picture-id.png', url: '${CLOUDFLARE_AI}/account-id/ai/run/@cf/black-forest-labs/flux-1-schnell', body: { prompt: 'A calm skyline at dusk.' } }`)}
+
+// The token is the "Cloudflare Workers AI" credential (Bearer Auth), attached
+// here by hand once it exists in n8n: a node naming a credential that does not
+// exist fails every run, the stand-in's too.
+const cloudflare = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Cloudflare: FLUX.1 schnell',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: expr('{{ $json.url }}'),
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpBearerAuth',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify($json.body) }}'),
+      options: { timeout: 120000, response: { response: { fullResponse: true, neverError: true } } },
+    },
+  },
+  output: [{ statusCode: 200, body: { success: true, result: { image: '/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==' } } }],
+});
+${codeNode('readPicture', 'Read the picture', code('pictures-read-image.js'), `{ ok: true, variant_id: 'variant-id', path: 'pictures/variant-id/picture-id.jpg', mime: 'image/jpeg', file: 'picture-id.jpg', image: '/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==' }`)}
+${isOk('gotPicture', 'Got a picture?')}
+
+const toFile = node({
+  type: 'n8n-nodes-base.convertToFile',
+  version: 1.1,
+  config: {
+    name: 'To a file',
+    parameters: {
+      operation: 'toBinary',
+      sourceProperty: 'image',
+      options: { mimeType: expr('{{ $json.mime }}'), fileName: expr('{{ $json.file }}') },
+    },
+  },
+  output: [{}],
+});
+
+const upload = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Upload to Storage',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: expr('${SUPABASE_STORAGE}/object/ad-pictures/{{ $("Read the picture").item.json.path }}'),
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'binaryData',
+      inputDataFieldName: 'data',
+      options: { timeout: 60000, response: { response: { fullResponse: true, neverError: true } } },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{ statusCode: 200, body: { Key: 'ad-pictures/pictures/variant-id/picture-id.jpg' } }],
+});
+${codeNode('uploaded', 'Uploaded', code('pictures-uploaded.js'), `{ ok: true, variant_id: 'variant-id', path: 'pictures/variant-id/picture-id.jpg', stand_in: false }`)}
 ${rpcNode('finish', 'Record the picture', 'picture_finish', '{{ JSON.stringify({ p_variant_id: $json.variant_id, p_path: $json.path, p_stand_in: $json.stand_in === true }) }}', `{ remove_picture: null }`, "\n    onError: 'continueRegularOutput',")}
 ${rpcNode('fail', 'Record why not', 'picture_fail', '{{ JSON.stringify({ p_variant_id: $json.variant_id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 
@@ -744,18 +823,21 @@ const removePicture = node({
   output: [{}],
 });
 
-const noteFlow = sticky('## Pictures\\nAt once when someone asks in the studio, and every five minutes for the ads that asked by themselves (the team\\'s switch in Settings, Agents), the database hands over the ads waiting for a picture (**picture_take_due**, claimed so two runs never make the same one; a claim lost for ten minutes is taken again, three times at most). Each goes to the image model with its prompt and the path to upload to, and the answer is recorded (**picture_finish** or **picture_fail**). The studio shows the picture under the ad\\'s words, and takes an approval back, since the ad changed. A picture no variant shows any more is removed from Storage.', [everyFiveMinutes, makeNow, takeDue, eachAsk], { color: 4 });
-const noteStandIn = sticky('## Stand-in until the key is in\\nThis makes nothing and says so: the studio keeps the drawn design and says no picture was made. To connect an image model (ChatGPT\\'s images API or Higgsfield), replace it with steps that keep its output (see the note in its code):\\n- send the item\\'s **prompt** and take the picture back;\\n- upload it with the **Supabase QGR** credential: POST /storage/v1/object/ad-pictures/{path} with its content type (a JPEG or WebP to the same path ending .jpg or .webp);\\n- answer { ok: true, variant_id, path }, or { ok: false, variant_id, error } when the model made nothing.', [imageModel], { color: 3 });
+const noteFlow = sticky('## Pictures\\nAt once when someone asks in the studio, and every five minutes for the ads that asked by themselves (the team\\'s switch in Settings, Agents), the database hands over the ads waiting for a picture (**picture_take_due**, claimed so two runs never make the same one; a claim lost for ten minutes is taken again, three times at most), each with its prompt, the brand\\'s picture style, the team\\'s image model and the path to upload to. The answer is recorded (**picture_finish** or **picture_fail**): the studio shows the picture under the ad\\'s words and keeps it with the variant\\'s others to choose again, and takes an approval back, since the ad changed. Past the eight a variant keeps, the oldest it does not show is removed from Storage.', [everyFiveMinutes, makeNow, takeDue, eachAsk], { color: 4 });
+const noteCloudflare = sticky('## Cloudflare Workers AI\\nWith pictures set to Cloudflare in Settings, Agents (with the account ID there), each ask goes to **FLUX.1 schnell**: the scene, the brand\\'s picture style from brand memory, and the rules (no words, no real people, no flags), 2,048 characters at most. The picture is read by its bytes, uploaded to ad-pictures with the **Supabase QGR** credential, and recorded.\\n\\nThe token: create a **Bearer Auth** credential named **Cloudflare Workers AI** holding an API token made from Cloudflare\\'s Workers AI template, then attach it to **Cloudflare: FLUX.1 schnell**. Until then that step does not run and the studio says why.\\n\\nFree: 10,000 neurons a day, about 170 pictures at 1024×1024. On Cloudflare\\'s free plan nothing is charged: past that a picture fails and says so until 00:00 UTC.', [realPictures, writePrompt, cloudflare, readPicture, gotPicture, toFile, upload, uploaded], { color: 5 });
+const noteStandIn = sticky('## Stand-in\\nThe way taken while pictures are set to the stand-in (Settings, Agents). It makes nothing and says so: the studio says no picture was made, and the variant keeps what it shows. Its output is the shape the real way answers in: { ok: true, variant_id, path, stand_in }, or { ok: false, variant_id, error }.', [imageModel], { color: 3 });
 
 export default workflow('qgr-pictures', 'QGR · Pictures')
   .add(everyFiveMinutes)
   .to(takeDue)
   .to(eachAsk)
-  .to(imageModel)
+  .to(realPictures.onTrue(writePrompt.to(cloudflare).to(readPicture).to(gotPicture.onTrue(toFile.to(upload).to(uploaded).to(made)).onFalse(made))).onFalse(imageModel))
+  .add(imageModel)
   .to(made.onTrue(finish.to(pictureToRemove.onTrue(removePicture))).onFalse(fail))
   .add(makeNow)
   .to(takeDue)
   .add(noteFlow)
+  .add(noteCloudflare)
   .add(noteStandIn);
 `;
 
