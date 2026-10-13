@@ -406,6 +406,34 @@
   font-size: 14px;
 }
 
+/* A finished agent's card is one link to what it made. */
+.stageOpen {
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.stageOpen:hover {
+  border-color: var(--indigo-200);
+  box-shadow: var(--shadow-lg);
+}
+
+.stageOpen .stageLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.stageOpen .stageLink:focus-visible {
+  outline: none;
+}
+
+.stageOpen .stageLink:focus-visible::after {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
 .stage :global(.btn) {
   width: fit-content;
   margin-top: auto;

@@ -46,8 +46,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
             ── POST /api/link-check → reads a pasted link as it is typed (lib/page)
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
             ── POST /api/transcribe → Deepgram reads the clip from a link signed for 15 min
-            ── POST /api/runs → reads the run's link → create_run() → POST the n8n
-               webhook { runId, startAt }
+            ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
+               when the team gave a direction → POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
@@ -83,6 +83,14 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   text, or why it could not) is stored in `runs.page`; the agents read that and
   never fetch a link themselves. A custom run whose page cannot be read is
   refused with a reason; a competitor run goes on from their ads.
+- A run can carry the team's direction for the agents ("Direction for the
+  agents" on the start card, up to 2,000 characters: what to focus on, the
+  hooks to try, what to leave out). It is stored in `runs.guidance` by
+  `set_run_guidance` before n8n is told about the run, and only while no agent
+  has started; Start over carries it to the new run. Each agent's request adds
+  it to the material with one rule saying how to use it (the guardrails win
+  over it), and only when there is one: without it every request is exactly
+  as before (`n8n/code.test.ts`).
 - `lib/data.ts` is the only data access. It picks `lib/data/live.ts` (Supabase)
   or `lib/data/sample.ts`; both implement `DataSource` (`lib/data/source.ts`)
   and return the shapes in `lib/types.ts`. Rows become those shapes in
@@ -102,7 +110,7 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   failed and the one before it is done or skipped. A retry is the same call.
 - People change things through their own functions, each `security definer`
   with a team check first (`private.require_team_member()`): `create_run`,
-  `report_start_failure` (n8n could not be reached), `save_variant`,
+  `report_start_failure` (n8n could not be reached), `set_run_guidance`, `save_variant`,
   `approve_variant`, `save_video_edit`, `update_brand_profile`,
   `continue_run` and `report_continue_failure`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
@@ -202,7 +210,7 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   HTTP node, only creating one from a workflow is refused). The Meta and LinkedIn tokens and the image model's key will be n8n
   credentials too; nothing that posts or draws is kept in Supabase or the app.
   A node holds its credential by id, so renaming one in n8n changes nothing
-  (the webhook secret was saved as "Header Auth account").
+  (the webhook secret is "Header Auth account 2", on all three webhooks).
 - A node names its credential only once that credential exists in n8n: a
   reference to a missing one fails every run before it starts, even a test
   with pinned data ("uses invalid credential").
@@ -295,12 +303,18 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   is cancelled. Saving the same words again changes nothing.
 - The Posts page lists what needs a look, what is scheduled, what went out
   and what was cancelled, in the team's time; a stand-in result says nothing
-  was posted. Its Calendar view (`?view=calendar`) puts each post on the day
+  was posted. Its Scheduled view (`?view=scheduled`) is every post still to go
+  out, soonest first, a day at a time, each with Move or send now and Cancel.
+  Its Calendar view (`?view=calendar`) puts each post on the day
   it goes out in the team's zone (`lib/posts.ts`), and a post none of whose
   places has started going out moves to another time or goes now
   (`reschedule_post`, which locks the places first so the publisher cannot be
-  claiming them). Home's calendar marks the days with posts beside the days
-  with runs, and lists what is coming up.
+  claiming them). Home's calendar shows how many runs started and how many
+  posts go out each day; picking a day lists them under the calendar, and
+  otherwise it lists what is coming up, with a link to the Scheduled view.
+- An agent's result opens from wherever it is counted: a run card's Hooks,
+  Angles and Variants open the report, the strategy and the ads, and a finished
+  agent's card on the run page is one link to what it made.
 - Results: once a place has gone out for real, "QGR · Post results" reads its
   numbers every six hours for four weeks (`results_take_due`) and records them
   on the place (`reach`, `views`, `reactions`, `comments`, `shares`, `clicks`,

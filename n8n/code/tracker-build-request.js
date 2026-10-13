@@ -22,6 +22,10 @@ const system = [
   'Work only from the material given.',
 ].join('\n');
 
+// The team's direction for the run, in their words: what to look for. Only when
+// they gave one; without it the request is exactly as before.
+const DIRECTION_RULE = "direction is the QGR team's note on what to look for in these ads. Let it decide which hooks and insights come first, but report only what the ads show.";
+
 const material = {
   competitor: { domain: p.domain, name_hint: p.competitorHint },
   website_text: p.websiteText || '',
@@ -29,6 +33,7 @@ const material = {
     return { id: a.id, platform: a.platform, format: a.format, days_running: a.days_running, text: a.text, headline: a.headline, cta: a.cta, page_name: a.page_name };
   }),
 };
+if (p.guidance) material.direction = p.guidance;
 
 const schema = {
   type: 'object',
@@ -67,7 +72,7 @@ return [{
       max_tokens: 16000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: system,
+      system: p.guidance ? system + '\n\n' + DIRECTION_RULE : system,
       messages: [{ role: 'user', content: 'The competitor material, as JSON:\n' + JSON.stringify(material) }],
     },
   },

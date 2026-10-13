@@ -160,6 +160,19 @@ describe('pages', () => {
     expect(await t.value<number>(`select count(*)::int from public.run_events where run_id = $1 and text = 'Could not read atlas.example: The site turned the reader away (403).'`, [second])).toBe(1);
   });
 
+  it('keeps the team’s direction with the run until an agent starts, and gives it to the agents', async () => {
+    const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom','text','Directed',array['meta'],'consultations', p_excerpt => $1)`, [EXCERPT]));
+    await t.asUser(outsider, () => expect(t.db.query(`select public.set_run_guidance($1, 'x')`, [runId])).rejects.toThrow(/Only the QGR team/));
+    await t.asUser(member, async () => {
+      await expect(t.db.query(`select public.set_run_guidance($1, $2)`, [runId, 'x'.repeat(2001)])).rejects.toThrow(/under 2,000/);
+      await t.db.query(`select public.set_run_guidance($1, '  Lead with families.  ')`, [runId]);
+    });
+    expect(await t.value<string>('select guidance from public.runs where id = $1', [runId])).toBe('Lead with families.');
+    const begun = await t.asService(() => t.value<{ run: { guidance: string } }>(`select public.agent_begin($1, 'strategist')`, [runId]));
+    expect(begun.run.guidance).toBe('Lead with families.');
+    await t.asUser(member, () => expect(t.db.query(`select public.set_run_guidance($1, 'Too late')`, [runId])).rejects.toThrow(/agents have started/));
+  });
+
   it('gives the agents the page with the run', async () => {
     const page = { ok: true, url: 'https://journal.example/post', title: 'A post', text: 'The words the strategist reads.', words: 6, readAt: '2026-10-08T09:00:00Z' };
     const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom','blog','A post',array['meta'],'consultations', p_url => 'https://journal.example/post', p_page => $1::jsonb)`, [JSON.stringify(page)]));

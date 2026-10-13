@@ -14,14 +14,10 @@ export default async function HomePage() {
     getActivity(),
   ]);
   const moving = !usingSampleData() && runs.some((r) => r.status === 'queued' || r.status === 'running');
-  const nextPost = posts
-    .filter((p) => p.targets.some((t) => t.status === 'scheduled') && p.scheduledFor >= now)
-    .map((p) => p.scheduledFor)
-    .sort()[0];
   return (
     <>
       <LiveRefresh active={moving} />
-      <HomeDashboard user={user} runs={runs} posts={posts} agents={agents} now={now} nextScan={nextScan} nextPost={nextPost ?? null} timeZone={settings.timeZone} adsSource={settings.adsSource} activity={activity} />
+      <HomeDashboard user={user} runs={runs} posts={posts} agents={agents} now={now} nextScan={nextScan} timeZone={settings.timeZone} adsSource={settings.adsSource} activity={activity} />
     </>
   );
 }

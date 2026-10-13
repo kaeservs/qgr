@@ -107,6 +107,8 @@ export interface Run {
   activity: RunEvent[];
   /** What was read from the run's link when it started. */
   page?: PageSummary;
+  /** The team's direction for the agents, given when the run started. */
+  guidance?: string;
 }
 
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';

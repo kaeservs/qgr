@@ -65,6 +65,9 @@ function assertStrictSchema(node: unknown, path = 'schema'): void {
   }
 }
 
+/** The JSON material a request sends the model, after its one-line preface. */
+const materialOf = (body: Json) => JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n')) as Json;
+
 function assertRequest(body: Json, effort: string) {
   expect(body.model).toBe('claude-haiku-5-5');
   expect(body).not.toHaveProperty('temperature');
@@ -112,6 +115,16 @@ describe('Competitor Tracker', () => {
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
     expect(material.ads).toHaveLength(10);
     expect(material.website_text).toBe('Horizon Visa Partners\n\nEB-5 advisors.\n\nEB-5 & you\nFamilies first.');
+  });
+
+  it('reads the team’s direction when they gave one, and asks exactly as before when not', () => {
+    const directed = run('tracker-prepare-ads.js', run('tracker-placeholder-ads.js', run('tracker-plan.js', { ...ctx, run: { ...ctx.run, guidance: 'Watch how they talk about age-out.' } })));
+    const { body } = run('tracker-build-request.js', directed) as { body: Json };
+    expect(materialOf(body).direction).toBe('Watch how they talk about age-out.');
+    expect(String(body.system)).toContain("direction is the QGR team's note on what to look for");
+    const plain = (run('tracker-build-request.js', prepared) as { body: Json }).body;
+    expect(materialOf(plain)).not.toHaveProperty('direction');
+    expect(String(plain.system)).not.toContain('direction');
   });
 
   it('builds hooks and angle counts from the ads, not from the model', () => {
@@ -342,6 +355,16 @@ describe('Ad Strategist', () => {
     expect(JSON.stringify(channelEnum)).toContain('"enum":["meta","linkedin","x"]');
   });
 
+  it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {
+    const directed = run('strategist-build-request.js', run('strategist-plan.js', { ...customCtx, run: { ...customCtx.run, guidance: 'Lead with the family angle.' } })) as { body: Json };
+    expect(materialOf(directed.body).direction).toBe('Lead with the family angle.');
+    expect(String(directed.body.system)).toContain("direction is the QGR team's brief for this run");
+    expect(String(directed.body.system)).toContain('the rule above wins');
+    const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
+    expect(materialOf(plain)).not.toHaveProperty('direction');
+    expect(String(plain.system)).not.toContain('direction');
+  });
+
   it('builds from the team’s notes on an uploaded clip', () => {
     const clipCtx = { run: { id: 'run-6', kind: 'custom', input: 'video', url: null, title: 'Founder clip', excerpt: 'Our founder explains concurrent filing for families on H-1B visas.', media_path: 'uploads/u/c.mp4', media: { duration: 42.6 }, platforms: ['meta'], goal: 'consultations' }, brand, report: null };
     const plan = run('strategist-plan.js', clipCtx);
@@ -497,6 +520,15 @@ describe('Content Agent', () => {
     // A run without a clip is asked for images, as before.
     const plain = run('content-build-request.js', ctx) as { body: Json };
     expect(String(plain.body.system)).toContain('no real or identifiable people');
+  });
+
+  it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {
+    const directed = run('content-build-request.js', { ...ctx, run: { ...ctx.run, guidance: 'Short lines. Mention the webinar on the 24th.' } }) as { body: Json };
+    expect(materialOf(directed.body).direction).toBe('Short lines. Mention the webinar on the 24th.');
+    expect(String(directed.body.system)).toContain("direction is the QGR team's brief for this run");
+    const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
+    expect(materialOf(plain)).not.toHaveProperty('direction');
+    expect(String(plain.system)).not.toContain('direction');
   });
 
   it('fails when a variant is missing', () => {

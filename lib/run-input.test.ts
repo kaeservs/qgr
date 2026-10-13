@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkToRead, normalizeUrl, parseNewRun, runTitle } from './run-input';
+import { linkToRead, MAX_GUIDANCE, MIN_EXCERPT, normalizeUrl, parseNewRun, runTitle } from './run-input';
 
 describe('normalizeUrl', () => {
   it('accepts what people paste', () => {
@@ -87,6 +87,17 @@ describe('parseNewRun', () => {
     const unnamed = parseNewRun({ ...base, source, title: '   ' });
     expect(named.ok && named.value.title).toBe('Q4 push');
     expect(unnamed.ok && 'title' in unnamed.value).toBe(false);
+  });
+
+  it('keeps the direction for the agents, line breaks and all, within its limit', () => {
+    const source = { kind: 'custom', type: 'text', excerpt: 'x'.repeat(MIN_EXCERPT) };
+    const given = parseNewRun({ ...base, source, guidance: '  Lead with families.\n- Rural projects\u0007 only  ' });
+    expect(given.ok && given.value.guidance).toBe('Lead with families.\n- Rural projects  only');
+    const blank = parseNewRun({ ...base, source, guidance: ' \n ' });
+    expect(blank.ok && 'guidance' in blank.value).toBe(false);
+    expect(parseNewRun({ ...base, source, guidance: 'x'.repeat(MAX_GUIDANCE) }).ok).toBe(true);
+    const long = parseNewRun({ ...base, source, guidance: 'x'.repeat(MAX_GUIDANCE + 1) });
+    expect(!long.ok && long.error).toMatch(/under 2,000 characters/);
   });
 });
 

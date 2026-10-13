@@ -3,7 +3,7 @@
 import { CalendarClock, Send, TriangleAlert, X as Close } from 'lucide-react';
 import Link from 'next/link';
 import { cx } from '@/lib/cx';
-import { cancellable, postState } from '@/lib/posts';
+import { cancellable, movable, postState } from '@/lib/posts';
 import type { PostState } from '@/lib/posts';
 import { formatInZone } from '@/lib/schedule';
 import type { Place, Post } from '@/lib/types';
@@ -13,13 +13,14 @@ import { usePostActions } from './usePostActions';
 import type { PostAction } from './usePostActions';
 import styles from './posts.module.css';
 
-function PostCard({
+export function PostCard({
   post,
   timeZone,
   busy,
   doing,
   onCancel,
   onRetry,
+  onMove,
 }: {
   post: Post;
   timeZone: string;
@@ -28,6 +29,8 @@ function PostCard({
   doing: PostAction | null;
   onCancel: () => void;
   onRetry: (place: Place) => void;
+  /** Opens the post to move it or send it now, while nothing of it has gone out. */
+  onMove?: () => void;
 }) {
   const text = post.targets[0]?.text ?? '';
   return (
@@ -59,6 +62,12 @@ function PostCard({
         </ul>
       </div>
       <div className={styles.postActions}>
+        {onMove && movable(post) && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onMove} disabled={busy}>
+            <CalendarClock size={14} aria-hidden />
+            Move or send now
+          </button>
+        )}
         {cancellable(post) && (
           <button type="button" className="btn btn-quiet btn-sm" onClick={onCancel} disabled={busy} aria-busy={doing === 'cancel'}>
             <Close size={14} aria-hidden />

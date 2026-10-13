@@ -9,6 +9,8 @@ export interface NewRunInput {
   title?: string;
   platforms: Platform[];
   goal: Goal;
+  /** The team's direction for the agents: what to make of the source, which hooks to focus on. */
+  guidance?: string;
 }
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -20,6 +22,8 @@ export const MAX_EXCERPT = 20_000;
 export const MIN_NOTES = 20;
 /** Supabase Free's limit for one file. The browser cuts and compresses a clip to fit under it. */
 export const MAX_CLIP_BYTES = 50 * 1024 * 1024;
+/** The direction for the agents: a few sentences, not a brief. The database holds the same limit. */
+export const MAX_GUIDANCE = 2000;
 const MAX_TITLE = 120;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 /** Where an uploaded clip is kept: the uploader's own folder, a fresh name, a video extension. */
@@ -158,6 +162,10 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
   const title = typeof body.title === 'string' ? body.title.trim() : '';
   if (title.length > MAX_TITLE) return { ok: false, error: 'That run name is too long.' };
 
+  // Control characters go; line breaks stay, so a list of points reads as one.
+  const guidance = typeof body.guidance === 'string' ? body.guidance.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').trim() : '';
+  if (guidance.length > MAX_GUIDANCE) return { ok: false, error: `Keep the direction for the agents under ${MAX_GUIDANCE.toLocaleString('en-US')} characters.` };
+
   return {
     ok: true,
     value: {
@@ -165,6 +173,7 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
       platforms: PLATFORMS.filter((p) => platforms.includes(p)),
       goal: body.goal,
       ...(title ? { title } : {}),
+      ...(guidance ? { guidance } : {}),
     },
   };
 }

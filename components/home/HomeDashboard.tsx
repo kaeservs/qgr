@@ -1,15 +1,15 @@
 'use client';
 
-import { Workflow, X } from 'lucide-react';
+import { Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
-import { dayKey, formatShortDate } from '@/lib/format';
+import { dayKey } from '@/lib/format';
 import { postsByDay, postState } from '@/lib/posts';
 import type { ActivityItem, AdsSetting, Agent, Post, User } from '@/lib/types';
-import { PostRows } from '../posts/PostRows';
 import { EmptyState } from '../ui/EmptyState';
 import { AgentPanel } from './AgentPanel';
+import { DayPanel } from './DayPanel';
 import { RunCalendar } from './RunCalendar';
 import { RunCard } from './RunCard';
 import { StartRunCard } from './StartRunCard';
@@ -22,7 +22,6 @@ export function HomeDashboard({
   agents,
   now,
   nextScan,
-  nextPost,
   timeZone,
   adsSource,
   activity,
@@ -33,17 +32,16 @@ export function HomeDashboard({
   agents: Agent[];
   now: string;
   nextScan: string | null;
-  nextPost: string | null;
   timeZone: string;
   adsSource: AdsSetting;
   /** What the agents are doing now, as the top bar reads it. */
   activity: ActivityItem[];
 }) {
+  // A day picked on the calendar: its posts and runs show under the calendar.
   const [day, setDay] = useState<string | null>(null);
-  const shown = day ? runs.filter((r) => dayKey(r.createdAt) === day) : runs.slice(0, 4);
   const byDay = useMemo(() => postsByDay(posts, timeZone), [posts, timeZone]);
-  // A chosen day's posts; otherwise the next few still to go out.
-  const dayPosts = day ? (byDay.get(day) ?? []) : [...byDay.values()].flat().filter((p) => postState(p) === 'waiting').slice(0, 3);
+  // Everything still to go out, soonest first (postsByDay sorts by time).
+  const waiting = useMemo(() => [...byDay.values()].flat().filter((p) => postState(p) === 'waiting'), [byDay]);
 
   return (
     <div className={styles.home}>
@@ -58,49 +56,24 @@ export function HomeDashboard({
         <section className="section" aria-labelledby="recent-runs">
           <div className="section-head">
             <h2 id="recent-runs" className="display h2">
-              {day ? `Runs on ${formatShortDate(day)}` : 'Recent runs'}
+              Recent runs
             </h2>
-            {day ? (
-              <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDay(null)}>
-                <X size={15} aria-hidden />
-                Show all
-              </button>
-            ) : (
-              <Link href="/runs" className="link small">
-                View all
-              </Link>
-            )}
+            <Link href="/runs" className="link small">
+              View all
+            </Link>
           </div>
-          {shown.length === 0 ? (
-            day ? (
-              <p className="muted small">No runs started that day.</p>
-            ) : (
-              <EmptyState icon={Workflow} title="No runs yet">
-                Start one above, from a competitor’s website or from your own podcast, blog post or text.
-              </EmptyState>
-            )
+          {runs.length === 0 ? (
+            <EmptyState icon={Workflow} title="No runs yet">
+              Start one above, from a competitor’s website or from your own podcast, blog post or text.
+            </EmptyState>
           ) : (
             <div className={styles.runList}>
-              {shown.map((run) => (
+              {runs.slice(0, 4).map((run) => (
                 <RunCard key={run.id} run={run} />
               ))}
             </div>
           )}
         </section>
-
-        {dayPosts.length > 0 && (
-          <section className="section" aria-labelledby="home-posts">
-            <div className="section-head">
-              <h2 id="home-posts" className="display h2">
-                {day ? `Posts on ${formatShortDate(day)}` : 'Coming up'}
-              </h2>
-              <Link href="/posts?view=calendar" className="link small">
-                Calendar
-              </Link>
-            </div>
-            <PostRows posts={dayPosts} timeZone={timeZone} />
-          </section>
-        )}
       </div>
 
       <aside className={`card ${styles.sideCol}`} aria-label="Calendar and agents">
@@ -111,8 +84,16 @@ export function HomeDashboard({
           selected={day}
           onSelect={setDay}
           nextScan={nextScan}
-          nextPost={nextPost}
           timeZone={timeZone}
+        />
+        <DayPanel
+          day={day}
+          runs={day ? runs.filter((r) => dayKey(r.createdAt) === day) : []}
+          posts={day ? (byDay.get(day) ?? []) : []}
+          comingUp={waiting.slice(0, 4)}
+          scheduled={waiting.length}
+          timeZone={timeZone}
+          onClose={() => setDay(null)}
         />
         <AgentPanel agents={agents} activity={activity} />
       </aside>

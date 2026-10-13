@@ -180,6 +180,12 @@ export default async function RunPage({ params }: Props) {
           </div>
         </div>
         <SourceBlock run={run} clipUrl={clipUrl} />
+        {run.guidance && (
+          <>
+            <h3 className={styles.notesTitle}>Your direction for the agents</h3>
+            <blockquote className={styles.excerpt}>{run.guidance}</blockquote>
+          </>
+        )}
       </section>
 
       <section className="section" aria-labelledby="agents">
@@ -191,7 +197,7 @@ export default async function RunPage({ params }: Props) {
             const stage = run.stages[key];
             const link = outputLink(key, run);
             return (
-              <li key={key} className={cx('card', styles.stage, styles[`stage-${stage.status}`])}>
+              <li key={key} className={cx('card', styles.stage, styles[`stage-${stage.status}`], link && styles.stageOpen)}>
                 <div className={styles.stageTop}>
                   <span className={styles.stageNum}>{i + 1}</span>
                   <StageBadge status={stage.status} />
@@ -206,6 +212,7 @@ export default async function RunPage({ params }: Props) {
                         ? HELD[key]
                         : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && run.source.kind === 'custom' ? 'Waiting to start.' : WAITING[key]))}
                 </p>
+                {/* The whole card opens the agent's result. */}
                 {link && (
                   <Link href={link.href} className={cx('link', styles.stageLink)}>
                     {link.label}
@@ -220,7 +227,7 @@ export default async function RunPage({ params }: Props) {
                         Upload again
                       </Link>
                     ) : (
-                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} />
+                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} />
                     )}
                   </div>
                 )}

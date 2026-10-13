@@ -24,7 +24,7 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
   'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url))';
@@ -205,6 +205,15 @@ export const liveData: DataSource = {
     const supabase = await db();
     const { data: id, error } = await supabase.rpc('create_run', toCreateRunArgs(input, page));
     if (error) return refused(error, 'The run could not be saved.');
+    // The direction is the run's before n8n is told about it, so every agent reads it.
+    if (input.guidance) {
+      const { error: guidanceError } = await supabase.rpc('set_run_guidance', { p_run_id: id, p_guidance: input.guidance });
+      if (guidanceError) {
+        const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: 'The direction for the agents could not be saved, so the run did not start.' });
+        if (reportError) console.error('Recording that the run could not start failed', reportError);
+        return refused(guidanceError, 'The direction for the agents could not be saved.');
+      }
+    }
     const started = await startPipeline(pipeline, id, input.source.kind === 'custom' ? 'strategist' : 'tracker');
     if (!started.ok) {
       // The run shows why it stopped, with a retry, instead of waiting forever.
