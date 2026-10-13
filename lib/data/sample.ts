@@ -155,6 +155,8 @@ export const sampleData: DataSource = {
     return { ok: true, value: null, sample: true };
   },
   saveVideoEdit: async () => ({ ok: true, value: null, sample: true }),
+  getAiVideos: async () => [mock.SAMPLE_AI_VIDEO],
+  getAiVideo: async (id) => (id === mock.SAMPLE_AI_VIDEO.id ? mock.SAMPLE_AI_VIDEO : null),
   getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),
   createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteClipUpload: async () => ({ ok: true, value: null, sample: true }),

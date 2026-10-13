@@ -586,6 +586,27 @@ posts that work (Brand memory below).
 - `mediabunny` and `@mediabunny/aac-encoder` are pinned to the same release,
   one at least two weeks old when it was taken.
 
+### AI video (`/videos`, `lib/ai-video.ts`), a preview
+
+- A video is made by Higgsfield from a prompt, a model (Seedance 2.0, Hailuo
+  2.3, Kling 3.0: what each takes is in `VIDEO_MODELS`, from Higgsfield's model
+  pages, to check again when the key goes in), a length, a shape and
+  references (pictures, and for Seedance one clip of 15 s at most; Kling
+  needs one picture, its first frame). `parseVideoRequest` is the rule,
+  tested. No price is shown until Higgsfield says one.
+- Not connected yet: nothing in Supabase or n8n. Generate checks the request
+  and adds a card saying nothing was made, kept on the page only; the live
+  library is empty (`getAiVideos`), and the sample data has one video, the
+  sample clip, marked "Sample video".
+- A finished video starts a run as if it were uploaded (`/runs/new?video=…`):
+  the start card fetches it into the clip field, which cuts and uploads it as
+  any clip, and the notes start with what it shows (`notesFor`), since it has
+  no speech. A run never waits on a generation.
+- Every video costs money: only a person's Generate will make one, and a
+  monthly limit comes with the connection. Then: a table of videos, an n8n
+  workflow calling Higgsfield with its key as an n8n credential, polling its
+  `status_url`, and the file copied into Storage.
+
 ## Rules
 
 1. **A run's status is derived from its stages**, never stored beside them

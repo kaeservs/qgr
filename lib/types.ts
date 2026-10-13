@@ -454,3 +454,25 @@ export interface TeamSettings extends AgentSettings {
   /** Which places' posts go out for real (n8n's real steps, with its credentials); the others go through a stand-in. */
   postForReal: Record<Place, boolean>;
 }
+
+/**
+ * A video Higgsfield made from a prompt, kept to start a run from (lib/ai-video.ts).
+ * Until Higgsfield is connected only the sample data has one.
+ */
+export interface AiVideo {
+  id: string;
+  title: string;
+  prompt: string;
+  model: 'seedance' | 'hailuo' | 'kling';
+  seconds: number;
+  aspect: '9:16' | '1:1' | '16:9';
+  /** The names of the pictures and clips it was asked to follow. */
+  references: { kind: 'image' | 'clip'; name: string }[];
+  status: 'ready' | 'making' | 'failed';
+  /** A link the browser can play it from; set once it is ready. */
+  url?: string;
+  error?: string;
+  createdAt: string;
+  /** The sample data's stand-in, which no model made. */
+  sample?: boolean;
+}

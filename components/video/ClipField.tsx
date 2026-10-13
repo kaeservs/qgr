@@ -53,7 +53,7 @@ function describe(job: Job | null): ClipStatus {
  * the whole clip already fits) and uploaded, while the person writes their
  * notes. A clip replaced or taken away is removed from Storage again.
  */
-export function ClipField({ onStatus }: { onStatus: (status: ClipStatus) => void }) {
+export function ClipField({ onStatus, initial }: { onStatus: (status: ClipStatus) => void; initial?: { url: string; name: string } | undefined }) {
   const input = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
   const [cutting, setCutting] = useState(false);
@@ -100,7 +100,10 @@ export function ClipField({ onStatus }: { onStatus: (status: ClipStatus) => void
 
   function pick(list: FileList | null) {
     const file = list?.[0];
-    if (!file) return;
+    if (file) take(file);
+  }
+
+  function take(file: File) {
     if (!file.type.startsWith('video/') && !kindOf(file)) return setProblem('Pick a video file: MP4, MOV or WebM.');
     setProblem(null);
     discard();
@@ -109,6 +112,24 @@ export function ClipField({ onStatus }: { onStatus: (status: ClipStatus) => void
     report(null);
     setCutting(true);
   }
+
+  // A video from the AI video library arrives as if it were picked here: fetched once, then cut and uploaded the same way.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!initial || started.current) return;
+    started.current = true;
+    const controller = new AbortController();
+    report({ stage: 'preparing', progress: 0 });
+    fetch(initial.url, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error(String(res.status));
+        return res.blob();
+      })
+      .then((blob) => take(new File([blob], initial.name, { type: blob.type || 'video/mp4' })))
+      .catch(() => {
+        if (!controller.signal.aborted) report({ stage: 'failed', error: 'The video couldn’t be loaded from the library. Go back to AI video and try again.' });
+      });
+  }, [initial, report]);
 
   async function prepare(file: File, cut: Cut, signal: AbortSignal) {
     const duration = keptSeconds(cut.keep);

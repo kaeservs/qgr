@@ -311,6 +311,10 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
+  // Nothing makes AI videos until Higgsfield is connected, so there are none to read yet.
+  getAiVideos: async () => [],
+  getAiVideo: async () => null,
+
   getClipUrl: async (path) => {
     const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, PLAY_SECONDS);
     if (error) {

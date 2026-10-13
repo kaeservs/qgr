@@ -1,6 +1,6 @@
 'use client';
 
-import { BookMarked, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, UserRound, Workflow, X } from 'lucide-react';
+import { BookMarked, Clapperboard, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, UserRound, Workflow, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -27,6 +27,7 @@ const GROUPS = [
       { href: '/competitors', label: 'Competitors', icon: Radar },
       { href: '/strategy', label: 'Strategy', icon: Compass },
       { href: '/content', label: 'Content', icon: Sparkles },
+      { href: '/videos', label: 'AI video', icon: Clapperboard },
     ],
   },
   {

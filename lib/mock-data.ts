@@ -3,7 +3,7 @@
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
 
-import type { AdSet, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
+import type { AdSet, AiVideo, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
 import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
@@ -166,6 +166,25 @@ export const SAMPLE_CLIP: Clip = {
   size: 671397,
 };
 export const SAMPLE_CLIP_URL = '/sample/eb5-explainer.mp4';
+/**
+ * The AI video page's one example: the sample clip, standing in for a video
+ * Higgsfield made (it says so on the page). Starting a run from it works as
+ * uploading the clip does.
+ */
+export const SAMPLE_AI_VIDEO: AiVideo = {
+  id: 'v-sample',
+  title: 'Family planning, golden hour',
+  prompt:
+    'A calm explainer opening: soft indigo and gold light over a city skyline at dusk, the camera drifting slowly forward, space at the top for a headline. No people, no flags, no text.',
+  model: 'seedance',
+  seconds: 15,
+  aspect: '16:9',
+  references: [{ kind: 'image', name: 'qgr-brand-colours.png' }],
+  status: 'ready',
+  url: SAMPLE_CLIP_URL,
+  createdAt: '2026-10-12T15:20:00Z',
+  sample: true,
+};
 /** A picture standing in for one an image model made, marked "Sample picture" in the image. */
 export const SAMPLE_PICTURE_URL = '/sample/picture-q4.jpg';
 

@@ -5,6 +5,7 @@
 import { STAGE_INFO } from '../pipeline';
 import type { NewRunInput } from '../run-input';
 import type {
+  AiVideo,
   ActivityItem,
   AdSet,
   Agent,
@@ -114,6 +115,9 @@ export interface DataSource {
 
   /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
   saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
+  /** Videos made by the AI video model, newest first. Empty until Higgsfield is connected. */
+  getAiVideos(): Promise<AiVideo[]>;
+  getAiVideo(id: string): Promise<AiVideo | null>;
   /** A link the browser can play a clip from, for a while. Null when there is none to give. */
   getClipUrl(path: string): Promise<string | null>;
   /**
