@@ -7,6 +7,8 @@
 import type { TranscriptLine } from './types';
 
 export const MAX_LINES = 1000;
+/** A long video's transcript: three hours of talk is about 6,000 lines. */
+export const MAX_LONG_LINES = 8000;
 export const MAX_LINE = 200;
 
 /** Short enough to read as a caption: about two seconds of speech, one sentence at most. */
@@ -53,7 +55,7 @@ function split(text: string): string[] {
  * Bracketed noise ([Music]) and a line said again straight after itself (how
  * Whisper fills a silence) are left out, as is anything malformed.
  */
-export function linesFromChunks(chunks: unknown, duration?: number): TranscriptLine[] {
+export function linesFromChunks(chunks: unknown, duration?: number, max = MAX_LINES): TranscriptLine[] {
   if (!Array.isArray(chunks)) return [];
   const passages = chunks.flatMap((c): { start: number; end: number | null; text: string }[] => {
     const chunk = c as Partial<SpeechChunk> | null;
@@ -83,7 +85,7 @@ export function linesFromChunks(chunks: unknown, duration?: number): TranscriptL
       at = until;
     }
   });
-  return lines.slice(0, MAX_LINES);
+  return lines.slice(0, max);
 }
 
 /** The words of a transcript as one text, for the run's notes. */

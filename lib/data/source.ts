@@ -3,9 +3,12 @@
 // through `lib/data.ts`, which picks one, and never know which it was.
 
 import { STAGE_INFO } from '../pipeline';
+import type { NewLongVideo } from '../long-video';
 import type { NewRunInput } from '../run-input';
 import type {
   AiVideo,
+  LongVideo,
+  LongVideoWithTranscript,
   ActivityItem,
   AdSet,
   Agent,
@@ -115,6 +118,16 @@ export interface DataSource {
 
   /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
   saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
+  /** Long videos, newest first, without their transcripts. */
+  getLongVideos(): Promise<LongVideo[]>;
+  /** One long video with its transcript, to pick and cut its moments. */
+  getLongVideo(id: string): Promise<LongVideoWithTranscript | null>;
+  /** Keeps a long video's transcript and asks the Moments agent for its moments. */
+  createLongVideo(input: NewLongVideo): Promise<Saved<{ id: string }>>;
+  askMomentsAgain(id: string): Promise<Saved>;
+  removeLongVideo(id: string): Promise<Saved>;
+  /** A run started from a clip cut from these lines: kept on its moment, or on a moment of the team's own. */
+  recordMomentRun(id: string, first: number, last: number, title: string, runId: string): Promise<Saved>;
   /** Videos made by the AI video model, newest first. Empty until Higgsfield is connected. */
   getAiVideos(): Promise<AiVideo[]>;
   getAiVideo(id: string): Promise<AiVideo | null>;

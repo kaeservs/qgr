@@ -78,6 +78,8 @@ posts that work (Brand memory below).
         numbers from Meta or LinkedIn → results_record() or results_fail()
     n8n "QGR · Pictures", every five minutes and on POST /webhook/qgr-picture →
         picture_take_due() → each ad → picture_finish() or picture_fail()
+    n8n "QGR · Moments", every five minutes and on POST /webhook/qgr-moments →
+        moments_take_due() → each long video → Claude → moments_finish() or moments_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -145,12 +147,13 @@ posts that work (Brand memory below).
   `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
   `set_ads_source`, `update_publishing_settings`, `set_post_for_real`,
-  `set_competitor_tracked`.
+  `set_competitor_tracked`, `create_long_video`, `ask_moments_again`,
+  `remove_long_video`, `record_moment_run`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
-  `prune_pictures`) is granted to
+  `prune_pictures`, `moments_*`) is granted to
   the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
@@ -207,7 +210,8 @@ posts that work (Brand memory below).
   (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
   `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
   Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
-  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`).
+  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`),
+  Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -586,7 +590,40 @@ posts that work (Brand memory below).
 - `mediabunny` and `@mediabunny/aac-encoder` are pinned to the same release,
   one at least two weeks old when it was taken.
 
-### AI video (`/videos`, `lib/ai-video.ts`), a preview
+### Long videos (`/videos`, `long_videos`, "QGR · Moments")
+
+- A long recording (a webinar, a talk: up to three hours) is turned into
+  short ads without ever being uploaded. The browser reads its sound five
+  minutes at a time with Mediabunny (only the bytes it needs, never the whole
+  file in memory), mixes it to 16 kHz mono and hands each piece to one
+  Whisper worker, which keeps the model loaded (`lib/speech-long.ts`); lines
+  come back as each piece is heard. Only the transcript is kept
+  (`create_long_video` through `POST /api/long-videos`, a route because three
+  hours of transcript is past a server action's 1 MB). Rules in
+  `lib/long-video.ts`, tested.
+- "QGR · Moments" (Haiku 5.5, medium effort) reads the transcript one
+  numbered line at a time and names five to ten moments by their first and
+  last line, with a title, why and a hook. Times are never asked of the
+  model: they are the lines' (`moments-read-answer.js` drops one outside the
+  transcript, under 8 s, over 150 s or overlapping a stronger one, and flags a
+  hook; `moments_finish` works the times out again). Usage goes to
+  `long_video_usage`, on failure too. The app pings `qgr-moments` when a video
+  is kept, so the moments come within a minute or two; the page re-reads
+  while it waits.
+- The moments page (`/videos/long/[id]`) plays the file from the computer
+  (kept in the tab, `lib/video/local-files.ts`, or picked again and known by
+  its size and length), lets the team nudge a moment a line at either end,
+  add one of their own from the transcript, and tick them. "Make ads" cuts
+  each ticked moment in the browser (`render`, aimed under 45 MB), uploads it
+  as an ordinary clip and starts an ordinary custom video run (notes: what is
+  said; captions: the moment's lines in the clip's seconds; direction: the
+  team's plus the moment's hook), then `record_moment_run` keeps the run on
+  its moment (a nudged one becomes the team's own). Re-asking keeps the
+  moments ads were made from and the team's own.
+- The sample data has one long video (a 40-minute webinar transcript) and
+  picks moments by their place in the video (`sampleMoments`), saying so.
+
+### AI video (`/videos?view=ai`, `lib/ai-video.ts`), a preview
 
 - A video is made by Higgsfield from a prompt, a model (Seedance 2.0, Hailuo
   2.3, Kling 3.0: what each takes is in `VIDEO_MODELS`, from Higgsfield's model
@@ -598,6 +635,8 @@ posts that work (Brand memory below).
   and adds a card saying nothing was made, kept on the page only; the live
   library is empty (`getAiVideos`), and the sample data has one video, the
   sample clip, marked "Sample video".
+- The sidebar's Video page holds both: Long videos (the default view) and AI
+  video (`?view=ai`).
 - A finished video starts a run as if it were uploaded (`/runs/new?video=…`):
   the start card fetches it into the clip field, which cuts and uploads it as
   any clip, and the notes start with what it shows (`notesFor`), since it has

@@ -438,6 +438,98 @@ export type Database = {
           },
         ]
       }
+      long_video_usage: {
+        Row: {
+          cache_creation_input_tokens: number
+          cache_read_input_tokens: number
+          created_at: string
+          id: number
+          input_tokens: number
+          long_video_id: string
+          model: string
+          output_tokens: number
+        }
+        Insert: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          long_video_id: string
+          model: string
+          output_tokens?: number
+        }
+        Update: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          long_video_id?: string
+          model?: string
+          output_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "long_video_usage_long_video_id_fkey"
+            columns: ["long_video_id"]
+            isOneToOne: false
+            referencedRelation: "long_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      long_videos: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          file: Json
+          finished_at: string | null
+          guidance: string | null
+          id: string
+          moments: Json
+          removed_at: string | null
+          status: string
+          title: string
+          transcript: Json
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          file: Json
+          finished_at?: string | null
+          guidance?: string | null
+          id?: string
+          moments?: Json
+          removed_at?: string | null
+          status?: string
+          title: string
+          transcript: Json
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          file?: Json
+          finished_at?: string | null
+          guidance?: string | null
+          id?: string
+          moments?: Json
+          removed_at?: string | null
+          status?: string
+          title?: string
+          transcript?: Json
+        }
+        Relationships: []
+      }
       post_targets: {
         Row: {
           attempts: number
@@ -976,8 +1068,18 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string }
         Returns: undefined
       }
+      ask_moments_again: { Args: { p_id: string }; Returns: undefined }
       cancel_post: { Args: { p_post_id: string }; Returns: string[] }
       continue_run: { Args: { p_run_id: string }; Returns: string }
+      create_long_video: {
+        Args: {
+          p_file: Json
+          p_guidance?: string
+          p_title: string
+          p_transcript: Json
+        }
+        Returns: string
+      }
       create_run: {
         Args: {
           p_competitor_name?: string
@@ -999,6 +1101,15 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string; p_summary: string }
         Returns: undefined
       }
+      moments_fail: {
+        Args: { p_error: string; p_id: string; p_usage?: Json }
+        Returns: undefined
+      }
+      moments_finish: {
+        Args: { p_id: string; p_moments: Json; p_usage?: Json }
+        Returns: undefined
+      }
+      moments_take_due: { Args: { p_limit?: number }; Returns: Json }
       next_scan_at: { Args: never; Returns: string }
       picture_fail: {
         Args: { p_error: string; p_variant_id: string }
@@ -1035,6 +1146,16 @@ export type Database = {
         Returns: Json
       }
       publisher_take_due: { Args: { p_limit?: number }; Returns: Json }
+      record_moment_run: {
+        Args: {
+          p_first: number
+          p_id: string
+          p_last: number
+          p_run_id: string
+          p_title: string
+        }
+        Returns: undefined
+      }
       record_usage: {
         Args: { p_run_id: string; p_stage: string; p_usage: Json }
         Returns: undefined
@@ -1052,6 +1173,7 @@ export type Database = {
         Returns: string
       }
       remove_brand_example: { Args: { p_id: string }; Returns: undefined }
+      remove_long_video: { Args: { p_id: string }; Returns: undefined }
       remove_picture: { Args: { p_variant_id: string }; Returns: string }
       request_picture: { Args: { p_variant_id: string }; Returns: undefined }
       reschedule_post: {

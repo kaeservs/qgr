@@ -5,6 +5,7 @@
 // left there, and only the sample run's own clip can be played.
 
 import { hostOf } from '../format';
+import { momentOf, sampleMoments } from '../long-video';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import * as mock from '../mock-data';
 import { initialStages, runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
@@ -13,7 +14,7 @@ import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
-import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Post, Run, TeamSettings } from '../types';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, LongVideoWithTranscript, Post, Run, TeamSettings } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -29,6 +30,7 @@ const store = globalThis as typeof globalThis & {
   __qgrUntracked?: Set<string>;
   __qgrMemory?: BrandMemory;
   __qgrExamples?: BrandExample[];
+  __qgrLongVideos?: LongVideoWithTranscript[];
 };
 const runList = (): Run[] => (store.__qgrRuns ??= structuredClone(mock.runs));
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
@@ -36,6 +38,7 @@ const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mo
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
 const memory = (): BrandMemory => (store.__qgrMemory ??= structuredClone(mock.brandMemory));
 const examples = (): BrandExample[] => (store.__qgrExamples ??= structuredClone(mock.brandExamples));
+const longVideos = (): LongVideoWithTranscript[] => (store.__qgrLongVideos ??= [mock.sampleLongVideo()]);
 const competitorList = (): Competitor[] => mock.competitors.map((c) => ({ ...c, tracked: !untracked().has(c.id) }));
 
 const byNewest = <T extends { createdAt: string }>(a: T, b: T) => b.createdAt.localeCompare(a.createdAt);
@@ -155,6 +158,48 @@ export const sampleData: DataSource = {
     return { ok: true, value: null, sample: true };
   },
   saveVideoEdit: async () => ({ ok: true, value: null, sample: true }),
+  getLongVideos: async () => longVideos().map(({ transcript: _transcript, ...video }) => video),
+  getLongVideo: async (id) => longVideos().find((v) => v.id === id) ?? null,
+  // No agent runs on the sample data: its moments are picked by their place in the video, and say so.
+  createLongVideo: async (input) => {
+    const id = `lv-${crypto.randomUUID().slice(0, 8)}`;
+    longVideos().unshift({
+      id,
+      title: input.title,
+      file: input.file,
+      guidance: input.guidance ?? null,
+      status: 'done',
+      error: null,
+      moments: sampleMoments(input.transcript),
+      lines: input.transcript.length,
+      createdAt: new Date().toISOString(),
+      sample: true,
+      transcript: input.transcript,
+    });
+    return { ok: true, value: { id }, sample: true };
+  },
+  askMomentsAgain: async (id) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    video.moments = [...sampleMoments(video.transcript).filter((m) => !video.moments.some((k) => k.first === m.first && k.last === m.last)), ...video.moments.filter((m) => m.source === 'team' || m.runIds.length > 0)];
+    return { ok: true, value: null, sample: true };
+  },
+  removeLongVideo: async (id) => {
+    store.__qgrLongVideos = longVideos().filter((v) => v.id !== id);
+    return { ok: true, value: null, sample: true };
+  },
+  recordMomentRun: async (id, first, last, title, runId) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    const known = video.moments.find((m) => m.first === first && m.last === last);
+    if (known) known.runIds.push(runId);
+    else {
+      const m = momentOf(video.transcript, first, last, { title });
+      if (!m) return { ok: false, status: 400, error: 'The moment is not inside the transcript.' };
+      video.moments.push({ ...m, runIds: [runId] });
+    }
+    return { ok: true, value: null, sample: true };
+  },
   getAiVideos: async () => [mock.SAMPLE_AI_VIDEO],
   getAiVideo: async (id) => (id === mock.SAMPLE_AI_VIDEO.id ? mock.SAMPLE_AI_VIDEO : null),
   getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),

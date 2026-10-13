@@ -44,6 +44,9 @@ export const publisherConfig = (): PipelineConfig | null => siblingWebhook('N8N_
  */
 export const picturesConfig = (): PipelineConfig | null => siblingWebhook('N8N_PICTURES_WEBHOOK_URL', 'qgr-picture');
 
+/** The "QGR · Moments" webhook, which looks at a long video now instead of at the workflow's next five minutes. */
+export const momentsConfig = (): PipelineConfig | null => siblingWebhook('N8N_MOMENTS_WEBHOOK_URL', 'qgr-moments');
+
 /** A webhook beside the run pipeline's: its own setting, or the run webhook's address with its path in place of qgr-run. */
 function siblingWebhook(setting: string, path: string): PipelineConfig | null {
   const pipeline = pipelineConfig();

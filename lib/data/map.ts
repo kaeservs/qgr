@@ -5,6 +5,7 @@
 
 import { runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
 import { CLIP_PATH, runTitle } from '../run-input';
+import type { NewLongVideo } from '../long-video';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
@@ -29,6 +30,9 @@ import type {
   CreativeStyle,
   Goal,
   Hook,
+  LongVideo,
+  LongVideoWithTranscript,
+  Moment,
   Notice,
   PageRead,
   PageSummary,
@@ -756,3 +760,76 @@ export function toActivity(rows: ActivityRows, now: string): ActivityItem[] {
 
   return items.sort((a, b) => b.since.localeCompare(a.since));
 }
+
+// ---------------------------------------------------------------- long videos
+
+export interface LongVideoRow {
+  id: string;
+  title: string;
+  file: Json;
+  guidance: string | null;
+  status: string;
+  error: string | null;
+  moments: Json;
+  created_at: string;
+  transcript?: Json;
+  lines?: number | null;
+}
+
+const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null);
+
+function toMoment(raw: unknown): Moment | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const m = raw as Record<string, unknown>;
+  if (typeof m.first !== 'number' || typeof m.last !== 'number') return null;
+  return {
+    first: m.first,
+    last: m.last,
+    start: num(m.start),
+    end: num(m.end),
+    title: str(m.title) ?? 'A moment',
+    why: str(m.why),
+    hook: str(m.hook),
+    warnings: Array.isArray(m.warnings) ? m.warnings.filter((w): w is string => typeof w === 'string') : [],
+    source: m.source === 'team' ? 'team' : 'agent',
+    runIds: Array.isArray(m.run_ids) ? m.run_ids.filter((r): r is string => typeof r === 'string') : [],
+  };
+}
+
+function toLines(raw: unknown): TranscriptLine[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((l): TranscriptLine[] => {
+    if (!l || typeof l !== 'object') return [];
+    const line = l as Record<string, unknown>;
+    return typeof line.start === 'number' && typeof line.end === 'number' && typeof line.text === 'string' ? [{ start: line.start, end: line.end, text: line.text }] : [];
+  });
+}
+
+const LONG_STATUS: Record<string, LongVideo['status']> = { queued: 'waiting', working: 'working', done: 'done', failed: 'failed' };
+
+/** A long video as the pages show it; with its transcript when the row has one. */
+export function toLongVideo(row: LongVideoRow): LongVideoWithTranscript {
+  const f = row.file && typeof row.file === 'object' && !Array.isArray(row.file) ? (row.file as Record<string, unknown>) : {};
+  const transcript = toLines(row.transcript);
+  return {
+    id: row.id,
+    title: row.title,
+    file: { name: str(f.name) ?? 'video', size: num(f.size), duration: num(f.duration), width: num(f.width), height: num(f.height) },
+    guidance: row.guidance,
+    status: LONG_STATUS[row.status] ?? 'waiting',
+    error: row.error,
+    moments: (Array.isArray(row.moments) ? row.moments : []).map(toMoment).filter((m): m is Moment => m !== null),
+    lines: row.lines ?? transcript.length,
+    createdAt: row.created_at,
+    transcript,
+  };
+}
+
+/** The arguments create_long_video takes: the guidance only when there is one. */
+export const toCreateLongVideoArgs = (input: NewLongVideo) => ({
+  p_title: input.title,
+  p_file: input.file as unknown as Json,
+  p_transcript: input.transcript as unknown as Json,
+  ...(input.guidance ? { p_guidance: input.guidance } : {}),
+});

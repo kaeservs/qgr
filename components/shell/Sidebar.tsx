@@ -27,7 +27,7 @@ const GROUPS = [
       { href: '/competitors', label: 'Competitors', icon: Radar },
       { href: '/strategy', label: 'Strategy', icon: Compass },
       { href: '/content', label: 'Content', icon: Sparkles },
-      { href: '/videos', label: 'AI video', icon: Clapperboard },
+      { href: '/videos', label: 'Video', icon: Clapperboard },
     ],
   },
   {

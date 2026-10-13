@@ -6,7 +6,7 @@ import { STAGE_ORDER } from '../pipeline';
 import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
 import { getViewer } from '../session';
-import { picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
+import { momentsConfig, picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
@@ -18,7 +18,9 @@ import {
   toBrandMemory,
   toBrandProfile,
   toCompetitor,
+  toCreateLongVideoArgs,
   toCreateRunArgs,
+  toLongVideo,
   toNotices,
   toPost,
   toRun,
@@ -308,6 +310,61 @@ export const liveData: DataSource = {
   saveVideoEdit: async (variantId, edit) => {
     const { error } = await (await db()).rpc('save_video_edit', { p_variant_id: variantId, p_edit: edit as unknown as Json });
     if (error) return refused(error, 'The video edit could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  getLongVideos: async () => {
+    const { data, error } = await (await db())
+      .from('long_videos')
+      .select('id, title, file, guidance, status, error, moments, created_at')
+      .is('removed_at', null)
+      .order('created_at', { ascending: false })
+      .limit(RECENT);
+    if (error) readFailed('long videos', error);
+    return data.map((row) => {
+      const { transcript: _transcript, ...video } = toLongVideo(row);
+      return video;
+    });
+  },
+
+  getLongVideo: async (id) => {
+    if (!UUID.test(id)) return null;
+    const { data, error } = await (await db())
+      .from('long_videos')
+      .select('id, title, file, guidance, status, error, moments, created_at, transcript')
+      .eq('id', id)
+      .is('removed_at', null)
+      .maybeSingle();
+    if (error) readFailed('the long video', error);
+    return data ? toLongVideo(data) : null;
+  },
+
+  createLongVideo: async (input) => {
+    const { data, error } = await (await db()).rpc('create_long_video', toCreateLongVideoArgs(input));
+    if (error) return refused(error, 'The video could not be kept.');
+    // The Moments agent looks at once rather than at its next five minutes.
+    const moments = momentsConfig();
+    if (moments) await pingQueue(moments);
+    return { ok: true, value: { id: data }, sample: false };
+  },
+
+  askMomentsAgain: async (id) => {
+    const { error } = await (await db()).rpc('ask_moments_again', { p_id: id });
+    if (error) return refused(error, 'The moments could not be asked for again.');
+    const moments = momentsConfig();
+    if (moments) await pingQueue(moments);
+    return { ok: true, value: null, sample: false };
+  },
+
+  removeLongVideo: async (id) => {
+    const { error } = await (await db()).rpc('remove_long_video', { p_id: id });
+    if (error) return refused(error, 'The video could not be taken away.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  recordMomentRun: async (id, first, last, title, runId) => {
+    const { error } = await (await db()).rpc('record_moment_run', { p_id: id, p_first: first, p_last: last, p_title: title, p_run_id: runId });
+    if (error) return refused(error, 'The run could not be kept with its moment.');
     return { ok: true, value: null, sample: false };
   },
 

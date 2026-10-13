@@ -44,6 +44,12 @@ export const addBrandExample: DataSource['addBrandExample'] = (example) => sourc
 export const removeBrandExample: DataSource['removeBrandExample'] = (id) => source().removeBrandExample(id);
 export const rememberPost: DataSource['rememberPost'] = (postId, place, note) => source().rememberPost(postId, place, note);
 export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source().saveVideoEdit(id, edit);
+export const getLongVideos: DataSource['getLongVideos'] = () => source().getLongVideos();
+export const getLongVideo: DataSource['getLongVideo'] = (id) => source().getLongVideo(id);
+export const createLongVideo: DataSource['createLongVideo'] = (input) => source().createLongVideo(input);
+export const askMomentsAgain: DataSource['askMomentsAgain'] = (id) => source().askMomentsAgain(id);
+export const removeLongVideo: DataSource['removeLongVideo'] = (id) => source().removeLongVideo(id);
+export const recordMomentRun: DataSource['recordMomentRun'] = (id, first, last, title, runId) => source().recordMomentRun(id, first, last, title, runId);
 export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
