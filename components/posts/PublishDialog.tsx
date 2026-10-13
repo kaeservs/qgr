@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { schedulePostAction } from '@/app/(app)/posts/actions';
 import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
 import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
+import { cx } from '@/lib/cx';
 import type { NewPostTarget } from '@/lib/data/source';
 import { INSTAGRAM_MAX } from '@/lib/guardrails';
 import { PLATFORM_OF, postText } from '@/lib/platforms';
@@ -95,6 +96,7 @@ export function PublishDialog({
   brand,
   timeZone,
   pages,
+  forReal,
   onClose,
   onPosted,
 }: {
@@ -105,6 +107,8 @@ export function PublishDialog({
   brand: { name: string; website: string };
   timeZone: string;
   pages: PostPages;
+  /** Which places post for real; the others go through their stand-ins. */
+  forReal: Record<Place, boolean>;
   onClose: () => void;
   onPosted: () => void;
 }) {
@@ -299,6 +303,7 @@ export function PublishDialog({
                     <span className={styles.placeName}>{PLACE_LABEL[place]}</span>
                     <span className={styles.placeWhere}>{reason ?? page(place) ?? 'No Page set in Settings yet'}</span>
                   </span>
+                  {can && <span className={cx('pill pill-sm', styles.placeMark, forReal[place] ? styles.forRealPill : 'pill-quiet')}>{forReal[place] ? 'Goes out for real' : 'Stand-in'}</span>}
                 </label>
               );
             })}
@@ -387,7 +392,11 @@ export function PublishDialog({
       </div>
 
       <footer className={video.dialogFoot}>
-        <p className={video.footNote}>It goes out exactly as approved. Posts shows how each one went.</p>
+        <p className={video.footNote}>
+          {places.some((p) => forReal[p])
+            ? 'It goes out exactly as approved. Posts shows how each one went.'
+            : 'Through the stand-ins: nothing is published yet. A place posts for real once its switch is on in Settings, Where posts go.'}
+        </p>
         <button type="button" className="btn btn-quiet" onClick={close}>
           Cancel
         </button>

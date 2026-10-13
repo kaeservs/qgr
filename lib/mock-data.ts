@@ -947,6 +947,8 @@ export const settings: TeamSettings = {
     instagram: { id: '17841400000000001', username: 'quantumglobalresidency' },
     linkedin: null,
   },
+  // The sample data never posts anywhere.
+  postForReal: { facebook: false, instagram: false, linkedin: false },
 };
 
 const NS_A_META = 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.';

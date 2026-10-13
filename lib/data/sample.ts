@@ -165,7 +165,14 @@ export const sampleData: DataSource = {
     return { ok: true, value: null, sample: true };
   },
   savePostPages: async (pages) => {
-    store.__qgrSettings = { ...settings(), pages };
+    // As the database does: a place whose Page is taken away stops posting for real.
+    const was = settings().postForReal;
+    store.__qgrSettings = { ...settings(), pages, postForReal: { facebook: was.facebook && !!pages.facebook, instagram: was.instagram && !!pages.instagram, linkedin: was.linkedin && !!pages.linkedin } };
+    return { ok: true, value: null, sample: true };
+  },
+  setPostForReal: async (place, on) => {
+    if (on && !settings().pages[place]) return { ok: false, status: 400, error: `Set the ${place === 'instagram' ? 'Instagram account' : `${PLACE_LABEL[place]} Page`} under Where posts go first.` };
+    store.__qgrSettings = { ...settings(), postForReal: { ...settings().postForReal, [place]: on } };
     return { ok: true, value: null, sample: true };
   },
   setCompetitorTracked: async (id, tracked) => {

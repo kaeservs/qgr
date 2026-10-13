@@ -134,7 +134,7 @@ export function AdStudio({
   /** The posts made from this set's variants. */
   posts: Post[];
   /** The team's zone, for posting times, and the Pages posts go to. */
-  publishing: { timeZone: string; pages: PostPages };
+  publishing: { timeZone: string; pages: PostPages; forReal: Record<Place, boolean> };
   /** What every picture keeps to (the brand's picture style), what makes them, and whether this is the sample data. */
   pictures: { style: string; model: PictureModel; sample: boolean };
 }) {
@@ -560,6 +560,7 @@ export function AdStudio({
           brand={frameBrand}
           timeZone={publishing.timeZone}
           pages={publishing.pages}
+          forReal={publishing.forReal}
           onClose={() => setPostOf(null)}
           onPosted={() => {
             setPostOf(null);

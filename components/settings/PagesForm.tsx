@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { savePostPagesAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
-import type { PostPages } from '@/lib/types';
+import type { Place, PostPages } from '@/lib/types';
 import { PlaceIcon } from '../ui/PlatformIcon';
+import { PostForReal } from './PostForReal';
 import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
 
@@ -28,11 +29,11 @@ const fieldsOf = (pages: PostPages): Fields => ({
 });
 
 /**
- * The Pages posts go to. The ids are what the platforms' APIs take; the names
- * are what the dashboard shows. The keys that post are n8n credentials and
- * never come here.
+ * The Pages posts go to, and whether each place posts for real. The ids are
+ * what the platforms' APIs take; the names are what the dashboard shows. The
+ * keys that post are n8n credentials and never come here.
  */
-export function PagesForm({ pages }: { pages: PostPages }) {
+export function PagesForm({ pages, postForReal }: { pages: PostPages; postForReal: Record<Place, boolean> }) {
   const toast = useToast();
   const router = useRouter();
   const [form, setForm] = useState(() => fieldsOf(pages));
@@ -81,6 +82,7 @@ export function PagesForm({ pages }: { pages: PostPages }) {
             <input className="input" inputMode="numeric" value={form.facebookId} onChange={(e) => set('facebookId', e.target.value)} placeholder="From the Page’s About, Page transparency" />
           </label>
         </div>
+        <PostForReal place="facebook" on={postForReal.facebook} ready={Boolean(pages.facebook?.id)} pageName={pages.facebook?.name || null} />
       </fieldset>
 
       <fieldset className={styles.fieldset}>
@@ -97,6 +99,7 @@ export function PagesForm({ pages }: { pages: PostPages }) {
             <input className="input" inputMode="numeric" value={form.instagramId} onChange={(e) => set('instagramId', e.target.value)} placeholder="The professional account’s ID" />
           </label>
         </div>
+        <PostForReal place="instagram" on={postForReal.instagram} ready={Boolean(pages.instagram?.id)} pageName={pages.instagram ? `@${pages.instagram.username}` : null} />
       </fieldset>
 
       <fieldset className={styles.fieldset}>
@@ -113,9 +116,10 @@ export function PagesForm({ pages }: { pages: PostPages }) {
             <input className="input" inputMode="numeric" value={form.linkedinId} onChange={(e) => set('linkedinId', e.target.value)} placeholder="The number in the Page’s admin link" />
           </label>
         </div>
+        <PostForReal place="linkedin" on={postForReal.linkedin} ready={Boolean(pages.linkedin?.id)} pageName={pages.linkedin?.name || null} />
       </fieldset>
 
-      <p className="muted small">Posting itself is n8n’s, with keys kept in its credentials. Until they are added, posts go through stand-ins and the Posts page says so.</p>
+      <p className="muted small">Posting itself is n8n’s, with the keys kept in its credentials. A place posts for real only while its switch is on; until then its posts go through a stand-in and the Posts page says nothing went out.</p>
 
       <div className={styles.actions}>
         {error && (

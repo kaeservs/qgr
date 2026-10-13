@@ -128,6 +128,8 @@ export interface DataSource {
   getTeamSettings(): Promise<TeamSettings>;
   saveAgentSettings(settings: AgentSettings): Promise<Saved>;
   savePostPages(pages: PostPages): Promise<Saved>;
+  /** Whether a place's posts go out for real; on needs its Page set. */
+  setPostForReal(place: Place, on: boolean): Promise<Saved>;
   setCompetitorTracked(competitorId: string, tracked: boolean): Promise<Saved>;
   /** Starts the agent a run waits on (its switch is off) or one that failed, and hands it to n8n. */
   continueRun(runId: string): Promise<Saved<{ stage: StageKey }>>;

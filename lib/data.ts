@@ -51,6 +51,7 @@ export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source
 export const getTeamSettings: DataSource['getTeamSettings'] = () => source().getTeamSettings();
 export const saveAgentSettings: DataSource['saveAgentSettings'] = (settings) => source().saveAgentSettings(settings);
 export const savePostPages: DataSource['savePostPages'] = (pages) => source().savePostPages(pages);
+export const setPostForReal: DataSource['setPostForReal'] = (place, on) => source().setPostForReal(place, on);
 export const setCompetitorTracked: DataSource['setCompetitorTracked'] = (id, tracked) => source().setCompetitorTracked(id, tracked);
 export const continueRun: DataSource['continueRun'] = (runId) => source().continueRun(runId);
 

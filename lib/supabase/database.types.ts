@@ -821,12 +821,15 @@ export type Database = {
           ads_source: string
           cloudflare_account: string | null
           content_auto: boolean
+          facebook_live: boolean
           facebook_page_id: string | null
           facebook_page_name: string | null
           id: number
           instagram_account_id: string | null
+          instagram_live: boolean
           instagram_username: string | null
           last_scan_at: string | null
+          linkedin_live: boolean
           linkedin_org_id: string | null
           linkedin_page_name: string | null
           pictures_auto: boolean
@@ -844,12 +847,15 @@ export type Database = {
           ads_source?: string
           cloudflare_account?: string | null
           content_auto?: boolean
+          facebook_live?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
           id?: number
           instagram_account_id?: string | null
+          instagram_live?: boolean
           instagram_username?: string | null
           last_scan_at?: string | null
+          linkedin_live?: boolean
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
@@ -867,12 +873,15 @@ export type Database = {
           ads_source?: string
           cloudflare_account?: string | null
           content_auto?: boolean
+          facebook_live?: boolean
           facebook_page_id?: string | null
           facebook_page_name?: string | null
           id?: number
           instagram_account_id?: string | null
+          instagram_live?: boolean
           instagram_username?: string | null
           last_scan_at?: string | null
+          linkedin_live?: boolean
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
@@ -1113,6 +1122,10 @@ export type Database = {
       set_pictures_auto: { Args: { p_on: boolean }; Returns: undefined }
       set_pictures_model: {
         Args: { p_account?: string; p_model: string }
+        Returns: undefined
+      }
+      set_post_for_real: {
+        Args: { p_on: boolean; p_place: string }
         Returns: undefined
       }
       set_run_guidance: {

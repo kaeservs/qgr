@@ -27,7 +27,7 @@ function Connection({ on, onLabel, offLabel }: { on: boolean; onLabel: string; o
 /** How each place last went: posting for real, through its stand-in, or not tried yet. */
 export type PostingState = 'live' | 'stand-in' | 'untried';
 
-const POSTING_LABEL: Record<PostingState, string> = { live: 'Posting', 'stand-in': 'Stand-in', untried: 'Not tried yet' };
+const POSTING_LABEL: Record<PostingState, string> = { live: 'Posting for real', 'stand-in': 'Stand-in', untried: 'For real, not tried yet' };
 
 /**
  * What the agents run on, beside the agents' and the Pages' cards, which come

@@ -370,6 +370,56 @@ describe('post files in Storage', () => {
   });
 });
 
+describe('posting for real', () => {
+  const live = () => t.value<{ facebook_live: boolean; instagram_live: boolean; linkedin_live: boolean }>(`select to_jsonb(x) from (select facebook_live, instagram_live, linkedin_live from public.team_settings) x`);
+  const setLive = (place: string, on: boolean, who = member) => t.asUser(who, () => t.db.query(`select public.set_post_for_real($1, $2)`, [place, on]));
+
+  it('is off for every place until someone turns it on, and needs the place’s Page', async () => {
+    await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '', '', '', '')`));
+    expect(await live()).toEqual({ facebook_live: false, instagram_live: false, linkedin_live: false });
+    await expect(setLive('instagram', true)).rejects.toThrow(/Set the Instagram account under Where posts go first/);
+    await expect(setLive('linkedin', true)).rejects.toThrow(/Set the LinkedIn Page under Where posts go first/);
+    await expect(setLive('x', true)).rejects.toThrow(/Facebook, Instagram or LinkedIn/);
+    await expect(setLive('facebook', true, outsider)).rejects.toThrow(/Only the QGR team/);
+    await setLive('facebook', true);
+    expect(await live()).toEqual({ facebook_live: true, instagram_live: false, linkedin_live: false });
+    // Turning a place off never needs its Page.
+    await setLive('linkedin', false);
+  });
+
+  it('tells the publisher which places go out for real', async () => {
+    const { variant } = await adSet();
+    await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '', '', '98765', 'Quantum Global Residency')`));
+    await setLive('facebook', true);
+    await setLive('linkedin', false);
+    await approve(member, variant.B);
+    const media = file(member);
+    await upload(member, media);
+    const post = await schedule(member, variant.B, [{ place: 'facebook', media_path: media, media_kind: 'image' }, { place: 'linkedin', media_path: media, media_kind: 'image' }]);
+    const due = (await takeDue()).filter((d) => d.post_id === post);
+    expect(due.map((d) => [d.place, (d as unknown as { live: boolean }).live])).toEqual([
+      ['facebook', true],
+      ['linkedin', false],
+    ]);
+    await t.asService(async () => {
+      await t.db.query(`select public.publisher_finish($1, 'facebook', '1234567890_1', 'https://www.facebook.com/1234567890_1', false)`, [post]);
+      await t.db.query(`select public.publisher_finish($1, 'linkedin', null, null, true)`, [post]);
+    });
+  });
+
+  it('stops a place posting for real when its Page is taken away', async () => {
+    await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '17841400000000000', 'quantumglobal', '98765', 'Quantum Global Residency')`));
+    await setLive('facebook', true);
+    await setLive('instagram', true);
+    await setLive('linkedin', true);
+    await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '', '', '98765', 'Quantum Global Residency')`));
+    expect(await live()).toEqual({ facebook_live: true, instagram_live: false, linkedin_live: true });
+    await setLive('facebook', false);
+    await setLive('linkedin', false);
+    expect(await live()).toEqual({ facebook_live: false, instagram_live: false, linkedin_live: false });
+  });
+});
+
 describe('the Pages posts go to', () => {
   it('keeps them for the team, checks their shape, and clears one left empty', async () => {
     await t.asUser(member, () => t.db.query(`select public.update_publishing_settings('1234567890', 'Quantum Global', '17841400000000000', '@quantumglobal', '', '')`));

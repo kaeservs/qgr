@@ -449,4 +449,6 @@ export interface PostPages {
 
 export interface TeamSettings extends AgentSettings {
   pages: PostPages;
+  /** Which places' posts go out for real (n8n's real steps, with its credentials); the others go through a stand-in. */
+  postForReal: Record<Place, boolean>;
 }

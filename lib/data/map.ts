@@ -625,6 +625,7 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
       instagram: row.instagram_account_id ? { id: row.instagram_account_id, username: row.instagram_username ?? '' } : null,
       linkedin: row.linkedin_org_id ? { id: row.linkedin_org_id, name: row.linkedin_page_name ?? '' } : null,
     },
+    postForReal: { facebook: row.facebook_live, instagram: row.instagram_live, linkedin: row.linkedin_live },
   };
 }
 

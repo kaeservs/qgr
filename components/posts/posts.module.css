@@ -74,6 +74,17 @@ legend.sectionTitle {
   font-weight: 600;
 }
 
+/* On its own row under the place's name, so the checkbox keeps its column. */
+.placeMark {
+  grid-column: 3;
+  justify-self: start;
+}
+
+.forRealPill {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
 .placeWhere {
   overflow: hidden;
   font-size: 12px;

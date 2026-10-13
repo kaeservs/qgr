@@ -22,8 +22,11 @@ The tracker reads sample ads until the team switches it to Apify in Settings,
 once Apify's token is in n8n; then it reads each competitor's real ads in
 Meta's Ad Library (Competitor ads below). An approved variant is posted now or at a time to the Facebook Page,
 Instagram and the LinkedIn Page, and the whole path runs (the file made in the
-browser, the queue in Supabase, n8n's publisher), but n8n's three posting
-steps are stand-ins that post nothing and say so (Posting below). An ad's
+browser, the queue in Supabase, n8n's publisher). Each place posts through a
+stand-in that posts nothing and says so until the team switches it to post for
+real (Settings, Where posts go); then n8n's real steps publish it and "QGR ·
+Post results" reads its numbers, once the Facebook and LinkedIn credentials
+are attached in n8n (Posting below). An ad's
 picture is asked for in the studio from a prompt, or by every new ad, and goes
 through n8n's "QGR · Pictures" to the image model chosen in Settings: the
 stand-in, which makes none and says so, or Cloudflare Workers AI's FLUX.1
@@ -63,15 +66,16 @@ posts that work (Brand memory below).
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
                update_agent_settings(), set_pictures_auto(), set_pictures_model(),
-               set_ads_source(), update_publishing_settings(),
+               set_ads_source(), update_publishing_settings(), set_post_for_real(),
                set_competitor_tracked()
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
         asking pipeline_next() before each of the last two
     n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
     n8n "QGR · Publisher", every minute and on POST /webhook/qgr-publish →
-        publisher_take_due() → each place → publisher_finish() or publisher_fail()
-    n8n "QGR · Post results", every six hours → results_take_due() → each place →
-        results_record() or results_fail()
+        publisher_take_due() → each place, through its stand-in or for real →
+        publisher_finish() or publisher_fail()
+    n8n "QGR · Post results", every six hours → results_take_due() → each place's
+        numbers from Meta or LinkedIn → results_record() or results_fail()
     n8n "QGR · Pictures", every five minutes and on POST /webhook/qgr-picture →
         picture_take_due() → each ad → picture_finish() or picture_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
@@ -127,7 +131,8 @@ posts that work (Brand memory below).
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
   `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
-  `set_ads_source`, `update_publishing_settings`, `set_competitor_tracked`.
+  `set_ads_source`, `update_publishing_settings`, `set_post_for_real`,
+  `set_competitor_tracked`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
@@ -230,9 +235,16 @@ posts that work (Brand memory below).
   HTTP node, only creating one from a workflow is refused), `Cloudflare
   Workers AI` (Bearer Auth: an API token made from Cloudflare's Workers AI
   template, on "Cloudflare: FLUX.1 schnell" in Pictures; until it is attached
-  that step does not run, and the studio says so). The Meta and LinkedIn tokens
-  will be n8n credentials too; nothing that posts or draws is kept in Supabase
-  or the app (the Cloudflare account ID is: it is an ID, not a secret).
+  that step does not run, and the studio says so), `Facebook Graph API` (the
+  Page's access token: it posts to the Page and its Instagram account and reads
+  their numbers; on "Facebook: post", the four Instagram steps and "Meta: its
+  numbers") and `LinkedIn Community Management` (LinkedIn Community Management
+  OAuth2 API, from an app LinkedIn has approved for its Community Management
+  API, connected by an admin of the Page; on every LinkedIn step and
+  "LinkedIn: its numbers"). Until a platform's credential is attached, its
+  steps do not run and each post or read says so. Nothing that posts or draws
+  is kept in Supabase or the app (the Cloudflare account ID is: it is an ID,
+  not a secret).
   A node holds its credential by id, so renaming one in n8n changes nothing
   (the webhook secret is "Header Auth account 2", on all three webhooks).
 - A node names its credential only once that credential exists in n8n: a
@@ -243,11 +255,12 @@ posts that work (Brand memory below).
   marked `data_source: placeholder`; it runs while the team's ads source is
   sample. "Image model (stand-in)" in Pictures is the way taken while pictures
   are set to the stand-in: it makes nothing and answers `stand_in: true`, so
-  the studio says no picture was made. "Facebook (stand-in)", "Instagram (stand-in)" and "LinkedIn
-  (stand-in)" in the publisher post nothing and answer `stand_in: true`, so
-  the dashboard says nothing went out; their three "results (stand-in)" twins
-  in Post results read nothing. Each is replaced by real steps with the same
-  output; the node's comment and the sticky beside it say what they are.
+  the studio says no picture was made. The publisher's "Facebook (stand-in)",
+  "Instagram (stand-in)" and "LinkedIn (stand-in)" are the way taken while a
+  place is not switched to post for real: they post nothing and answer
+  `stand_in: true`, so the dashboard says nothing went out, and nothing is read
+  for their results. The node's comment and the note beside it say what they
+  are.
 
 ### Brand memory (`brand_profile`, `brand_examples`, `/brand`)
 
@@ -295,10 +308,11 @@ posts that work (Brand memory below).
   (`pictures_auto`), what makes pictures (`pictures_model`: stand-in or
   cloudflare, with `cloudflare_account`), where the tracker reads ads
   (`ads_source`), the scan schedule (`scan_every` off, day or week, with
-  `scan_day` and `scan_hour`) and the Pages posts go to. Settings changes it
-  through `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
-  `set_ads_source` and `update_publishing_settings`; Home's agent cards flip
-  the same switches.
+  `scan_day` and `scan_hour`), the Pages posts go to and whether each posts
+  for real (`facebook_live`, `instagram_live`, `linkedin_live`). Settings
+  changes it through `update_agent_settings`, `set_pictures_auto`,
+  `set_pictures_model`, `set_ads_source`, `update_publishing_settings` and
+  `set_post_for_real`; Home's agent cards flip the same switches.
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
   Content Agent's off, every strategy waits before the ads. The pipeline asks
@@ -364,6 +378,34 @@ posts that work (Brand memory below).
 - Post now pings the publisher's webhook (`N8N_PUBLISH_WEBHOOK_URL`, or the
   run webhook's address with `qgr-publish`), so it goes within seconds rather
   than at the next minute.
+- Posting for real is switched per place (Settings, Where posts go:
+  `team_settings.facebook_live`, `instagram_live` and `linkedin_live`, through
+  `set_post_for_real`, which needs the place's Page or account first; the
+  switch says what the place needs in n8n and asks once more before it turns
+  on). `publisher_take_due` hands each place its switch (`live`), and "Post for
+  real?" sends it to its stand-in or to its real steps. For real, the file is
+  signed for an hour (`object/sign/post-media`, "With its link") so the
+  platform, or n8n for LinkedIn, can fetch it, then:
+  - Facebook: one request to the Page (Graph API v25.0, pinned): a picture to
+    `/photos`, a video to `/videos` on graph-video, words alone to `/feed`.
+  - Instagram: a container from the file (a picture, or a video as a Reel),
+    checked after 10 s (60 s for a video) and then once a minute for five
+    minutes at most, as Meta asks ("Publish, wait or stop?" loops back to the
+    wait), published once FINISHED, and its link read after.
+  - LinkedIn (`LinkedIn-Version` 202609, pinned; LinkedIn keeps a version a
+    year): the picture or the video is uploaded first (a video in the parts
+    LinkedIn asks for, each read from Storage with a Range request, then
+    checked once a minute until AVAILABLE, since a post whose video then fails
+    is never shown), then `/rest/posts` names it, as the Page. The words are
+    escaped for LinkedIn's little text format, so they read as written.
+  Every answer is read in code (`n8n/code/publisher-*.js`, tested in
+  `n8n/publisher.test.ts` with the platforms' answers as fixtures): posted with
+  its link, failed (nothing went out, and why: Try again), or unknown when the
+  request went and its answer was lost (rule 11; Instagram's PUBLISHED too). A
+  step whose credential is not attached hands its input on, which reads as
+  "not asked". The publish dialog marks each place "Goes out for real" or
+  "Stand-in", and Settings shows each as posting for real, for real but not
+  tried yet, or a stand-in.
 - An approved variant that is edited loses its approval (`save_variant_words`,
   `save_video_edit`), and one waiting to post cannot be edited until its post
   is cancelled. Saving the same words again changes nothing.
@@ -388,8 +430,14 @@ posts that work (Brand memory below).
   numbers every six hours for four weeks (`results_take_due`) and records them
   on the place (`reach`, `views`, `reactions`, `comments`, `shares`, `clicks`,
   each a count or null where the platform does not report it; `results_record`).
-  A failed read keeps the numbers before it and says why (`results_fail`). A
-  stand-in post has none. Engagement is reactions, comments, shares and clicks
+  One request a post ("Plan the read", `n8n/code/results-plan.js`): on
+  Facebook a post's shares, comments, reactions and insights (`post_media_view`,
+  `post_total_media_view_unique`, `post_clicks`: Meta's impressions metrics
+  went in 2025) or a video's `video_insights`; on Instagram the media's
+  insights (reach, views, likes, comments, shares); on LinkedIn the post's
+  `organizationalEntityShareStatistics`. "Read the numbers" takes each by its
+  name, so one a platform drops leaves the others. A failed read keeps the
+  numbers before it and says why (`results_fail`). A stand-in post has none. Engagement is reactions, comments, shares and clicks
   per person reached (per view where there is no reach), computed in code,
   never by a model: `lib/results.ts` for the dashboard and the strategist's own
   script for its prompt, kept in step by `n8n/code.test.ts`. Posts shows each
