@@ -1,8 +1,11 @@
 // The Claude request: Haiku 5.5 at high effort, because this copy goes out in
 // QGR's name under strict rules (high is Anthropic's advice for Haiku on
 // strict instruction following). The schema asks only for the platforms this
-// run selected, with each platform's own call-to-action buttons. Lengths are
-// in the prompt; the editor flags anything long. No temperature.
+// run selected, with each platform's own call-to-action buttons, and a post in
+// full for each place those platforms post to. Lengths are in the prompt; the
+// editor flags anything long. No temperature. The Content Agent reads the
+// whole chain: the strategy, what it came from (the competitor report or
+// QGR's own source), and the brand memory.
 const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'high';
 const ctx = $input.first().json;
@@ -29,6 +32,15 @@ const GOALS = {
   awareness: 'finding out more',
   guide: 'downloading the guide',
 };
+// The places a run posts to, by the platform whose copy each stands beside,
+// and what a post in full is on each.
+const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
+const POSTS = {
+  facebook: 'facebook: two or three short paragraphs, 60 to 150 words, ending with one clear next step',
+  instagram: 'instagram: a caption of 40 to 120 words in short lines with a blank line between, then 3 to 8 relevant hashtags on the last line (Instagram takes 2,200 characters and 30 hashtags at most)',
+  linkedin: 'linkedin: a post of 100 to 220 words for professionals: a strong first line, short paragraphs, at most three hashtags',
+};
+const places = ['facebook', 'instagram', 'linkedin'].filter(function (p) { return run.platforms.indexOf(PLACE_PLATFORM[p]) !== -1; });
 
 const copyProps = {};
 run.platforms.forEach(function (p) {
@@ -50,6 +62,18 @@ run.platforms.forEach(function (p) {
   }
 });
 
+const variantProps = {
+  label: { type: 'string', enum: ['A', 'B', 'C'] },
+  creative_text: { type: 'string' },
+  creative_style: { type: 'string', enum: ['arcs', 'split', 'spotlight'] },
+  image_prompt: { type: 'string' },
+  copy: { type: 'object', additionalProperties: false, required: run.platforms, properties: copyProps },
+};
+if (places.length > 0) {
+  const postProps = {};
+  places.forEach(function (p) { postProps[p] = { type: 'string' }; });
+  variantProps.posts = { type: 'object', additionalProperties: false, required: places, properties: postProps };
+}
 const schema = {
   type: 'object',
   additionalProperties: false,
@@ -57,18 +81,7 @@ const schema = {
   properties: {
     variants: {
       type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['label', 'creative_text', 'creative_style', 'image_prompt', 'copy'],
-        properties: {
-          label: { type: 'string', enum: ['A', 'B', 'C'] },
-          creative_text: { type: 'string' },
-          creative_style: { type: 'string', enum: ['arcs', 'split', 'spotlight'] },
-          image_prompt: { type: 'string' },
-          copy: { type: 'object', additionalProperties: false, required: run.platforms, properties: copyProps },
-        },
-      },
+      items: { type: 'object', additionalProperties: false, required: Object.keys(variantProps), properties: variantProps },
     },
   },
 };
@@ -88,20 +101,57 @@ const creativeLines = clip
   : [
       '- creative_text: the words on the image, eight words at most.',
       '- creative_style: arcs, split or spotlight, each used once across the three variants.',
-      '- image_prompt: a prompt for an image model describing the scene only: no words in the image, QGR indigo (#1C1B9D) and gold (#EFB74A), no real or identifiable people, no flags.',
+      '- image_prompt: a prompt for an image model describing the scene only: no words in the image, QGR indigo (#1C1B9D) and gold (#EFB74A), no real or identifiable people, no flags.' +
+        (brand.picture_style ? ' Keep to picture_style.' : ''),
     ];
+const postLines = places.length > 0
+  ? ['- posts: the same idea written in full as an organic post for each place, not the ad copy cut down:'].concat(places.map(function (p) { return '  ' + POSTS[p]; }))
+  : [];
+
+// How QGR's own recent posts did, from the platforms' numbers: engagement per
+// person reached (per view where a platform gives no reach), computed here and
+// never by the model, as the strategist's code and lib/results.ts do. The best
+// three, with their words, are examples to write like.
+const has = function (n) { return n !== null && n !== undefined; };
+function rate(r) {
+  const base = has(r.reach) ? r.reach : r.views;
+  if (!has(base) || base <= 0) return null;
+  return ((r.reactions || 0) + (r.comments || 0) + (r.shares || 0) + (r.clicks || 0)) / base;
+}
+const bestPosts = (ctx.results || [])
+  .map(function (r) { return { r: r, rate: rate(r) }; })
+  .filter(function (x) { return x.rate !== null && x.r.text; })
+  .sort(function (a, b) { return b.rate - a.rate; })
+  .slice(0, 3)
+  .map(function (x) { return { place: x.r.place, text: x.r.text, engagement: (Math.round(x.rate * 1000) / 10).toFixed(1) + '%' }; });
+const examples = (ctx.examples || []).slice(0, 8).map(function (e) {
+  const example = { place: e.place, text: e.text };
+  if (e.note) example.why_it_worked = e.note;
+  return example;
+});
+// Format notes for the places this run writes for, and X when it does.
+const formats = {};
+places.concat(run.platforms.indexOf('x') !== -1 ? ['x'] : []).forEach(function (p) {
+  if (brand.post_formats && brand.post_formats[p]) formats[p] = brand.post_formats[p];
+});
+const hasMemory = Object.keys(formats).length > 0 || examples.length > 0 || bestPosts.length > 0;
+
 const system = [
   'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. Write three variants: A follows the strategy\'s first angle, B the second, C the third.',
   '',
   'For each variant:',
   '- copy for each of these platforms, written for that platform rather than one text cut down, within these lengths:',
   lengths,
-].concat(creativeLines, [
+].concat(creativeLines, postLines, [
   '',
   'Voice: ' + (brand.voice || []).join(', ') + '. Every ad leads to ' + GOALS[run.goal] + '.',
   'Rules every ad follows: ' + strategy.guardrails.join('; ') + '.',
   'Never say guaranteed, never promise approval, a timeline or a return, and never name a competitor. Processing times are estimates.',
-]).join('\n');
+  '',
+  'The material holds the strategy and what it came from: the competitor report, or QGR\'s own source. Use their specifics (a question the source answers, a gap in the competitor\'s ads), never a competitor\'s claim or name.',
+]).concat(hasMemory
+  ? ['Brand memory: follow post_formats for each place, and write like posts_that_work and our_best_posts (their format, length and tone) without copying their words.']
+  : []).join('\n');
 
 // The team's direction for the run, in their words. Only when they gave one;
 // without it the request is exactly as before.
@@ -111,18 +161,37 @@ const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
   strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: strategy.angles, channels: strategy.channels },
 };
-if (clip) material.clip = { length: clipLength, what_is_said: run.excerpt || '' };
+if (brand.topics && brand.topics.length > 0) material.brand.topics = brand.topics;
+if (ctx.report) {
+  material.competitor_report = {
+    competitor: ctx.report.competitor,
+    summary: ctx.report.summary,
+    insights: ctx.report.insights,
+    winning_hooks: (ctx.report.hooks || []).map(function (h) { return { text: h.text, days_running: h.days_running, variations: h.variations }; }),
+  };
+}
+const page = run.page && run.page.ok ? run.page : null;
+if (clip) {
+  material.clip = { length: clipLength, what_is_said: run.excerpt || '' };
+} else if (run.kind === 'custom') {
+  const text = run.input === 'text' ? run.excerpt || '' : (page && page.text) || '';
+  if (text) material.source = { type: run.input, title: (page && page.title) || run.title, text: text.slice(0, 12000) };
+}
 if (run.guidance) material.direction = run.guidance;
+if (Object.keys(formats).length > 0) material.post_formats = formats;
+if (brand.picture_style && !clip) material.picture_style = brand.picture_style;
+if (examples.length > 0) material.posts_that_work = examples;
+if (bestPosts.length > 0) material.our_best_posts = bestPosts;
 
 return [{
   json: {
     body: {
       model: MODEL,
-      max_tokens: 16000,
+      max_tokens: 32000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
       system: run.guidance ? system + '\n\n' + DIRECTION_RULE : system,
-      messages: [{ role: 'user', content: 'The brand and the strategy, as JSON:\n' + JSON.stringify(material) }],
+      messages: [{ role: 'user', content: 'The brand, the strategy and what it came from, as JSON:\n' + JSON.stringify(material) }],
     },
   },
 }];

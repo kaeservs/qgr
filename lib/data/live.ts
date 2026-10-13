@@ -10,8 +10,24 @@ import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
 import { transcribe, transcriptionKey } from '../transcribe';
-import { toActivity, toAdSet, toAgents, toBrandProfile, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toTeamSettings, toUser, WORKING_MINUTES } from './map';
-import type { PostRow, RunRow } from './map';
+import {
+  toActivity,
+  toAdSet,
+  toAgents,
+  toBrandExample,
+  toBrandMemory,
+  toBrandProfile,
+  toCompetitor,
+  toCreateRunArgs,
+  toNotices,
+  toPost,
+  toRun,
+  toStrategy,
+  toTeamSettings,
+  toUser,
+  WORKING_MINUTES,
+} from './map';
+import type { BrandExampleRow, PostRow, RunRow } from './map';
 import { searchIndex } from './source';
 import type { DataSource, Saved } from './source';
 
@@ -31,9 +47,9 @@ const COMPETITOR =
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const AD_SET =
-  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
+  'id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit), runs!ad_sets_run_id_fkey(media_path, media)';
 const POST =
-  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title))';
+  'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title)), brand_examples!brand_examples_post_id_fkey(place, removed_at)';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
 const MEDIA_BUCKET = 'run-media';
 /** The files posts go out with, made in the browser. Removed once every place has its post. */
@@ -159,11 +175,22 @@ const posts = cache(async () => {
   return (data as PostRow[]).map(toPost).filter((p) => p !== null);
 });
 
-const brandProfile = cache(async () => {
+const brandRow = cache(async () => {
   const { data, error } = await (await db()).from('brand_profile').select('*').eq('id', 1).maybeSingle();
   if (error) readFailed('the brand profile', error);
   if (!data) throw new Error('The brand profile is missing');
-  return toBrandProfile(data);
+  return data;
+});
+const brandProfile = async () => toBrandProfile(await brandRow());
+
+const brandExamples = cache(async () => {
+  const { data, error } = await (await db())
+    .from('brand_examples')
+    .select('id, place, text, note, source, post_id, created_at')
+    .is('removed_at', null)
+    .order('created_at', { ascending: false });
+  if (error) readFailed('brand memory', error);
+  return (data as BrandExampleRow[]).map(toBrandExample).filter((e) => e !== null);
 });
 
 export const liveData: DataSource = {
@@ -197,6 +224,10 @@ export const liveData: DataSource = {
     return searchIndex(c, s, a, r.map(toRun));
   },
   getBrandProfile: () => brandProfile(),
+  getBrandMemory: async () => {
+    const [row, examples] = await Promise.all([brandRow(), brandExamples()]);
+    return { memory: toBrandMemory(row), examples };
+  },
 
   createRun: async (input, page) => {
     // Without n8n a run would wait forever, so it is not recorded at all.
@@ -236,8 +267,14 @@ export const liveData: DataSource = {
         ...(c.cta !== undefined ? { cta: c.cta } : {}),
       };
     }
-    const warnings = guardrailWarnings(edit.creativeText, edit.copy, platforms);
-    const { error } = await (await db()).rpc('save_variant', { p_variant_id: variantId, p_creative_text: edit.creativeText, p_copy: copy, p_warnings: warnings });
+    const warnings = guardrailWarnings(edit.creativeText, edit.copy, platforms, edit.posts);
+    const { error } = await (await db()).rpc('save_variant_words', {
+      p_variant_id: variantId,
+      p_creative_text: edit.creativeText,
+      p_copy: copy,
+      p_posts: edit.posts as Json,
+      p_warnings: warnings,
+    });
     if (error) return refused(error, 'Your changes could not be saved.');
     return { ok: true, value: { warnings }, sample: false };
   },
@@ -452,6 +489,38 @@ export const liveData: DataSource = {
       p_x_handle: profile.xHandle,
     });
     if (error) return refused(error, 'The brand profile could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  saveBrandMemory: async (memory) => {
+    const { error } = await (await db()).rpc('update_brand_memory', {
+      p_topics: memory.topics,
+      p_post_formats: memory.postFormats as Json,
+      p_picture_style: memory.pictureStyle,
+    });
+    if (error) return refused(error, 'Brand memory could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  addBrandExample: async (example) => {
+    const { data, error } = await (await db()).rpc('add_brand_example', {
+      p_place: example.place,
+      p_text: example.text,
+      ...(example.note ? { p_note: example.note } : {}),
+    });
+    if (error) return refused(error, 'The post could not be kept.');
+    return { ok: true, value: { id: data }, sample: false };
+  },
+
+  removeBrandExample: async (id) => {
+    const { error } = await (await db()).rpc('remove_brand_example', { p_id: id });
+    if (error) return refused(error, 'The post could not be taken out.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  rememberPost: async (postId, place, note) => {
+    const { error } = await (await db()).rpc('remember_post', { p_post_id: postId, p_place: place, ...(note ? { p_note: note } : {}) });
+    if (error) return refused(error, 'The post could not be kept.');
     return { ok: true, value: null, sample: false };
   },
 };

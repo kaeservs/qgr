@@ -39,6 +39,11 @@ A video run can start from a link or from a clip uploaded from the computer,
 cut in the browser first; in the studio every variant of such a run is a video
 made from that clip, edited and exported to MP4 in the browser (Video below).
 
+Every variant carries the short ad copy for each platform and a post in full
+for each place (Facebook, Instagram, LinkedIn), and every agent reads the
+team's brand memory: voice and rules, topics, format notes, picture style and
+posts that work (Brand memory below).
+
 ## How the pieces connect
 
     browser ── proxy.ts: signed in? else /sign-in
@@ -51,7 +56,8 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
             ── POST /api/post-media → a signed upload link for the file a post goes out with
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
-               save_variant(), approve_variant(), save_video_edit(), update_brand_profile(),
+               save_variant_words(), approve_variant(), save_video_edit(), update_brand_profile(),
+               update_brand_memory(), add_brand_example(), remove_brand_example(), remember_post(),
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                request_picture(), remove_picture(), update_agent_settings(),
                set_pictures_auto(), set_ads_source(), update_publishing_settings(),
@@ -110,8 +116,10 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   failed and the one before it is done or skipped. A retry is the same call.
 - People change things through their own functions, each `security definer`
   with a team check first (`private.require_team_member()`): `create_run`,
-  `report_start_failure` (n8n could not be reached), `set_run_guidance`, `save_variant`,
+  `report_start_failure` (n8n could not be reached), `set_run_guidance`,
+  `save_variant_words` (`save_variant` stays for pages opened before it),
   `approve_variant`, `save_video_edit`, `update_brand_profile`,
+  `update_brand_memory`, `add_brand_example`, `remove_brand_example`, `remember_post`,
   `continue_run` and `report_continue_failure`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
   `remove_picture`, `update_agent_settings`, `set_pictures_auto`,
@@ -155,6 +163,12 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Every Claude call's `usage` goes to `agent_usage`, on failure too.
 - Local migration files are named by the version Supabase recorded when it
   applied them (`list_migrations`), so the CLI and the project agree.
+- The Supabase-QGR connector holds a migration with a destructive statement
+  for the owner to confirm, and gives up after 60 s: a `drop`, and a `delete`
+  even inside a function's body. Migrations add and replace (`create or
+  replace` with the same arguments keeps grants); a function that changes its
+  arguments gets a new name, and taking a row away is a mark
+  (`brand_examples.removed_at`). What has to drop waits for the owner.
 - Name the foreign key in every embed (`runs → strategies!strategies_run_id_fkey(...)`):
   several tables link runs, strategies and competitors in more than one way.
   The typed client catches a wrong column but not a wrong hint, so check hints
@@ -225,6 +239,45 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
   in Post results read nothing. Each is replaced by real steps with the same
   output; the node's comment and the sticky beside it say what they are.
 
+### Brand memory (`brand_profile`, `brand_examples`, `/brand`)
+
+- The Brand memory page holds what every agent reads before it writes: the
+  voice and rules (moved from Settings; `update_brand_profile`), what the team
+  usually posts about (`topics`), how it formats a post on each platform
+  (`post_formats`), how its pictures look (`picture_style`; these three by
+  `update_brand_memory`), posts that work (`brand_examples`: pasted with
+  `add_brand_example`, or marked "This worked" on a post that went out), and
+  the best posts by their results (computed from the platforms' numbers, as
+  `lib/results.ts` does, with "Keep in memory").
+- `agent_begin` gives every stage the brand (with topics, formats and picture
+  style) and the twelve newest posts that work; the strategist and the Content
+  Agent also get how recent posts did, with each post's words. The tracker
+  writes its insights for QGR (`our_brand`); the strategist keeps its angles
+  to the topics and learns from the posts that work; the Content Agent follows
+  the format notes, writes like the posts that work and the best three by
+  engagement, and keeps its picture prompts to the picture style. Each part is
+  sent only when there is something in it.
+- Taking a post out of brand memory marks it (`removed_at`), so the agents and
+  the page leave it out; marking the same post "This worked" again brings it
+  back. Brand memory keeps up to 60 posts.
+
+### The Content Agent's chain and posts
+
+- The Content Agent reads the whole chain: the strategy (each angle's why and
+  the competitor hook it answers), what it came from (the competitor report's
+  insights and hooks, or the source's text, up to 12,000 characters, or a
+  clip's words), the team's direction and the brand memory. It writes three
+  variants, each with the ad copy for every platform the run asked for and a
+  post in full for every place those platforms post to: Facebook (60 to 150
+  words), Instagram (40 to 120 words, then hashtags) and LinkedIn (100 to 220
+  words). Its read step fails a variant without a post for a place, or with one
+  past 3,000 characters (never cut), and flags posts as it flags copy.
+  `max_tokens` is 32,000 for it and 24,000 for the strategist.
+- The studio shows each variant as an ad on a platform or a post on a place
+  (the Ads and Posts buttons), with the chain under its name: why the angle
+  should work, and the competitor hook it answers, linked to the report. A
+  post is edited in place; one emptied goes back to the ad copy.
+
 ### Switches and scans (`team_settings`)
 
 - `team_settings` is one row: the team's time zone, the two switches
@@ -284,8 +337,9 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - A post is one approved variant going to one or more places (Facebook,
   Instagram, LinkedIn), now or at a time up to 90 days ahead, made with
   `schedule_post`. Each place is a `post_targets` row holding its own copy of
-  the approved words (Meta's for Facebook and Instagram, LinkedIn's for
-  LinkedIn) and the file it goes with: a picture drawn in the browser by
+  the approved words (the variant's post for that place, in full; or, without
+  one, its ad copy: Meta's for Facebook and Instagram, LinkedIn's for
+  LinkedIn; `postText` in `lib/platforms.ts`) and the file it goes with: a picture drawn in the browser by
   `lib/creative/draw.ts` (1080×1080 for Meta, 1200×628 for LinkedIn, the same
   design the studio shows) or, for a run from a clip, the variant's video made
   by `components/video/makeVideo.ts` as MP4 only. The dialog shows the files
@@ -298,9 +352,12 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
 - Post now pings the publisher's webhook (`N8N_PUBLISH_WEBHOOK_URL`, or the
   run webhook's address with `qgr-publish`), so it goes within seconds rather
   than at the next minute.
-- An approved variant that is edited loses its approval (`save_variant`,
+- An approved variant that is edited loses its approval (`save_variant_words`,
   `save_video_edit`), and one waiting to post cannot be edited until its post
   is cancelled. Saving the same words again changes nothing.
+- A place that went out for real (not through a stand-in) has "This worked"
+  (`remember_post`): its words become a post that works in brand memory, and
+  the place shows "In brand memory".
 - The Posts page lists what needs a look, what is scheduled, what went out
   and what was cancelled, in the team's time; a stand-in result says nothing
   was posted. Its Scheduled view (`?view=scheduled`) is every post still to go
@@ -422,7 +479,9 @@ made from that clip, edited and exported to MP4 in the browser (Video below).
    are drawn in neutral tones so they are never mistaken for ours.
 6. **Flag, never rewrite.** Guardrail checks (`lib/guardrails.ts`, the same
    rules as the Content Agent's, kept in step by `n8n/code.test.ts`) flag a
-   phrase for a person to judge before approving. Nothing edits words silently.
+   phrase for a person to judge before approving, in the ad copy, the image
+   words and the posts, and past what X and Instagram take. Nothing edits words
+   silently.
 7. **The sample data says it is sample data.** The top bar says so, saves say
    "Saved for this session", and a report built from sample ads says its ads
    are examples.

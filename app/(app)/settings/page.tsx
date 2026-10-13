@@ -3,7 +3,7 @@ import { AgentSettingsForm } from '@/components/settings/AgentSettingsForm';
 import { PagesForm } from '@/components/settings/PagesForm';
 import { SettingsForm } from '@/components/settings/SettingsForm';
 import type { PostingState } from '@/components/settings/SettingsForm';
-import { getBrandProfile, getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
+import { getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
 import { pipelineConfig } from '@/lib/supabase/config';
 import { transcriptionKey } from '@/lib/transcribe';
 import { PLACES } from '@/lib/types';
@@ -24,18 +24,17 @@ function postingStates(posts: Post[]): Record<Place, PostingState> {
 }
 
 export default async function SettingsPage() {
-  const [profile, settings, posts] = await Promise.all([getBrandProfile(), getTeamSettings(), getPosts()]);
+  const [settings, posts] = await Promise.all([getTeamSettings(), getPosts()]);
   const { pages, ...agents } = settings;
   return (
     <div className="page">
       <header className="page-head">
         <div>
           <h1 className="display h1">Settings</h1>
-          <p className="lead">How Quantum Global sounds, when the agents work, and where posts go.</p>
+          <p className="lead">When the agents work, where posts go, and what the dashboard runs on.</p>
         </div>
       </header>
       <SettingsForm
-        profile={profile}
         connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, transcripts: transcriptionKey() !== null, posting: postingStates(posts) }}
       >
         <AgentSettingsForm settings={agents} />

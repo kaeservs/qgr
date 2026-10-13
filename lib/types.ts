@@ -214,6 +214,12 @@ export interface Variant {
   creative: { text: string; style: CreativeStyle };
   /** Copy for each platform the run asked for. */
   copy: Partial<Record<Platform, PlatformCopy>>;
+  /**
+   * The same idea written in full as a post for each place: a Facebook post,
+   * an Instagram caption with its hashtags, a LinkedIn post. A place without
+   * one goes out with its ad copy.
+   */
+  posts?: Partial<Record<Place, string>>;
   approved?: boolean;
   /** Phrases flagged against the guardrails, for a person to judge before approving. */
   warnings?: string[];
@@ -278,6 +284,33 @@ export interface BrandProfile {
   guardrails: string[];
   pageName: string;
   xHandle: string;
+}
+
+/** Where a post that works was seen: the three places posts go, and X. */
+export const EXAMPLE_PLACES = ['facebook', 'instagram', 'linkedin', 'x'] as const;
+export type ExamplePlace = (typeof EXAMPLE_PLACES)[number];
+
+/**
+ * What every agent reads beside the brand profile: what the team usually
+ * posts about, how it formats a post on each platform, and how its pictures look.
+ */
+export interface BrandMemory {
+  topics: string[];
+  postFormats: Partial<Record<ExamplePlace, string>>;
+  pictureStyle: string;
+}
+
+/** A post that works: pasted by the team, or marked "This worked" on one that went out. */
+export interface BrandExample {
+  id: string;
+  place: ExamplePlace;
+  text: string;
+  /** Why it worked, in the team's words. */
+  note?: string;
+  source: 'pasted' | 'marked';
+  /** The post it came from, when it was marked on one. */
+  postId?: string;
+  createdAt: string;
 }
 
 /** Something the agents or n8n are doing right now, for the Working list in the top bar. */
@@ -349,6 +382,8 @@ export interface PostTarget {
   results?: PostResults;
   /** Why the last read of the results failed; the numbers before it stay. */
   resultsError?: string;
+  /** Kept in brand memory as a post that works. */
+  remembered?: boolean;
 }
 
 export interface Post {

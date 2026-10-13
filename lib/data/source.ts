@@ -9,8 +9,11 @@ import type {
   AdSet,
   Agent,
   AgentSettings,
+  BrandExample,
+  BrandMemory,
   BrandProfile,
   Competitor,
+  ExamplePlace,
   Notice,
   PageRead,
   PageSummary,
@@ -35,10 +38,19 @@ export type RunWithStatus = Run & { status: RunStatus };
 /** What a change did. `sample` is true when nothing was stored: the sample data keeps no changes. */
 export type Saved<T = null> = { ok: true; value: T; sample: boolean } | { ok: false; error: string; status: number };
 
-/** A person's edit to one variant: the words on its image and its copy per platform. */
+/** A person's edit to one variant: the words on its image, its ad copy per platform and its posts per place. */
 export interface VariantEdit {
   creativeText: string;
   copy: Partial<Record<Platform, PlatformCopy>>;
+  /** A place left out goes out with its ad copy. */
+  posts: Partial<Record<Place, string>>;
+}
+
+/** A post that works, pasted by the team. */
+export interface NewBrandExample {
+  place: ExamplePlace;
+  text: string;
+  note?: string;
 }
 
 /** One place a new post goes, with the file the browser made for it there, if any. */
@@ -85,6 +97,8 @@ export interface DataSource {
   getActivity(): Promise<ActivityItem[]>;
   getSearchIndex(): Promise<SearchItem[]>;
   getBrandProfile(): Promise<BrandProfile>;
+  /** What the team posts about, how it formats posts, how its pictures look; and the posts that work, newest first. */
+  getBrandMemory(): Promise<{ memory: BrandMemory; examples: BrandExample[] }>;
 
   /** Records a run, with what was read from its link, and hands it to the agents. */
   createRun(input: NewRunInput, page: PageRead | null): Promise<Saved<{ id: string }>>;
@@ -92,6 +106,12 @@ export interface DataSource {
   saveVariant(variantId: string, edit: VariantEdit): Promise<Saved<{ warnings: string[] }>>;
   approveVariant(variantId: string): Promise<Saved>;
   saveBrandProfile(profile: BrandProfile): Promise<Saved>;
+  saveBrandMemory(memory: BrandMemory): Promise<Saved>;
+  addBrandExample(example: NewBrandExample): Promise<Saved<{ id: string }>>;
+  /** Takes a post out of brand memory: the agents no longer read it. */
+  removeBrandExample(id: string): Promise<Saved>;
+  /** "This worked" on a post that went out: its words for that place become a post that works. */
+  rememberPost(postId: string, place: Place, note?: string): Promise<Saved>;
 
   /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
   saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
@@ -141,7 +161,8 @@ export const PAGES: SearchItem[] = [
   { label: 'Strategy', sub: STAGE_INFO.strategist.name, href: '/strategy', kind: 'page' },
   { label: 'Content', sub: STAGE_INFO.content.name, href: '/content', kind: 'page' },
   { label: 'Posts', sub: 'Scheduled and sent posts', href: '/posts', kind: 'page' },
-  { label: 'Settings', sub: 'Brand profile, agents and Pages', href: '/settings', kind: 'page' },
+  { label: 'Brand memory', sub: 'Voice, rules, formats and posts that work', href: '/brand', kind: 'page' },
+  { label: 'Settings', sub: 'Agents, Pages and connections', href: '/settings', kind: 'page' },
 ];
 
 export function searchIndex(competitors: Competitor[], strategies: Strategy[], adSets: AdSet[], runs: Run[]): SearchItem[] {

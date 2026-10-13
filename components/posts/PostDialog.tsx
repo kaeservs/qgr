@@ -88,8 +88,10 @@ export function PostDialog({ post, timeZone, actions, onClose }: { post: Post; t
               target={t}
               busy={busy}
               retrying={busy && actions.doing === `retry-${t.place}`}
+              remembering={busy && actions.doing === `remember-${t.place}`}
               timeZone={timeZone}
               onRetry={() => void actions.retry(post, t.place)}
+              onRemember={() => void actions.remember(post, t.place)}
             />
           ))}
         </ul>

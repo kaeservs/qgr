@@ -8,12 +8,12 @@ import { hostOf } from '../format';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import * as mock from '../mock-data';
 import { initialStages, runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
-import { PLATFORM_LABEL } from '../platforms';
+import { PLATFORM_LABEL, postText } from '../platforms';
 import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
-import type { ActivityItem, BrandProfile, Competitor, Place, Post, Run, TeamSettings } from '../types';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Post, Run, TeamSettings } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -22,15 +22,21 @@ import type { DataSource, RunWithStatus } from './source';
 // Runs, posts and settings changed in this process, kept on globalThis so the
 // API routes and the pages share them (Next bundles them separately). They
 // reset on restart.
-const store = globalThis as typeof globalThis & { __qgrRuns?: Run[]; __qgrPosts?: Post[]; __qgrSettings?: TeamSettings; __qgrUntracked?: Set<string> };
+const store = globalThis as typeof globalThis & {
+  __qgrRuns?: Run[];
+  __qgrPosts?: Post[];
+  __qgrSettings?: TeamSettings;
+  __qgrUntracked?: Set<string>;
+  __qgrMemory?: BrandMemory;
+  __qgrExamples?: BrandExample[];
+};
 const runList = (): Run[] => (store.__qgrRuns ??= structuredClone(mock.runs));
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
+const memory = (): BrandMemory => (store.__qgrMemory ??= structuredClone(mock.brandMemory));
+const examples = (): BrandExample[] => (store.__qgrExamples ??= structuredClone(mock.brandExamples));
 const competitorList = (): Competitor[] => mock.competitors.map((c) => ({ ...c, tracked: !untracked().has(c.id) }));
-
-/** The sample's posts go through the publisher's stand-ins: nothing is posted anywhere. */
-const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' } as const satisfies Record<Place, 'meta' | 'linkedin'>;
 
 const byNewest = <T extends { createdAt: string }>(a: T, b: T) => b.createdAt.localeCompare(a.createdAt);
 const withStatus = (run: Run): RunWithStatus => ({ ...run, status: runStatus(run) });
@@ -92,6 +98,7 @@ export const sampleData: DataSource = {
   },
   getSearchIndex: async () => searchIndex(mock.competitors, mock.strategies, mock.adSets, runList()),
   getBrandProfile: async () => brand,
+  getBrandMemory: async () => ({ memory: memory(), examples: [...examples()].sort(byNewest) }),
 
   createRun: async (input, page) => {
     const now = new Date().toISOString();
@@ -120,9 +127,33 @@ export const sampleData: DataSource = {
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },
-  saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy)) }, sample: true }),
+  saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy), edit.posts) }, sample: true }),
   approveVariant: async () => ({ ok: true, value: null, sample: true }),
   saveBrandProfile: async () => ({ ok: true, value: null, sample: true }),
+  // Brand memory changes last this session, so the page shows what was saved.
+  saveBrandMemory: async (next) => {
+    store.__qgrMemory = next;
+    return { ok: true, value: null, sample: true };
+  },
+  addBrandExample: async (example) => {
+    const id = `e-${crypto.randomUUID().slice(0, 8)}`;
+    examples().push({ id, ...example, source: 'pasted', createdAt: new Date().toISOString() });
+    return { ok: true, value: { id }, sample: true };
+  },
+  removeBrandExample: async (id) => {
+    const list = examples();
+    const at = list.findIndex((e) => e.id === id);
+    if (at === -1) return { ok: false, status: 404, error: 'That post is not in brand memory.' };
+    list.splice(at, 1);
+    return { ok: true, value: null, sample: true };
+  },
+  rememberPost: async (postId, place, note) => {
+    const target = postList().find((p) => p.id === postId)?.targets.find((t) => t.place === place);
+    if (!target || target.status !== 'posted') return { ok: false, status: 400, error: 'Only a post that went out can be kept as one that works.' };
+    if (examples().some((e) => e.postId === postId && e.place === place)) return { ok: false, status: 400, error: 'That post is already in brand memory.' };
+    examples().push({ id: `e-${crypto.randomUUID().slice(0, 8)}`, place, text: target.text, ...(note ? { note } : {}), source: 'marked', postId, createdAt: new Date().toISOString() });
+    return { ok: true, value: null, sample: true };
+  },
   saveVideoEdit: async () => ({ ok: true, value: null, sample: true }),
   getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),
   createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
@@ -155,7 +186,10 @@ export const sampleData: DataSource = {
     return { ok: true, value: { stage }, sample: true };
   },
 
-  getPosts: async () => [...postList()].sort((a, b) => b.scheduledFor.localeCompare(a.scheduledFor)),
+  getPosts: async () =>
+    [...postList()]
+      .sort((a, b) => b.scheduledFor.localeCompare(a.scheduledFor))
+      .map((p) => ({ ...p, targets: p.targets.map((t) => (examples().some((e) => e.postId === p.id && e.place === t.place) ? { ...t, remembered: true } : t)) })),
   schedulePost: async (post) => {
     const set = mock.adSets.find((a) => a.variants.some((v) => v.id === post.variantId));
     const variant = set?.variants.find((v) => v.id === post.variantId);
@@ -174,7 +208,7 @@ export const sampleData: DataSource = {
       ...(post.thumbnail ? { thumbnail: post.thumbnail } : {}),
       targets: post.targets.map((t) => ({
         place: t.place,
-        text: variant.copy[PLACE_PLATFORM[t.place]]?.text ?? '',
+        text: postText(variant, t.place),
         media: t.media?.kind ?? null,
         // Sent now, it goes straight through the stand-in.
         ...(post.at ? { status: 'scheduled' as const } : { status: 'posted' as const, postedAt: now }),

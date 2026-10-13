@@ -155,6 +155,8 @@ const contentAnswer = (_material: Json, schema: Json): Json => {
       Object.fromEntries(s.required.map((field) => [field, s.properties[field]?.enum?.[0] ?? `${platform} ${field}`])),
     ]),
   );
+  // A post in full for each place the schema asks for.
+  const postsSchema = (((schema.properties as Json).variants as Json).items as { properties: { posts?: { required: string[] } } }).properties.posts;
   return {
     variants: ['A', 'B', 'C'].map((label, i) => ({
       label,
@@ -162,6 +164,7 @@ const contentAnswer = (_material: Json, schema: Json): Json => {
       creative_style: ['arcs', 'split', 'spotlight'][i],
       image_prompt: '',
       copy,
+      ...(postsSchema ? { posts: Object.fromEntries(postsSchema.required.map((place) => [place, `Variant ${label}'s ${place} post, in full.`])) } : {}),
     })),
   };
 };
@@ -289,7 +292,7 @@ async function dashboardAdSet(runId: string): Promise<AdSetRow> {
     t.value<AdSetRow>(
       `select json_build_object('id', ad.id, 'run_id', ad.run_id, 'strategy_id', ad.strategy_id, 'title', ad.title, 'created_at', ad.created_at,
         'ad_variants', (select json_agg(json_build_object('id', v.id, 'label', v.label, 'angle', v.angle, 'creative_text', v.creative_text, 'creative_style', v.creative_style,
-          'image_url', v.image_url, 'copy', v.copy, 'warnings', v.warnings, 'approved_at', v.approved_at)) from public.ad_variants v where v.ad_set_id = ad.id)
+          'image_url', v.image_url, 'copy', v.copy, 'posts', v.posts, 'warnings', v.warnings, 'approved_at', v.approved_at)) from public.ad_variants v where v.ad_set_id = ad.id)
       ) from public.ad_sets ad where ad.run_id = $1`,
       [runId],
     ),
@@ -368,6 +371,8 @@ describe('a competitor run, from their website to three ads', () => {
     const adSet = toAdSet(await dashboardAdSet(runId));
     expect(adSet.variants.map((v) => [v.label, v.angle])).toEqual([['A', 'Clarity over hype'], ['B', 'Family first'], ['C', 'Diligence you can check']]);
     expect(Object.keys(adSet.variants[0]!.copy)).toEqual(['meta', 'linkedin', 'x']);
+    // A post in full for each place Meta and LinkedIn post to; X's copy is its post.
+    expect(adSet.variants[0]!.posts).toEqual({ facebook: "Variant A's facebook post, in full.", instagram: "Variant A's instagram post, in full.", linkedin: "Variant A's linkedin post, in full." });
     expect(await t.value<number>('select count(*)::int from public.agent_usage where run_id = $1', [runId])).toBe(3);
   });
 

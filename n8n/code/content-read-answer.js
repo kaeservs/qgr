@@ -1,6 +1,8 @@
 // Reads Claude's three variants, names each after its strategy angle, and
-// flags (never silently fixes) anything that breaks a guardrail or X's hard
-// 280-character limit, so a person sees it before approving.
+// flags (never silently fixes) anything that breaks a guardrail, X's hard
+// 280-character limit or what Instagram takes, so a person sees it before
+// approving. Each variant must come with its post in full for every place the
+// run posts to. The flags are lib/guardrails.ts's, in the same order.
 const res = $input.first().json;
 const ctx = $('Begin: load the run').first().json;
 const run = ctx.run;
@@ -39,6 +41,12 @@ const RULES = [
   [/\bassured\b/i, 'says "assured"'],
   [/\bin\s+\d+\s+(days|weeks|months)\b/i, 'promises a timeline'],
 ];
+const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
+const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
+const places = ['facebook', 'instagram', 'linkedin'].filter(function (p) { return run.platforms.indexOf(PLACE_PLATFORM[p]) !== -1; });
+function hashtags(text) {
+  return (text.match(/(^|\s)#[^\s#]+/g) || []).length;
+}
 const byLabel = {};
 (answer.variants || []).forEach(function (v) { if (!byLabel[v.label]) byLabel[v.label] = v; });
 
@@ -65,6 +73,20 @@ for (let i = 0; i < labels.length; i += 1) {
   RULES.forEach(function (rule) {
     if (rule[0].test(v.creative_text || '')) warnings.push('image text ' + rule[1]);
   });
+  const posts = {};
+  for (let j = 0; j < places.length; j += 1) {
+    const place = places[j];
+    const post = String((v.posts && v.posts[place]) || '').trim();
+    if (!post) return fail('Claude did not write variant ' + labels[i] + '\'s ' + PLACE_NAME[place] + ' post.');
+    // Words are flagged, never cut: a post past what any place takes fails the run instead.
+    if (post.length > 3000) return fail('Claude wrote variant ' + labels[i] + '\'s ' + PLACE_NAME[place] + ' post past 3,000 characters.');
+    posts[place] = post;
+    RULES.forEach(function (rule) {
+      if (rule[0].test(posts[place])) warnings.push(place + ' post ' + rule[1]);
+    });
+    if (place === 'instagram' && posts[place].length > 2200) warnings.push('instagram post is ' + posts[place].length + ' characters; Instagram allows 2,200');
+    if (place === 'instagram' && hashtags(posts[place]) > 30) warnings.push('instagram post has ' + hashtags(posts[place]) + ' hashtags; Instagram allows 30');
+  }
   variants.push({
     label: labels[i],
     angle: angles[i].name,
@@ -73,6 +95,7 @@ for (let i = 0; i < labels.length; i += 1) {
     image_prompt: String(v.image_prompt || '').trim(),
     image_url: null,
     copy: v.copy,
+    posts: posts,
     warnings: warnings,
   });
 }

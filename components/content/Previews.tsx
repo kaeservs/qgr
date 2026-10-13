@@ -37,7 +37,7 @@ export interface PreviewProps {
 }
 
 /** The image, or the video when the variant is one. */
-function Visual({ creative, image, video, ratio, editable, onCreative }: Pick<PreviewProps, 'creative' | 'image' | 'video' | 'editable' | 'onCreative'> & { ratio: 'square' | 'wide' }) {
+export function Visual({ creative, image, video, ratio, editable, onCreative }: Pick<PreviewProps, 'creative' | 'image' | 'video' | 'editable' | 'onCreative'> & { ratio: 'square' | 'wide' }) {
   if (video) return <VideoCreative video={video} words={creative.text} label={video.label} />;
   return <Creative text={creative.text} style={creative.style} image={image} ratio={ratio} editable={editable} onChange={onCreative} />;
 }
@@ -54,7 +54,7 @@ function Cta({ platform, value, editable, onChange, className }: { platform: Pla
   );
 }
 
-const Mark = ({ size }: { size: number }) => <Image src="/brand/qgr-mark.png" alt="" width={size} height={size} />;
+export const Mark = ({ size }: { size: number }) => <Image src="/brand/qgr-mark.png" alt="" width={size} height={size} />;
 
 export function MetaPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video }: PreviewProps) {
   const limits = COPY_LIMITS.meta;

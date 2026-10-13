@@ -25,6 +25,20 @@ describe('guardrailWarnings', () => {
   it('checks only the platforms asked for', () => {
     expect(guardrailWarnings('Fine', copy('100% approval'), ['meta'])).toEqual(['meta text says "100%"']);
   });
+
+  it('flags the posts after everything else, and holds Instagram to what it takes', () => {
+    const posts = {
+      facebook: 'Approval guaranteed.',
+      instagram: `${'a'.repeat(2190)} ${Array.from({ length: 31 }, (_, i) => `#tag${i}`).join(' ')}`,
+      linkedin: 'Plan with care.',
+    };
+    expect(guardrailWarnings('Risk-free', copy('Fine.'), ['meta', 'x'], posts)).toEqual([
+      'image text says "risk-free"',
+      'facebook post says "guarantee"',
+      `instagram post is ${posts.instagram.length} characters; Instagram allows 2,200`,
+      'instagram post has 31 hashtags; Instagram allows 30',
+    ]);
+  });
 });
 
 describe('copyPlatforms', () => {
@@ -39,6 +53,8 @@ describe('describeWarning', () => {
     expect(describeWarning('linkedin headline promises a timeline')).toBe('LinkedIn headline promises a timeline');
     expect(describeWarning('image text says "risk-free"')).toBe('Image text says “risk-free”');
     expect(describeWarning('x text is 290 characters; X allows 280')).toBe('X text is 290 characters; X allows 280');
+    expect(describeWarning('instagram post has 31 hashtags; Instagram allows 30')).toBe('Instagram post has 31 hashtags; Instagram allows 30');
+    expect(describeWarning('linkedin post says "100%"')).toBe('LinkedIn post says “100%”');
   });
 });
 

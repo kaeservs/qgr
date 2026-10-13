@@ -2,7 +2,8 @@
 // or QGR's own content on a custom run. A link's page was read by the app when
 // the run started (run.page); an uploaded clip comes with the words said in it
 // (run.excerpt): its transcript, read over by the team, or what they typed.
-// How the team's own recent posts did comes along too (ctx.results).
+// How the team's own recent posts did comes along too (ctx.results), and the
+// posts the team keeps in brand memory as ones that work (ctx.examples).
 const ctx = $input.first().json;
 const run = ctx.run;
 const KIND = { podcast: 'Podcast', blog: 'Blog post', video: 'Video', text: 'Text' };
@@ -23,6 +24,7 @@ return [{
     page: page ? { title: page.title || null, description: page.description || null, type: page.type || null } : null,
     clip: clip ? { duration: clip.duration, transcript: Array.isArray(clip.transcript) && clip.transcript.length > 0 } : null,
     results: Array.isArray(ctx.results) ? ctx.results : [],
+    examples: Array.isArray(ctx.examples) ? ctx.examples : [],
     sourceText: sourceText,
     sourceLabel: custom ? (clip ? 'Uploaded clip' : KIND[run.input]) + ' · ' + run.title : null,
   },

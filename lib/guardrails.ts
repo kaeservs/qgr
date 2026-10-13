@@ -1,6 +1,6 @@
 import { PLATFORM_LABEL } from './platforms';
-import { PLATFORMS } from './types';
-import type { Platform, PlatformCopy } from './types';
+import { PLACES, PLATFORMS } from './types';
+import type { Place, Platform, PlatformCopy } from './types';
 
 // The checks the Content Agent runs on Claude's answer
 // (n8n/code/content-read-answer.js), run again here whenever a person edits a
@@ -20,8 +20,24 @@ const FIELDS = ['text', 'headline', 'description'] as const;
 
 /** X refuses a longer post; the other platforms' lengths are recommendations. */
 export const X_MAX = 280;
+/** Instagram refuses a longer caption, or more hashtags. */
+export const INSTAGRAM_MAX = 2200;
+export const INSTAGRAM_HASHTAGS = 30;
 
-export function guardrailWarnings(creativeText: string, copy: Partial<Record<Platform, PlatformCopy>>, platforms: readonly Platform[]): string[] {
+/** The hashtags in a post, as Instagram counts them. */
+export const hashtagsIn = (text: string): number => (text.match(/(^|\s)#[^\s#]+/g) ?? []).length;
+
+/**
+ * The flags for a variant's words: its ad copy for each platform, the words on
+ * its image, then its posts for each place. A post is flagged like copy, and
+ * past what Instagram takes.
+ */
+export function guardrailWarnings(
+  creativeText: string,
+  copy: Partial<Record<Platform, PlatformCopy>>,
+  platforms: readonly Platform[],
+  posts: Partial<Record<Place, string>> = {},
+): string[] {
   const warnings: string[] = [];
   for (const p of platforms) {
     const c = copy[p];
@@ -34,6 +50,13 @@ export function guardrailWarnings(creativeText: string, copy: Partial<Record<Pla
     if (p === 'x' && c.text.length > X_MAX) warnings.push(`x text is ${c.text.length} characters; X allows ${X_MAX}`);
   }
   for (const [rule, says] of RULES) if (rule.test(creativeText)) warnings.push(`image text ${says}`);
+  for (const place of PLACES) {
+    const post = posts[place];
+    if (!post) continue;
+    for (const [rule, says] of RULES) if (rule.test(post)) warnings.push(`${place} post ${says}`);
+    if (place === 'instagram' && post.length > INSTAGRAM_MAX) warnings.push(`instagram post is ${post.length} characters; Instagram allows ${INSTAGRAM_MAX.toLocaleString('en-US')}`);
+    if (place === 'instagram' && hashtagsIn(post) > INSTAGRAM_HASHTAGS) warnings.push(`instagram post has ${hashtagsIn(post)} hashtags; Instagram allows ${INSTAGRAM_HASHTAGS}`);
+  }
   return warnings;
 }
 

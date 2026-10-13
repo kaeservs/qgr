@@ -1,12 +1,14 @@
-import type { VariantEdit } from './data/source';
+import type { NewBrandExample, VariantEdit } from './data/source';
+import { PLATFORM_OF } from './platforms';
 import type { ParseResult } from './run-input';
-import { PLATFORMS } from './types';
-import type { BrandProfile, Platform, PlatformCopy } from './types';
+import { EXAMPLE_PLACES, PLACES, PLATFORMS } from './types';
+import type { BrandMemory, BrandProfile, ExamplePlace, Place, Platform, PlatformCopy } from './types';
 
 // What the studio and the settings page may send. Server actions are public
 // endpoints, so their input is checked here before it reaches a data source;
 // the database checks the same limits again (save_variant,
-// update_brand_profile), which is the check that counts.
+// save_variant_words, update_brand_profile, update_brand_memory,
+// add_brand_example), which is the check that counts.
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -26,7 +28,15 @@ export const LIMITS = {
   guardrails: 12,
   guardrail: 200,
   pageName: 80,
+  post: 3000,
+  topics: 12,
+  topic: 80,
+  formatNote: 1000,
+  pictureStyle: 600,
+  example: 3000,
+  exampleNote: 300,
 } as const;
+
 
 /** An id as the dashboard shows them: a uuid, or a sample id like `v-q4-a`. */
 export const isRecordId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{1,64}$/.test(v);
@@ -56,7 +66,57 @@ export function parseVariantEdit(body: unknown): ParseResult<VariantEdit> {
     };
   }
   if (Object.keys(copy).length === 0) return { ok: false, error: 'The ad has no copy.' };
-  return { ok: true, value: { creativeText, copy } };
+
+  // Posts are optional: a place left out goes out with its ad copy.
+  const posts: Partial<Record<Place, string>> = {};
+  if (body.posts !== undefined) {
+    if (!isRecord(body.posts)) return { ok: false, error: 'The posts are not readable.' };
+    for (const place of PLACES) {
+      const raw = body.posts[place];
+      if (raw === undefined) continue;
+      if (typeof raw !== 'string') return { ok: false, error: 'The posts are not readable.' };
+      const post = raw.trim();
+      if (!post) continue;
+      if (post.length > LIMITS.post) return { ok: false, error: `Keep each post under ${LIMITS.post.toLocaleString('en-US')} characters.` };
+      if (!copy[PLATFORM_OF[place]]) return { ok: false, error: 'A post is for a place this ad does not go to.' };
+      posts[place] = post;
+    }
+  }
+  return { ok: true, value: { creativeText, copy, posts } };
+}
+
+/** What the team posts about, how it formats posts, how its pictures look. Empty values are dropped. */
+export function parseBrandMemory(body: unknown): ParseResult<BrandMemory> {
+  if (!isRecord(body)) return { ok: false, error: 'Nothing to save.' };
+  const topics = Array.isArray(body.topics) ? [...new Set(body.topics.map(text).filter(Boolean))] : [];
+  if (topics.length > LIMITS.topics) return { ok: false, error: `Keep it to ${LIMITS.topics} topics.` };
+  if (topics.some((t) => t.length > LIMITS.topic)) return { ok: false, error: `Keep each topic under ${LIMITS.topic} characters.` };
+  const postFormats: BrandMemory['postFormats'] = {};
+  if (isRecord(body.postFormats)) {
+    for (const place of EXAMPLE_PLACES) {
+      const note = text(body.postFormats[place]);
+      if (!note) continue;
+      if (note.length > LIMITS.formatNote) return { ok: false, error: `Keep each format note under ${LIMITS.formatNote.toLocaleString('en-US')} characters.` };
+      postFormats[place] = note;
+    }
+  }
+  const pictureStyle = text(body.pictureStyle);
+  if (pictureStyle.length > LIMITS.pictureStyle) return { ok: false, error: `Keep the picture style under ${LIMITS.pictureStyle} characters.` };
+  return { ok: true, value: { topics, postFormats, pictureStyle } };
+}
+
+const isExamplePlace = (v: unknown): v is ExamplePlace => typeof v === 'string' && (EXAMPLE_PLACES as readonly string[]).includes(v);
+
+/** A post that works, pasted by the team. */
+export function parseBrandExample(body: unknown): ParseResult<NewBrandExample> {
+  if (!isRecord(body)) return { ok: false, error: 'Nothing to save.' };
+  if (!isExamplePlace(body.place)) return { ok: false, error: 'Say where the post ran.' };
+  const post = text(body.text);
+  if (!post) return { ok: false, error: 'Paste the post.' };
+  if (post.length > LIMITS.example) return { ok: false, error: `Keep the post under ${LIMITS.example.toLocaleString('en-US')} characters.` };
+  const note = text(body.note);
+  if (note.length > LIMITS.exampleNote) return { ok: false, error: `Keep the note under ${LIMITS.exampleNote} characters.` };
+  return { ok: true, value: { place: body.place, text: post, ...(note ? { note } : {}) } };
 }
 
 export function parseBrandProfile(body: unknown): ParseResult<BrandProfile> {

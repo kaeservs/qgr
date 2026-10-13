@@ -204,7 +204,7 @@ const sampleRun = `{ id: 'run-id', kind: 'competitor', input: 'website', url: 'h
 const tracker = `${IMPORTS}
 ${subTrigger}
 ${beginNode('tracker')}
-${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'], adsSource: 'sample', library: null, guidance: null }`, "\n    onError: 'continueErrorOutput',")}
+${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'], adsSource: 'sample', library: null, guidance: null, brand: null }`, "\n    onError: 'continueErrorOutput',")}
 ${ifTrue('realAds', 'Real ads?', '{{ $json.adsSource === "apify" }}')}
 
 const apify = node({

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toCompetitor, toCreateRunArgs, toNotices, toRun, toStrategy, toUser } from './map';
-import type { ActivityRows, AdSetRow, CompetitorRow, RunRow, StageRow, StrategyRow } from './map';
+import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toUser } from './map';
+import type { ActivityRows, AdSetRow, BrandRow, CompetitorRow, PostRow, RunRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
 const CLIP_PATH_OK = 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.mp4';
@@ -215,10 +215,25 @@ describe('toAdSet', () => {
     picture_error: null,
     picture_requested_at: null,
     copy: { meta: { text: 't', headline: 'h', description: 'd', cta: 'Book now' }, x: { text: 't', headline: 'h' } },
+    posts: {},
     warnings: [],
     approved_at: null,
     video_edit: null,
     ...extra,
+  });
+
+  it('carries a variant’s posts in full, and none when it has none', () => {
+    const set = toAdSet({
+      id: 'set-1',
+      run_id: 'run-1',
+      strategy_id: 'strat-1',
+      title: 'Q4',
+      created_at: '2026-10-07T10:00:00Z',
+      ad_variants: [variant('A', { posts: { facebook: 'The full post.', instagram: '  ', tiktok: 'No.', linkedin: 3 } }), variant('B')],
+      runs: null,
+    });
+    expect(set.variants[0]?.posts).toEqual({ facebook: 'The full post.' });
+    expect(set.variants[1]).not.toHaveProperty('posts');
   });
 
   it('sorts the variants and reads approval from any of them', () => {
@@ -427,5 +442,70 @@ describe('toActivity', () => {
 
   it('says nothing when nothing is at work', () => {
     expect(toActivity(rows({}), now)).toEqual([]);
+  });
+});
+
+describe('brand memory', () => {
+  const row: BrandRow = {
+    id: 1,
+    company: 'Quantum Global Residency',
+    website: 'quantumglobalresidency.com',
+    offer: 'EB-5 guidance',
+    audience: 'Families',
+    voice: ['Calm'],
+    guardrails: [],
+    page_name: 'Quantum Global',
+    x_handle: '@quantumglobal',
+    updated_at: '2026-10-13T10:00:00Z',
+    topics: ['EB-5 basics'],
+    post_formats: { instagram: 'Hashtags last.', tiktok: 'No.', linkedin: '  ' },
+    picture_style: null,
+  };
+
+  it('reads the topics, the format notes for known places, and an empty picture style', () => {
+    expect(toBrandMemory(row)).toEqual({ topics: ['EB-5 basics'], postFormats: { instagram: 'Hashtags last.' }, pictureStyle: '' });
+  });
+
+  it('reads a post that works, and leaves out one from nowhere', () => {
+    const example = { id: 'e-1', place: 'linkedin', text: 'A post.', note: null, source: 'marked', post_id: 'p-1', created_at: '2026-10-13T10:00:00Z' };
+    expect(toBrandExample(example)).toEqual({ id: 'e-1', place: 'linkedin', text: 'A post.', source: 'marked', postId: 'p-1', createdAt: '2026-10-13T10:00:00Z' });
+    expect(toBrandExample({ ...example, place: 'tiktok' })).toBeNull();
+  });
+
+  it('marks the places of a post kept in brand memory', () => {
+    const post: PostRow = {
+      id: 'p-1',
+      variant_id: 'v-1',
+      scheduled_for: '2026-10-13T10:00:00Z',
+      created_at: '2026-10-13T09:00:00Z',
+      thumbnail: null,
+      post_targets: (['facebook', 'linkedin'] as const).map((place) => ({
+        place,
+        text: 'Words',
+        media_kind: null,
+        status: 'posted',
+        posted_at: '2026-10-13T10:00:05Z',
+        remote_url: null,
+        stand_in: false,
+        error: null,
+        reach: null,
+        views: null,
+        reactions: null,
+        comments: null,
+        shares: null,
+        clicks: null,
+        results_at: null,
+        results_error: null,
+      })),
+      ad_variants: { label: 'A', angle: 'One', ad_set_id: 's-1', ad_sets: { title: 'Q4' } },
+      brand_examples: [
+        { place: 'linkedin', removed_at: null },
+        { place: 'facebook', removed_at: '2026-10-13T11:00:00Z' },
+      ],
+    };
+    expect(toPost(post)?.targets.map((t) => [t.place, t.remembered ?? false])).toEqual([
+      ['facebook', false],
+      ['linkedin', true],
+    ]);
   });
 });
