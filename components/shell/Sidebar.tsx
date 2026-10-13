@@ -1,6 +1,6 @@
 'use client';
 
-import { BookMarked, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, Workflow, X } from 'lucide-react';
+import { BookMarked, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, UserRound, Workflow, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -41,7 +41,7 @@ const GROUPS = [
 
 const isActive = (pathname: string, href: string) => (href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(`${href}/`));
 
-/** The account's own menu: Settings, and Sign out when there is an account to sign out of. */
+/** The account's own menu: their profile, Settings, and Sign out when there is an account to sign out of. */
 function AccountMenu({ canSignOut, onNavigate }: { canSignOut: boolean; onNavigate: () => void }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -53,6 +53,17 @@ function AccountMenu({ canSignOut, onNavigate }: { canSignOut: boolean; onNaviga
       </button>
       {open && (
         <div className={styles.accountMenu}>
+          <Link
+            href="/profile"
+            className={styles.accountItem}
+            onClick={() => {
+              setOpen(false);
+              onNavigate();
+            }}
+          >
+            <UserRound size={16} aria-hidden />
+            Your profile
+          </Link>
           <Link
             href="/settings"
             className={styles.accountItem}
@@ -116,11 +127,13 @@ export function Sidebar({ user, open, onClose, canSignOut }: { user: User; open:
         </nav>
 
         <div className={styles.user}>
-          <Avatar name={user.name} size={40} brand />
-          <div className={styles.userText}>
-            <p className={styles.userName}>{user.name}</p>
-            <p className={styles.userRole}>{user.role}</p>
-          </div>
+          <Link href="/profile" className={styles.userLink} onClick={onClose} aria-label={`Your profile: ${user.name}`}>
+            <Avatar name={user.name} size={40} brand src={user.photoUrl} />
+            <div className={styles.userText}>
+              <p className={styles.userName}>{user.name}</p>
+              <p className={styles.userRole}>{user.role}</p>
+            </div>
+          </Link>
           <AccountMenu canSignOut={canSignOut} onNavigate={onClose} />
         </div>
       </aside>

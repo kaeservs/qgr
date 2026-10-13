@@ -4,6 +4,7 @@ import { cache } from 'react';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import { STAGE_ORDER } from '../pipeline';
 import { pingQueue, startPipeline } from '../pipeline-start';
+import { PHOTO_BUCKET } from '../profile-input';
 import { getViewer } from '../session';
 import { picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
@@ -60,6 +61,8 @@ const POST_BUCKET = 'post-media';
 const PICTURE_BUCKET = 'ad-pictures';
 /** Long enough to read a page and post from it. */
 const PICTURE_SECONDS = 60 * 60;
+/** A page re-signs it, so an hour covers any page left open. */
+const PHOTO_SECONDS = 60 * 60;
 /** Long enough for a working session in the studio; a reload signs a fresh one. */
 const PLAY_SECONDS = 6 * 60 * 60;
 
@@ -215,7 +218,12 @@ export const liveData: DataSource = {
   getNow: async () => new Date().toISOString(),
   getCurrentUser: async () => {
     const viewer = await getViewer();
-    return viewer ? toUser(viewer) : { name: 'Signed out', firstName: 'there', role: '', initials: '?' };
+    if (!viewer) return { name: 'Signed out', firstName: 'there', role: '', initials: '?' };
+    const user = toUser(viewer);
+    if (!viewer.photoPath) return user;
+    const { data, error } = await (await db()).storage.from(PHOTO_BUCKET).createSignedUrl(viewer.photoPath, PHOTO_SECONDS);
+    if (error) console.error('Signing the profile photo failed', error);
+    return data?.signedUrl ? { ...user, photoUrl: data.signedUrl } : user;
   },
   getRuns: async () => (await runRows()).map(toRun),
   getRun: (id) => runById(id),

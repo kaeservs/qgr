@@ -28,8 +28,8 @@ export default async function CompetitorPage({ params }: Props) {
 
   const hooks = [...c.hooks].sort((a, b) => b.daysRunning - a.daysRunning);
   const longest = hooks[0]?.daysRunning ?? 0;
-  // A competitor known only from uploaded ads has no site to scan: upload again instead.
-  const rescan = c.domain ? `/runs/new?url=${encodeURIComponent(c.domain)}` : '/runs/new?type=upload';
+  // A competitor known only from ads uploaded before that tab went has no site to scan: start from a link instead.
+  const rescan = c.domain ? `/runs/new?url=${encodeURIComponent(c.domain)}` : '/runs/new';
 
   return (
     <div className="page">

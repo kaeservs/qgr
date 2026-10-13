@@ -377,7 +377,7 @@ describe('toAgents and toUser', () => {
   });
 
   it('names the signed-in teammate', () => {
-    expect(toUser({ id: 'u', email: 'alex.morgan@example.com', name: 'Alex Morgan', role: 'owner' })).toEqual({ name: 'Alex Morgan', firstName: 'Alex', role: 'Owner', initials: 'AM' });
+    expect(toUser({ id: 'u', email: 'alex.morgan@example.com', name: 'Alex Morgan', photoPath: null, role: 'owner' })).toEqual({ name: 'Alex Morgan', firstName: 'Alex', role: 'Owner', initials: 'AM' });
   });
 });
 
