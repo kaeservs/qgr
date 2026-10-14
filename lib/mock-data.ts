@@ -3,7 +3,8 @@
 // Ad copy follows the guardrails a real strategy carries: no promised outcome,
 // timeline or return, because EB-5 is an investment with risk.
 
-import type { AdSet, AiVideo, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
+import { sampleMoments } from './long-video';
+import type { AdSet, AiVideo, LongVideoWithTranscript, TranscriptLine, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
 import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
@@ -1162,3 +1163,53 @@ export const brandExamples: BrandExample[] = [
     createdAt: '2026-09-30T15:00:00Z',
   },
 ];
+
+// ---------------------------------------------------------------- long videos
+
+/** What a webinar's speaker says, a line every ten seconds or so: the sample long video's transcript. */
+const WEBINAR_LINES = [
+  'Welcome, everyone, and thank you for joining tonight’s session on EB-5.',
+  'Before we start, a quick note: this is general information, not advice for your case.',
+  'Let’s begin with the question we hear most: what does EB-5 actually involve?',
+  'EB-5 is an investment in a U.S. business that creates jobs, in return for a path to a green card.',
+  'The investment is at risk. That is the first thing anyone considering it should understand.',
+  'Most families we speak to are on H-1B visas and want a plan that does not depend on a lottery.',
+  'So the real question is not whether EB-5 is fast. It is whether it fits your family’s plan.',
+  'Processing times change, and anyone quoting you a fixed date is guessing.',
+  'What you can control is how carefully the project is chosen before you invest.',
+  'That is why we look at every project independently before we discuss it with a client.',
+  'We read the loan documents, the developer’s track record and how the jobs are counted.',
+  'Debt projects are repaid before equity, which is why many investors prefer them.',
+  'Equity means owning a share of the project, with more risk and possibly more return.',
+  'Neither is right for everyone. It depends on what you need from the investment.',
+  'Now, a question from the chat: what happens to children who turn twenty-one?',
+  'This is one of the most important parts of planning, and it is worth starting early.',
+  'The age-out rules are complex, and the right timing depends on your family’s situation.',
+  'This is exactly the kind of detail we go through on a free consultation.',
+  'Another question: can I keep working on my H-1B while the petition is pending?',
+  'In many cases, yes, and concurrent filing can matter here if you are already in the U.S.',
+];
+const webinarTranscript = (): TranscriptLine[] => {
+  const lines: TranscriptLine[] = [];
+  for (let i = 0; i < 240; i++) lines.push({ start: i * 10, end: i * 10 + 9.2, text: WEBINAR_LINES[i % WEBINAR_LINES.length]! });
+  return lines;
+};
+
+/** The sample data's long video: a 40-minute webinar, its moments picked by place, not by an agent (lib/long-video.ts). */
+export const sampleLongVideo = (): LongVideoWithTranscript => {
+  const transcript = webinarTranscript();
+  return {
+    id: 'lv-sample',
+    title: 'EB-5 investor webinar (sample)',
+    file: { name: 'eb5-webinar-sample.mp4', size: 1_204_224_000, duration: 2400, width: 1920, height: 1080 },
+    guidance: null,
+    status: 'done',
+    error: null,
+    moments: sampleMoments(transcript),
+    lines: transcript.length,
+    createdAt: '2026-10-12T16:00:00Z',
+    sample: true,
+    example: true,
+    transcript,
+  };
+};

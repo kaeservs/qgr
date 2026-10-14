@@ -1,4 +1,4 @@
-// Builds the n8n Workflow SDK source for the eight QGR workflows from the
+// Builds the n8n Workflow SDK source for the nine QGR workflows from the
 // Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts and
 // publisher.test.ts). The output in ./workflows is what gets validated and
 // saved to n8n through its MCP server. Scripts are embedded with
@@ -1161,8 +1161,66 @@ export default workflow('qgr-pictures', 'QGR · Pictures')
   .add(noteStandIn);
 `;
 
+// ---------------------------------------------------------------- moments
+
+const momentsAsk = `{ long_video_id: 'video-id', title: 'EB-5 webinar', duration: 1800, guidance: null, transcript: [{ start: 0, end: 9.5, text: 'Welcome, everyone.' }], brand: { company: 'Quantum Global Residency' } }`;
+
+const moments = `${IMPORTS}
+
+const everyFiveMinutes = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every five minutes',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 5 }] } },
+  },
+  output: [{}],
+});
+
+const lookNow = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Look now',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-moments',
+      authentication: 'headerAuth',
+      responseMode: 'onReceived',
+      options: { responseCode: { values: { responseCode: 'customCode', customCode: 202 } } },
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: {} }],
+});
+${rpcNode('takeDue', 'Take the videos waiting', 'moments_take_due', '{{ JSON.stringify({ p_limit: 2 }) }}', momentsAsk, "\n    executeOnce: true,")}
+${codeNode('eachVideo', 'One item per video', code('shared-items.js'), momentsAsk)}
+${codeNode('buildRequest', 'Build the Claude request', code('moments-build-request.js'), `{ long_video_id: 'video-id', body: { model: 'claude-haiku-5-5', max_tokens: 8000 } }`)}
+${claudeNode('claude', 'Claude: pick the moments')}
+${codeNode('readAnswer', 'Read the moments', code('moments-read-answer.js'), `{ ok: true, p_id: 'video-id', p_moments: [{ first: 3, last: 9, title: 'Why debt is repaid first', why: 'A plain answer.', hook: 'Debt gets repaid first.', warnings: [] }], p_usage: { model: 'claude-haiku-5-5', input_tokens: 40000, output_tokens: 1500 } }`)}
+${isOk('found', 'Found any?')}
+${rpcNode('finish', 'Record the moments', 'moments_finish', '{{ JSON.stringify({ p_id: $json.p_id, p_moments: $json.p_moments, p_usage: $json.p_usage }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('fail', 'Record why not', 'moments_fail', '{{ JSON.stringify({ p_id: $json.p_id, p_error: $json.p_error, p_usage: $json.p_usage }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+const noteFlow = sticky('## Moments\\nA long video is heard in the browser, on the team\\'s own computer, and never uploaded: only its transcript is kept. At once when it is saved, and every five minutes, the database hands over the long videos waiting (**moments_take_due**, claimed so two runs never take the same one; a claim lost for ten minutes is taken again, three times at most), each with its transcript, the team\\'s direction and the brand.', [everyFiveMinutes, lookNow, takeDue, eachVideo], { color: 4 });
+const noteClaude = sticky('## The pick\\nHaiku 5.5 reads the transcript one numbered line at a time and names five to ten moments by their first and last line, the strongest first. Times come from the transcript, never from the model: **Read the moments** drops a moment outside the transcript, under 8 seconds, over two and a half minutes or overlapping a stronger one, and flags (never rewrites) a hook against the guardrails. The database works the times out again (**moments_finish**). The usage is kept on failure too (**moments_fail**).', [buildRequest, claude, readAnswer, found, finish, fail], { color: 5 });
+
+export default workflow('qgr-moments', 'QGR · Moments')
+  .add(everyFiveMinutes)
+  .to(takeDue)
+  .to(eachVideo)
+  .to(buildRequest)
+  .to(claude.onError(readAnswer))
+  .to(readAnswer)
+  .to(found.onTrue(finish).onFalse(fail))
+  .add(lookNow)
+  .to(takeDue)
+  .add(noteFlow)
+  .add(noteClaude);
+`;
+
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures, moments })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

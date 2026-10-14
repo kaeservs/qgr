@@ -44,6 +44,12 @@ export const addBrandExample: DataSource['addBrandExample'] = (example) => sourc
 export const removeBrandExample: DataSource['removeBrandExample'] = (id) => source().removeBrandExample(id);
 export const rememberPost: DataSource['rememberPost'] = (postId, place, note) => source().rememberPost(postId, place, note);
 export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source().saveVideoEdit(id, edit);
+export const getLongVideos: DataSource['getLongVideos'] = () => source().getLongVideos();
+export const getLongVideo: DataSource['getLongVideo'] = (id) => source().getLongVideo(id);
+export const createLongVideo: DataSource['createLongVideo'] = (input) => source().createLongVideo(input);
+export const askMomentsAgain: DataSource['askMomentsAgain'] = (id) => source().askMomentsAgain(id);
+export const removeLongVideo: DataSource['removeLongVideo'] = (id) => source().removeLongVideo(id);
+export const recordMomentRun: DataSource['recordMomentRun'] = (id, first, last, title, runId) => source().recordMomentRun(id, first, last, title, runId);
 export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
@@ -67,4 +73,7 @@ export const stopPicture: DataSource['stopPicture'] = (id) => source().stopPictu
 export const removePicture: DataSource['removePicture'] = (id) => source().removePicture(id);
 export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
 export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);
+export const createEditMediaUpload: DataSource['createEditMediaUpload'] = (extension) => source().createEditMediaUpload(extension);
+export const deleteEditMedia: DataSource['deleteEditMedia'] = (path) => source().deleteEditMedia(path);
+export const signEditMedia: DataSource['signEditMedia'] = (paths) => source().signEditMedia(paths);
 export const deletePostMedia: DataSource['deletePostMedia'] = (path) => source().deletePostMedia(path);

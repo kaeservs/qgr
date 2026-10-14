@@ -19,7 +19,9 @@ import { RenderError } from '@/lib/video/errors';
 import { removePostFile, UploadError, uploadPostFile } from '@/lib/video/upload';
 import { PlaceIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
-import { downloadClip, makeVariantVideo } from '../video/makeVideo';
+import { downloadClip, fetchEditMedia, makeVariantVideo } from '../video/makeVideo';
+import { mediaUrls } from '../video/useMediaUrls';
+import { mediaOf } from '@/lib/video/timeline';
 import video from '../video/video.module.css';
 import styles from './posts.module.css';
 
@@ -211,10 +213,14 @@ export function PublishDialog({
         if (!clip.url) throw new RenderError('The clip can’t be read right now. Reload the page to try again.');
         setStep({ label: 'Downloading the clip…', progress: null });
         const file = await downloadClip(clip.url, signal);
+        // The other videos, pictures and music the edit uses.
+        const links = await mediaUrls(mediaOf(edit).map((m) => m.path));
+        const media = await fetchEditMedia(edit, (path) => links[path] ?? null, signal);
         const label = 'Making the video…';
         setStep({ label, progress: 0 });
         const made = await makeVariantVideo({
           clip: file,
+          media,
           edit,
           words: variant.creative.text,
           brand,

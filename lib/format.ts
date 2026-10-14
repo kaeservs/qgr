@@ -41,3 +41,10 @@ export const percent = (part: number, whole: number) => (whole === 0 ? 0 : Math.
 const dayShort = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 /** `Mon 12 Oct`. */
 export const formatDayShort = (iso: string) => dayShort.format(new Date(iso)).replace(',', '');
+
+/** A file's size as people say it: 870 KB, 45.2 MB, 2.4 GB. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+}

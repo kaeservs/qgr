@@ -3,9 +3,12 @@
 // through `lib/data.ts`, which picks one, and never know which it was.
 
 import { STAGE_INFO } from '../pipeline';
+import type { NewLongVideo } from '../long-video';
 import type { NewRunInput } from '../run-input';
 import type {
   AiVideo,
+  LongVideo,
+  LongVideoWithTranscript,
   ActivityItem,
   AdSet,
   Agent,
@@ -72,6 +75,22 @@ export interface NewPost {
 export const POST_MEDIA_TYPES = { jpg: 'image/jpeg', mp4: 'video/mp4' } as const;
 export type PostMediaExtension = keyof typeof POST_MEDIA_TYPES;
 
+/** The kinds of file the video editor adds to an edit (bucket edit-media): other videos, pictures and music. */
+export const EDIT_MEDIA_TYPES = {
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  jpg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  mp3: 'audio/mpeg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  wav: 'audio/wav',
+  ogg: 'audio/ogg',
+} as const;
+export type EditMediaExtension = keyof typeof EDIT_MEDIA_TYPES;
+
 /** The kinds of file Storage keeps clips as (bucket run-media). */
 export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
 export type ClipExtension = keyof typeof CLIP_TYPES;
@@ -115,6 +134,16 @@ export interface DataSource {
 
   /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
   saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
+  /** Long videos, newest first, without their transcripts. */
+  getLongVideos(): Promise<LongVideo[]>;
+  /** One long video with its transcript, to pick and cut its moments. */
+  getLongVideo(id: string): Promise<LongVideoWithTranscript | null>;
+  /** Keeps a long video's transcript and asks the Moments agent for its moments. */
+  createLongVideo(input: NewLongVideo): Promise<Saved<{ id: string }>>;
+  askMomentsAgain(id: string): Promise<Saved>;
+  removeLongVideo(id: string): Promise<Saved>;
+  /** A run started from a clip cut from these lines: kept on its moment, or on a moment of the team's own. */
+  recordMomentRun(id: string, first: number, last: number, title: string, runId: string): Promise<Saved>;
   /** Videos made by the AI video model, newest first. Empty until Higgsfield is connected. */
   getAiVideos(): Promise<AiVideo[]>;
   getAiVideo(id: string): Promise<AiVideo | null>;
@@ -158,6 +187,16 @@ export interface DataSource {
   createPostUpload(extension: PostMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes a post file nothing waits on: one made for a post that was never sent. */
   deletePostMedia(path: string): Promise<Saved>;
+  /**
+   * Where the browser uploads a file added to a video edit: a fresh path in the
+   * teammate's own folder and a signed link. The sample data keeps the file in
+   * the tab, so its path is `local:` and its link null.
+   */
+  createEditMediaUpload(extension: EditMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a file added to an edit that no saved edit uses. */
+  deleteEditMedia(path: string): Promise<Saved>;
+  /** Links the browser can read files added to edits from, for a while, by path. */
+  signEditMedia(paths: string[]): Promise<Record<string, string>>;
 }
 
 /** The app's own pages, for search. */

@@ -476,3 +476,53 @@ export interface AiVideo {
   /** The sample data's stand-in, which no model made. */
   sample?: boolean;
 }
+
+/**
+ * A moment of a long video worth an ad, by its transcript lines (first and
+ * last, both included); its times are those lines'. The Moments agent picks
+ * them, or the team does; each run cut from one is kept on it.
+ */
+export interface Moment {
+  first: number;
+  last: number;
+  start: number;
+  end: number;
+  title: string;
+  why: string | null;
+  hook: string | null;
+  /** Guardrail flags on the hook, never fixed silently. */
+  warnings: string[];
+  source: 'agent' | 'team';
+  runIds: string[];
+}
+
+/** What a long video's file was, to know it again when it is picked again. Never uploaded. */
+export interface LongVideoFile {
+  name: string;
+  size: number;
+  duration: number;
+  width: number;
+  height: number;
+}
+
+/** A long recording heard in the browser; only its transcript is kept. */
+export interface LongVideo {
+  id: string;
+  title: string;
+  file: LongVideoFile;
+  guidance: string | null;
+  /** Waiting for the Moments agent, being looked at, done, or failed (with why). */
+  status: 'waiting' | 'working' | 'done' | 'failed';
+  error: string | null;
+  moments: Moment[];
+  lines: number;
+  createdAt: string;
+  /** The sample data's, whose moments no agent picked. */
+  sample?: boolean;
+  /** The sample data's example, which has no file anywhere to pick. */
+  example?: boolean;
+}
+
+export interface LongVideoWithTranscript extends LongVideo {
+  transcript: TranscriptLine[];
+}

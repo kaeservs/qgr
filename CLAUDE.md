@@ -59,6 +59,8 @@ posts that work (Brand memory below).
             ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
                when the team gave a direction → POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
+            ── POST /api/edit-media → a signed upload link for a file added to a video edit;
+               POST /api/edit-media/links → links to read them
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant_words(), approve_variant(), save_video_edit(), update_brand_profile(),
@@ -78,13 +80,16 @@ posts that work (Brand memory below).
         numbers from Meta or LinkedIn → results_record() or results_fail()
     n8n "QGR · Pictures", every five minutes and on POST /webhook/qgr-picture →
         picture_take_due() → each ad → picture_finish() or picture_fail()
+    n8n "QGR · Moments", every five minutes and on POST /webhook/qgr-moments →
+        moments_take_due() → each long video → Claude → moments_finish() or moments_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
 - The browser never calls Supabase or n8n, with one exception: a file goes
   from the browser straight to Storage, through a link the server signs as the
   teammate for one path in their own folder (a clip through `/api/uploads`,
-  the file a post goes out with through `/api/post-media`), because a 50 MB
+  the file a post goes out with through `/api/post-media`, a video, picture or
+  music added to an edit through `/api/edit-media`), because a 50 MB
   file cannot pass through a Vercel function (4.5 MB a request). Clips play
   and export from links the server signs too (`getClipUrl`). Every other
   Supabase call is made by the server with the person's own session and the
@@ -145,12 +150,13 @@ posts that work (Brand memory below).
   `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
   `set_ads_source`, `update_publishing_settings`, `set_post_for_real`,
-  `set_competitor_tracked`.
+  `set_competitor_tracked`, `create_long_video`, `ask_moments_again`,
+  `remove_long_video`, `record_moment_run`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
-  `prune_pictures`) is granted to
+  `prune_pictures`, `moments_*`) is granted to
   the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
@@ -163,6 +169,13 @@ posts that work (Brand memory below).
   their own folder and removes a file only while no post waits on it; n8n
   removes it once the last place has it (`publisher_finish` returns
   `remove_media`), since each platform keeps its own copy.
+- A file added to a video edit (another video, a picture, music) lives in the
+  private bucket `edit-media` (50 MB; MP4, WebM, MOV, JPEG, PNG, WebP, MP3,
+  M4A, AAC, WAV, OGG) at `media/{uploader}/{uuid}.{ext}`. A member reads any
+  and uploads only into their own folder; the uploader removes one only while
+  no saved edit names it (the editor takes back what it uploaded and the
+  saved edit left out). `save_video_edit` refuses an edit naming a file not
+  in the bucket.
 - An ad's picture lives in the private bucket `ad-pictures` (10 MB, PNG, JPEG
   or WebP) at `pictures/{variant}/{uuid}.{ext}`, uploaded by n8n alone. A
   member reads any, and removes only one no variant shows and no variant keeps
@@ -207,7 +220,8 @@ posts that work (Brand memory below).
   (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
   `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
   Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
-  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`).
+  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`),
+  Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -542,8 +556,31 @@ posts that work (Brand memory below).
   the cover frame. Kept parts and captions are in the clip's own seconds, so a
   caption stays with its words when the cut changes. `parseVideoEdit` is the
   app's check; `save_video_edit` checks the parts are inside the clip.
-- One function draws a frame (`lib/video/draw.ts`): the studio's preview and
-  the exported file are both drawn by it, so what is seen is what is exported.
+- The timeline (`lib/video/timeline.ts`, pure and tested) makes an edit a
+  sequence of pieces played one after another: parts of the run's clip (in
+  any order, any speed from 0.5× to 2×, each its own volume), other videos,
+  pictures and title cards. Each piece has its effects (ten filters,
+  brightness, contrast, colour, a punch-in, a slow zoom or pan, mirror, a
+  blurred fill, vignette, grain) and the transition into it (cut, cross-fade,
+  through black or white, four slides, two wipes, zoom, circle, blur). Over
+  the video: texts with a place, a style, a size and how they come in, a
+  caption style (boxed, bold, word by word, minimal), a progress bar; under
+  it, music, faded and quieter while a clip speaks. Up to 40 pieces, 30 texts
+  and ten minutes. Without a sequence, `keep` is the sequence, so every edit
+  from before reads as it did; with one, `keep` is derived from it for the
+  database, and `compactEdit` saves a plain cut as `keep` alone. Captions show
+  wherever a piece of the run's clip plays, never over another video or a
+  picture. Overlays, the words' `until` and the cover are in the edited
+  video's seconds. A sped-up or slowed piece plays silent.
+- One function draws a frame (`lib/video/compose.ts`, from the pieces in
+  `lib/video/draw.ts`): the studio's preview (`useEditedVideo`, a <video> per
+  file, two per file so the next piece waits ready) and the exported file
+  (`renderTimeline`: a decoder per piece, opened as it comes on screen, the
+  sound mixed ten seconds at a time in an OfflineAudioContext) are both drawn
+  by it, so what is seen is what is exported. Its sound rules (`pieceGainAt`,
+  `musicGainAt`) drive both too. Filters are the canvas's own (`ctx.filter`):
+  a browser without them shows and exports the pieces unfiltered, so the
+  filtered look is checked in Chrome or Edge.
 - Files are made in the browser by Mediabunny over WebCodecs
   (`lib/video/render.ts`): MP4 with H.264 and AAC whenever the browser can
   (the ad platforms want MP4), Mediabunny's own AAC encoder where the browser
@@ -586,7 +623,40 @@ posts that work (Brand memory below).
 - `mediabunny` and `@mediabunny/aac-encoder` are pinned to the same release,
   one at least two weeks old when it was taken.
 
-### AI video (`/videos`, `lib/ai-video.ts`), a preview
+### Long videos (`/videos`, `long_videos`, "QGR · Moments")
+
+- A long recording (a webinar, a talk: up to three hours) is turned into
+  short ads without ever being uploaded. The browser reads its sound five
+  minutes at a time with Mediabunny (only the bytes it needs, never the whole
+  file in memory), mixes it to 16 kHz mono and hands each piece to one
+  Whisper worker, which keeps the model loaded (`lib/speech-long.ts`); lines
+  come back as each piece is heard. Only the transcript is kept
+  (`create_long_video` through `POST /api/long-videos`, a route because three
+  hours of transcript is past a server action's 1 MB). Rules in
+  `lib/long-video.ts`, tested.
+- "QGR · Moments" (Haiku 5.5, medium effort) reads the transcript one
+  numbered line at a time and names five to ten moments by their first and
+  last line, with a title, why and a hook. Times are never asked of the
+  model: they are the lines' (`moments-read-answer.js` drops one outside the
+  transcript, under 8 s, over 150 s or overlapping a stronger one, and flags a
+  hook; `moments_finish` works the times out again). Usage goes to
+  `long_video_usage`, on failure too. The app pings `qgr-moments` when a video
+  is kept, so the moments come within a minute or two; the page re-reads
+  while it waits.
+- The moments page (`/videos/long/[id]`) plays the file from the computer
+  (kept in the tab, `lib/video/local-files.ts`, or picked again and known by
+  its size and length), lets the team nudge a moment a line at either end,
+  add one of their own from the transcript, and tick them. "Make ads" cuts
+  each ticked moment in the browser (`render`, aimed under 45 MB), uploads it
+  as an ordinary clip and starts an ordinary custom video run (notes: what is
+  said; captions: the moment's lines in the clip's seconds; direction: the
+  team's plus the moment's hook), then `record_moment_run` keeps the run on
+  its moment (a nudged one becomes the team's own). Re-asking keeps the
+  moments ads were made from and the team's own.
+- The sample data has one long video (a 40-minute webinar transcript) and
+  picks moments by their place in the video (`sampleMoments`), saying so.
+
+### AI video (`/videos?view=ai`, `lib/ai-video.ts`), a preview
 
 - A video is made by Higgsfield from a prompt, a model (Seedance 2.0, Hailuo
   2.3, Kling 3.0: what each takes is in `VIDEO_MODELS`, from Higgsfield's model
@@ -598,6 +668,8 @@ posts that work (Brand memory below).
   and adds a card saying nothing was made, kept on the page only; the live
   library is empty (`getAiVideos`), and the sample data has one video, the
   sample clip, marked "Sample video".
+- The sidebar's Video page holds both: Long videos (the default view) and AI
+  video (`?view=ai`).
 - A finished video starts a run as if it were uploaded (`/runs/new?video=…`):
   the start card fetches it into the clip field, which cuts and uploads it as
   any clip, and the notes start with what it shows (`notesFor`), since it has

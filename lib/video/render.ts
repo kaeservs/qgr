@@ -11,6 +11,8 @@
 
 import {
   ALL_FORMATS,
+  AudioBufferSink,
+  AudioBufferSource,
   AudioSample,
   AudioSampleSink,
   AudioSampleSource,
@@ -28,8 +30,10 @@ import {
   canEncodeVideo,
 } from 'mediabunny';
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny';
-import { clipTimeAt, keptSeconds } from './edit';
-import type { Part, Size } from './edit';
+import { clipTimeAt, editedSeconds, keptSeconds } from './edit';
+import type { Part, Size, VideoEdit } from './edit';
+import { frameAt, hasSound, layout, musicGainAt, pieceGainAt, sequenceOf } from './timeline';
+import type { Placed, Showing } from './timeline';
 import type { Picture } from './draw';
 import { RenderError } from './errors';
 
@@ -71,6 +75,24 @@ export async function probeClip(source: Blob | string): Promise<ClipInfo> {
   } catch (err) {
     if (err instanceof RenderError) throw err;
     throw new RenderError('This file can’t be read as a video.');
+  } finally {
+    input.dispose();
+  }
+}
+
+/** How long a piece of music runs, in seconds. Throws RenderError when the browser can't play its sound. */
+export async function probeAudio(source: Blob): Promise<number> {
+  const input = fromSource(source);
+  try {
+    const audio = await input.getPrimaryAudioTrack();
+    if (!audio) throw new RenderError('This file has no sound in it.');
+    if (!(await audio.canDecode())) throw new RenderError('This browser can’t play this file’s sound. Try an MP3 or M4A.');
+    const duration = await input.computeDuration();
+    if (!(duration > 0)) throw new RenderError('This file’s length can’t be read.');
+    return duration;
+  } catch (err) {
+    if (err instanceof RenderError) throw err;
+    throw new RenderError('This file can’t be read as music.');
   } finally {
     input.dispose();
   }
@@ -317,5 +339,263 @@ export async function filmstrip(source: Blob | string, duration: number, count: 
     return [];
   } finally {
     input.dispose();
+  }
+}
+
+// ---------------------------------------------------------------- a whole timeline
+
+export interface TimelineJob {
+  /** The run's clip. */
+  clip: Blob;
+  /** Every other file the edit uses, by its path (lib/video/timeline.ts, mediaOf). */
+  media: ReadonlyMap<string, Blob>;
+  edit: VideoEdit;
+  size: Size;
+  bitrate: number;
+  /** Draws the frame at the edited video's second `time`, asking `pictureOf` for what each piece on screen shows. */
+  draw: (ctx: CanvasRenderingContext2D, time: number, pictureOf: (showing: Showing) => Picture | null) => void;
+  onProgress?: (share: number) => void;
+  signal?: AbortSignal;
+  maxFrameRate?: number;
+  requireMp4?: boolean;
+}
+
+interface Opened {
+  input: Input;
+  video: InputVideoTrack | null;
+  audio: InputAudioTrack | null;
+  first: number;
+}
+
+/** A file's tracks, opened once: its picture when the browser can decode it, its sound when it has some. */
+async function open(source: Blob, label: string): Promise<Opened> {
+  const input = fromSource(source);
+  try {
+    const video = await input.getPrimaryVideoTrack();
+    if (video && !(await video.canDecode())) throw new RenderError(`This browser can’t read ${label}. Try Chrome, Edge or Safari.`);
+    const track = await input.getPrimaryAudioTrack();
+    const audio = track && (await track.canDecode()) ? track : null;
+    return { input, video, audio, first: video ? await video.getFirstTimestamp() : 0 };
+  } catch (err) {
+    input.dispose();
+    if (err instanceof RenderError) throw err;
+    throw new RenderError(`${label.charAt(0).toUpperCase()}${label.slice(1)} can’t be read as a video or sound.`);
+  }
+}
+
+const RATE = 48_000;
+/** The sound is mixed this many seconds at a time: an hour of music never sits in memory. */
+const CHUNK = 10;
+/** Gain is set this many times a second: smooth enough for fades and ducking. */
+const STEPS = 100;
+
+function curve(from: number, seconds: number, gain: (t: number) => number): Float32Array {
+  const n = Math.max(2, Math.ceil(seconds * STEPS) + 1);
+  const out = new Float32Array(n);
+  for (let k = 0; k < n; k++) out[k] = gain(from + (k / (n - 1)) * seconds);
+  return out;
+}
+
+/** Puts the buffers of `track` between `start` and `end` (its own seconds) on `ctx` at `at` (the chunk's seconds), through `node`. */
+async function schedule(ctx: OfflineAudioContext, node: AudioNode, track: InputAudioTrack, start: number, end: number, at: number, signal?: AbortSignal) {
+  for await (const { buffer, timestamp } of new AudioBufferSink(track).buffers(start, end)) {
+    if (signal?.aborted) throw aborted();
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(node);
+    const when = at + (timestamp - start);
+    if (when < 0) {
+      if (-when < buffer.duration) source.start(0, -when);
+    } else source.start(when);
+  }
+}
+
+/**
+ * Renders an edit's whole timeline to a file: every piece decoded in order
+ * from its own file (the run's clip, other videos, pictures), each frame drawn
+ * by the caller, and one sound track mixed from the clips' sound, faded
+ * through the transitions, and the music, faded and ducked. Throws RenderError
+ * with a reason a person can act on, or an AbortError when cancelled.
+ */
+export async function renderTimeline(job: TimelineJob): Promise<{ blob: Blob; target: Target }> {
+  const opened = new Map<string, Opened>();
+  const bitmaps = new Map<string, ImageBitmap>();
+  let output: Output | null = null;
+  const stop = () => void output?.cancel();
+  job.signal?.addEventListener('abort', stop, { once: true });
+  try {
+    const sequence = sequenceOf(job.edit);
+    const placed: Placed[] = layout(sequence);
+    const total = editedSeconds(job.edit);
+
+    const run = await open(job.clip, 'the clip');
+    opened.set('', run);
+    if (!run.video) throw new RenderError('This file has no video in it.');
+    for (const s of sequence) {
+      if (s.kind === 'clip' && s.media && !opened.has(s.media.path)) {
+        const blob = job.media.get(s.media.path);
+        if (!blob) throw new RenderError(`${s.media.name} could not be fetched. Reload the page to try again.`);
+        const file = await open(blob, s.media.name);
+        if (!file.video) throw new RenderError(`${s.media.name} has no video in it.`);
+        opened.set(s.media.path, file);
+      } else if (s.kind === 'image' && !bitmaps.has(s.media.path)) {
+        const blob = job.media.get(s.media.path);
+        if (!blob) throw new RenderError(`${s.media.name} could not be fetched. Reload the page to try again.`);
+        bitmaps.set(s.media.path, await createImageBitmap(blob).catch(() => Promise.reject(new RenderError(`${s.media.name} can’t be read as a picture.`))));
+      }
+    }
+    const music = job.edit.music ?? null;
+    let musicTrack: InputAudioTrack | null = null;
+    if (music) {
+      const blob = job.media.get(music.media.path);
+      if (!blob) throw new RenderError(`${music.media.name} could not be fetched. Reload the page to try again.`);
+      const file = await open(blob, music.media.name);
+      opened.set(music.media.path, file);
+      musicTrack = file.audio;
+    }
+
+    const audioOf = (s: Showing['placed']['segment']) => (s.kind === 'clip' ? (opened.get(s.media?.path ?? '')?.audio ?? null) : null);
+    const speaks = job.edit.volume > 0 && placed.some((p) => hasSound(p.segment) && audioOf(p.segment));
+    const withAudio = speaks || musicTrack !== null;
+
+    const stats = await run.video.computePacketStats(90);
+    const frameRate = clamp(Math.round(stats.averagePacketRate) || 30, 10, job.maxFrameRate ?? 30);
+    const target = await chooseTarget(job.size, job.bitrate, withAudio);
+    if (!target) throw new RenderError('This browser can’t make video files. Use Chrome, Edge or Safari.');
+    if (job.requireMp4 && target.container !== 'mp4') throw new RenderError('This browser can only make WebM, and posts go out as MP4. Post it from Chrome, Edge or Safari.');
+    if (job.signal?.aborted) throw aborted();
+
+    const canvas = document.createElement('canvas');
+    canvas.width = job.size.width;
+    canvas.height = job.size.height;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new RenderError('This browser can’t draw video frames.');
+
+    output = new Output({
+      format: target.container === 'mp4' ? new Mp4OutputFormat({ fastStart: 'in-memory' }) : new WebMOutputFormat(),
+      target: new BufferTarget(),
+    });
+    const frames = new CanvasSource(canvas, { codec: target.video, quality: new Quality({ bitrate: job.bitrate }), keyFrameInterval: 2 });
+    output.addVideoTrack(frames, { frameRate });
+    const sound = withAudio && target.audio ? new AudioBufferSource({ codec: target.audio, quality: new Quality({ bitrate: AUDIO_BITRATE }) }) : null;
+    if (sound) output.addAudioTrack(sound);
+    await output.start();
+
+    // Each frame shows the middle of its time. First, which second of its source every clip piece shows on each frame it is on screen.
+    const count = Math.max(1, Math.round(total * frameRate));
+    const at = (i: number) => (i + 0.5) / frameRate;
+    const times = new Map<number, number[]>();
+    for (let i = 0; i < count; i++) {
+      const f = frameAt(placed, at(i));
+      for (const s of [f.current, f.previous]) {
+        if (!s || s.placed.segment.kind !== 'clip' || s.source === null) continue;
+        const list = times.get(s.placed.index) ?? [];
+        list.push(s.source);
+        times.set(s.placed.index, list);
+      }
+    }
+
+    // A decoder per piece, opened as it comes on screen and closed after it: two at most at any time.
+    const playing = new Map<number, { frames: AsyncGenerator<{ canvas: HTMLCanvasElement | OffscreenCanvas } | null>; last: Picture | null; left: number }>();
+    const pull = async (s: Showing): Promise<Picture | null> => {
+      const seg = s.placed.segment;
+      if (seg.kind !== 'clip') return null;
+      let piece = playing.get(s.placed.index);
+      if (!piece) {
+        const file = opened.get(seg.media?.path ?? '');
+        const list = times.get(s.placed.index) ?? [];
+        if (!file?.video) return null;
+        const w = await file.video.getDisplayWidth();
+        const h = await file.video.getDisplayHeight();
+        const scale = Math.min(1, 1920 / Math.max(w, h));
+        const sink = new CanvasSink(file.video, { width: Math.round(w * scale), height: Math.round(h * scale), fit: 'fill', poolSize: 2 });
+        const first = file.first;
+        piece = { frames: sink.canvasesAtTimestamps(list.map((t) => Math.max(first, t))), last: null, left: list.length };
+        playing.set(s.placed.index, piece);
+      }
+      const next = await piece.frames.next();
+      piece.left -= 1;
+      if (!next.done && next.value) piece.last = { image: next.value.canvas, width: next.value.canvas.width, height: next.value.canvas.height };
+      if (piece.left <= 0) {
+        await piece.frames.return(undefined);
+        playing.delete(s.placed.index);
+      }
+      return piece.last;
+    };
+
+    const pictures = async () => {
+      for (let i = 0; i < count; i++) {
+        if (job.signal?.aborted) throw aborted();
+        const t = at(i);
+        const f = frameAt(placed, t);
+        const shown = new Map<number, Picture | null>();
+        for (const s of [f.current, f.previous]) {
+          if (!s) continue;
+          const seg = s.placed.segment;
+          if (seg.kind === 'clip') shown.set(s.placed.index, await pull(s));
+          else if (seg.kind === 'image') {
+            const bitmap = bitmaps.get(seg.media.path);
+            shown.set(s.placed.index, bitmap ? { image: bitmap, width: bitmap.width, height: bitmap.height } : null);
+          }
+        }
+        job.draw(ctx, t, (s) => shown.get(s.placed.index) ?? null);
+        await frames.add(i / frameRate, 1 / frameRate);
+        job.onProgress?.((i + 1) / count);
+      }
+      frames.close();
+    };
+
+    const samples = async () => {
+      if (!sound) return;
+      for (let c0 = 0; c0 < total - 0.0005; c0 += CHUNK) {
+        const seconds = Math.min(CHUNK, total - c0);
+        const mix = new OfflineAudioContext(2, Math.max(1, Math.round(seconds * RATE)), RATE);
+        if (job.edit.volume > 0) {
+          for (const p of placed) {
+            const track = audioOf(p.segment);
+            const seg = p.segment;
+            if (!track || seg.kind !== 'clip' || !hasSound(seg) || p.until <= c0 || p.at >= c0 + seconds) continue;
+            const from = Math.max(c0, p.at);
+            const to = Math.min(c0 + seconds, p.until);
+            const gain = mix.createGain();
+            gain.gain.setValueCurveAtTime(curve(c0, seconds, (t) => pieceGainAt(placed, p.index, t, job.edit.volume)), 0, seconds);
+            gain.connect(mix.destination);
+            await schedule(mix, gain, track, seg.start + (from - p.at), seg.start + (to - p.at), from - c0, job.signal);
+          }
+        }
+        if (music && musicTrack) {
+          const gain = mix.createGain();
+          gain.gain.setValueCurveAtTime(curve(c0, seconds, (t) => musicGainAt(music, placed, t, total, job.edit.volume)), 0, seconds);
+          gain.connect(mix.destination);
+          // The music starts again when it runs out.
+          const length = music.media.duration ?? total;
+          for (let loop = Math.floor(c0 / length) * length; loop < c0 + seconds; loop += length) {
+            const from = Math.max(c0, loop);
+            const to = Math.min(c0 + seconds, loop + length);
+            if (to > from) await schedule(mix, gain, musicTrack, from - loop, to - loop, from - c0, job.signal);
+          }
+        }
+        const mixed = await mix.startRendering();
+        if (job.signal?.aborted) throw aborted();
+        await sound.add(mixed);
+      }
+      sound.close();
+    };
+
+    await Promise.all([pictures(), samples()]);
+    await output.finalize();
+    const buffer = (output.target as BufferTarget).buffer;
+    if (!buffer) throw new RenderError('The video came out empty.');
+    return { blob: new Blob([buffer], { type: target.mime }), target };
+  } catch (err) {
+    if (output && output.state !== 'finalized' && output.state !== 'canceled') await output.cancel().catch(() => undefined);
+    if (job.signal?.aborted) throw aborted();
+    if (err instanceof RenderError) throw err;
+    console.error('Rendering the video failed', err);
+    throw new RenderError('The video could not be made in this browser.');
+  } finally {
+    job.signal?.removeEventListener('abort', stop);
+    for (const file of opened.values()) file.input.dispose();
+    for (const bitmap of bitmaps.values()) bitmap.close();
   }
 }
