@@ -1,6 +1,6 @@
 'use client';
 
-import { AudioLines, Download, Film, Image as ImageIcon, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Trash2, TriangleAlert, Type, Undo2, Upload, X as Close } from 'lucide-react';
+import { AudioLines, Download, Film, Image as ImageIcon, Music2, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Trash2, TriangleAlert, Type, Undo2, Upload, X as Close } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { saveVariantAction, saveVideoEditAction } from '@/app/(app)/content/actions';
@@ -423,6 +423,55 @@ export function VideoEditor({
               </div>
             </div>
 
+            <div className={styles.addRow} aria-label="Add to the video">
+              <span className={styles.addLabel}>Add:</span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={adding !== null}
+                onClick={() => {
+                  const s = piece?.segment;
+                  const from = s && s.kind === 'clip' && s.media === null ? s.end : 0;
+                  const start = from < duration - 0.5 ? from : 0;
+                  add({ id: newId(), kind: 'clip', media: null, start, end: Math.min(duration, start + 5), speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT });
+                }}
+              >
+                <Plus size={14} aria-hidden />
+                Part of the clip
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={adding !== null} onClick={() => videoPicker.current?.click()}>
+                <Film size={14} aria-hidden />
+                Another video
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={adding !== null} onClick={() => picturePicker.current?.click()}>
+                <ImageIcon size={14} aria-hidden />
+                Picture
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={adding !== null}
+                onClick={() => add({ id: newId(), kind: 'title', text: 'Your headline', subtext: '', style: 'brand', seconds: STILL_SECONDS.default, effects: DEFAULT_EFFECTS, transition: { type: 'fade', seconds: 0.5 } })}
+              >
+                <Type size={14} aria-hidden />
+                Title card
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={adding !== null}
+                onClick={() => {
+                  setTab('sound');
+                  musicPicker.current?.click();
+                }}
+              >
+                <Music2 size={14} aria-hidden />
+                {edit.music ? 'Music ✓' : 'Music'}
+              </button>
+              <input ref={videoPicker} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'video'); e.target.value = ''; }} />
+              <input ref={picturePicker} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'image'); e.target.value = ''; }} />
+              <input ref={musicPicker} type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'music'); e.target.value = ''; }} />
+            </div>
             <Sequence
               placed={placed}
               total={total}
@@ -445,43 +494,6 @@ export function VideoEditor({
               }}
             />
 
-            <div className={styles.addRow} aria-label="Add to the video">
-              <span className="muted small">Add after the picked piece:</span>
-              <button
-                type="button"
-                className="btn btn-quiet btn-sm"
-                disabled={adding !== null}
-                onClick={() => {
-                  const s = piece?.segment;
-                  const from = s && s.kind === 'clip' && s.media === null ? s.end : 0;
-                  const start = from < duration - 0.5 ? from : 0;
-                  add({ id: newId(), kind: 'clip', media: null, start, end: Math.min(duration, start + 5), speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT });
-                }}
-              >
-                <Plus size={14} aria-hidden />
-                Part of the clip
-              </button>
-              <button type="button" className="btn btn-quiet btn-sm" disabled={adding !== null} onClick={() => videoPicker.current?.click()}>
-                <Film size={14} aria-hidden />
-                Another video
-              </button>
-              <button type="button" className="btn btn-quiet btn-sm" disabled={adding !== null} onClick={() => picturePicker.current?.click()}>
-                <ImageIcon size={14} aria-hidden />
-                Picture
-              </button>
-              <button
-                type="button"
-                className="btn btn-quiet btn-sm"
-                disabled={adding !== null}
-                onClick={() => add({ id: newId(), kind: 'title', text: 'Your headline', subtext: '', style: 'brand', seconds: STILL_SECONDS.default, effects: DEFAULT_EFFECTS, transition: { type: 'fade', seconds: 0.5 } })}
-              >
-                <Type size={14} aria-hidden />
-                Title card
-              </button>
-              <input ref={videoPicker} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'video'); e.target.value = ''; }} />
-              <input ref={picturePicker} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'image'); e.target.value = ''; }} />
-              <input ref={musicPicker} type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'music'); e.target.value = ''; }} />
-            </div>
             {adding && (
               <div className={styles.footNote} aria-live="polite">
                 {adding.label}

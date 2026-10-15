@@ -216,7 +216,7 @@ export function PiecePanel({
           <span className="muted small">
             Of {s.media ? s.media.name : 'the run’s clip'}, {length(sourceSeconds)} long.
           </span>
-          <Choices label="Speed" options={SPEEDS} value={s.speed as (typeof SPEEDS)[number]} name={(v) => `${v}×`} onPick={(v) => c.setSequence(setPiece(seq, s.id, { speed: v }))} />
+          <Choices label="Speed: slow motion or faster" options={SPEEDS} value={s.speed as (typeof SPEEDS)[number]} name={(v) => (v === 0.5 ? '0.5× slow-mo' : `${v}×`)} onPick={(v) => c.setSequence(setPiece(seq, s.id, { speed: v }))} />
           <Slider
             label="Its sound"
             min={0}
