@@ -572,6 +572,17 @@ posts that work (Brand memory below).
   wherever a piece of the run's clip plays, never over another video or a
   picture. Overlays, the words' `until` and the cover are in the edited
   video's seconds. A sped-up or slowed piece plays silent.
+- The editor opens before a run too: on the start card once an uploaded clip
+  is ready, and on a long video's moment ("Edit video", which cuts the moment
+  on this computer first and reuses that cut for Make ads). It plays the
+  clip from the browser's own copy, so it works on the sample data as well,
+  and shows "Each ad's words show here" where the agents' words will go.
+  "Use this edit" hands the edit back rather than saving it: it goes with the
+  clip into the run (`Clip.edit`, kept in `runs.media.edit`, checked by
+  `parseClip` and, in live mode, every file it names checked in edit-media).
+  Every ad without an edit of its own starts from it (`toAdSet`, `editOf`);
+  an ad's own edit, saved in the studio, takes its place, and "Whole clip,
+  no edits" is then saved as such rather than as nothing.
 - One function draws a frame (`lib/video/compose.ts`, from the pieces in
   `lib/video/draw.ts`): the studio's preview (`useEditedVideo`, a <video> per
   file, two per file so the next piece waits ready) and the exported file

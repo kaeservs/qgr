@@ -55,6 +55,17 @@ describe('parseNewRun', () => {
     expect(r.ok && linkToRead(r.value.source)).toBeNull();
   });
 
+  it('takes the edit made as a clip was uploaded, checked as the studio’s are', async () => {
+    const { defaultEdit } = await import('./video/edit');
+    const clip = { path: 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.webm', name: 'a.webm', duration: 30, width: 1280, height: 720, size: 1000 };
+    const notes = 'What is said in the clip, in a sentence.';
+    const base = { platforms: ['meta'], goal: 'consultations' };
+    const edit = { ...defaultEdit(30), aspect: '4:5', keep: [{ start: 0, end: 10 }] };
+    const r = parseNewRun({ ...base, source: { kind: 'custom', type: 'video', clip: { ...clip, edit }, notes } });
+    expect(r.ok && 'clip' in r.value.source ? r.value.source.clip.edit : null).toMatchObject({ aspect: '4:5', keep: [{ start: 0, end: 10 }] });
+    expect(parseNewRun({ ...base, source: { kind: 'custom', type: 'video', clip: { ...clip, edit: { ...edit, keep: [{ start: 0, end: 90 }] } }, notes } })).toEqual({ ok: false, error: 'A kept part is outside the clip.' });
+  });
+
   it('refuses a clip from anywhere else, too long or too large, or without notes', () => {
     const clip = { path: 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.webm', name: 'a.webm', duration: 30, width: 1280, height: 720, size: 1000 };
     const notes = 'What is said in the clip, in a sentence.';

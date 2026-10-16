@@ -35,6 +35,11 @@ export interface Clip {
   size: number;
   /** What is said in it, line by line, when it was transcribed: in the clip's own seconds. */
   transcript?: TranscriptLine[];
+  /**
+   * The edit made as the clip was uploaded, before the run: where every ad
+   * made from it starts. An ad's own edit, made in the studio, takes its place.
+   */
+  edit?: VideoEdit;
 }
 
 /** One line said in a clip. Seconds are the clip's own, so a line stays with its words whatever is cut. */

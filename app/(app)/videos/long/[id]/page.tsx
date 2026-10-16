@@ -3,13 +3,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { MomentsBoard } from '@/components/videos/MomentsBoard';
-import { getLongVideo } from '@/lib/data';
+import { getFrameBrand, getLongVideo } from '@/lib/data';
 
 export const metadata: Metadata = { title: 'Long video' };
 
 export default async function LongVideoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const video = await getLongVideo(id);
+  const [video, brand] = await Promise.all([getLongVideo(id), getFrameBrand()]);
   if (!video) notFound();
   return (
     <div className="page">
@@ -20,10 +20,10 @@ export default async function LongVideoPage({ params }: { params: Promise<{ id: 
       <header className="page-head">
         <div>
           <h1 className="display h1">{video.title}</h1>
-          <p className="lead">Tick the moments worth an ad, watch and adjust them, then make ads: each is cut on this computer and becomes a run.</p>
+          <p className="lead">Tick the moments worth an ad, watch and adjust them, edit them if you like, then make ads: each is cut on this computer and becomes a run.</p>
         </div>
       </header>
-      <MomentsBoard video={video} />
+      <MomentsBoard video={video} brand={brand} />
     </div>
   );
 }

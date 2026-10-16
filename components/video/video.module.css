@@ -1024,3 +1024,11 @@
   font-weight: 600;
   color: var(--text);
 }
+
+/* The editor's button under a clip before its run, with what the edit adds. */
+.clipEdit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}

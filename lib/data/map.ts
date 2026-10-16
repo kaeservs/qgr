@@ -272,6 +272,8 @@ export function clipOf(path: string | null, media: Json | null): Clip | null {
   if (!path || !CLIP_PATH.test(path) || !isRecord(media) || typeof media.duration !== 'number' || media.duration <= 0) return null;
   const count = (v: Json | undefined) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
   const transcript = transcriptOf(media.transcript);
+  // An edit made as the clip was uploaded; one that no longer reads is dropped, and the ads start from the whole clip.
+  const parsed = media.edit !== undefined && media.edit !== null ? parseVideoEdit(media.edit, media.duration) : null;
   return {
     path,
     name: typeof media.name === 'string' && media.name ? media.name : 'Uploaded clip',
@@ -280,6 +282,7 @@ export function clipOf(path: string | null, media: Json | null): Clip | null {
     height: count(media.height),
     size: count(media.size),
     ...(transcript.length > 0 ? { transcript } : {}),
+    ...(parsed?.ok ? { edit: parsed.value } : {}),
   };
 }
 
@@ -503,7 +506,8 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
           ...(v.image_prompt?.trim() ? { picturePrompt: v.image_prompt.trim() } : {}),
           ...(picture ? { picture } : {}),
           ...(pictures.length > 0 ? { pictures } : {}),
-          ...(edit?.ok ? { videoEdit: edit.value } : {}),
+          // Without its own edit, an ad starts from the one made as the clip was uploaded.
+          ...(edit?.ok ? { videoEdit: edit.value } : clip?.edit ? { videoEdit: clip.edit } : {}),
         },
       ];
     });
@@ -684,8 +688,16 @@ export function toCreateRunArgs(input: NewRunInput, page: PageRead | null = null
   }
   if (source.type === 'text') return { ...base, p_kind: 'custom', p_input: 'text', p_excerpt: source.excerpt };
   if ('clip' in source) {
-    const { path, name, duration, width, height, size, transcript } = source.clip;
-    const media = { name, duration, width, height, size, ...(transcript ? { transcript: transcript.map((l) => ({ start: l.start, end: l.end, text: l.text })) } : {}) };
+    const { path, name, duration, width, height, size, transcript, edit } = source.clip;
+    const media = {
+      name,
+      duration,
+      width,
+      height,
+      size,
+      ...(transcript ? { transcript: transcript.map((l) => ({ start: l.start, end: l.end, text: l.text })) } : {}),
+      ...(edit ? { edit: edit as unknown as Json } : {}),
+    };
     return { ...base, p_kind: 'custom', p_input: 'video', p_excerpt: source.notes, p_media_path: path, p_media: media };
   }
   return { ...base, p_kind: 'custom', p_input: source.type, p_url: source.url };

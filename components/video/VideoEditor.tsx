@@ -66,6 +66,9 @@ const slug = (s: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 40) || 'video';
 
+/** Shown where the ad's words will go, while editing a clip before its run has any. */
+const WORDS_TO_COME = 'Each ad’s words show here';
+
 /** What the editor hands back when it saves: the variant as the server now holds it. */
 export interface SavedVideo {
   videoEdit: VideoEdit | null;
@@ -96,27 +99,31 @@ export function VideoEditor({
   url,
   brand,
   setTitle,
-  platforms,
+  platforms = [],
   onClose,
   onSaved,
+  onApply,
 }: {
-  variant: Variant;
+  /** The ad being edited; absent before the run, while the clip is being uploaded. */
+  variant?: Variant | undefined;
   clip: Clip;
   url: string | null;
   brand: { name: string; website: string };
   setTitle: string;
-  platforms: Platform[];
+  platforms?: Platform[];
   onClose: () => void;
-  onSaved: (saved: SavedVideo) => void;
+  onSaved?: (saved: SavedVideo) => void;
+  /** Before the run: the edit every ad will start from (null for the clip as it is), handed back rather than saved. */
+  onApply?: (edit: VideoEdit | null) => void;
 }) {
   const toast = useToast();
   const dialog = useRef<HTMLDialogElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const host = useRef<HTMLDivElement>(null);
-  const started = useMemo(() => variant.videoEdit ?? defaultEdit(clip.duration), [variant.videoEdit, clip.duration]);
+  const started = useMemo(() => variant?.videoEdit ?? clip.edit ?? defaultEdit(clip.duration), [variant?.videoEdit, clip.edit, clip.duration]);
   const history = useUndoable<VideoEdit>(started);
   const edit = history.value;
-  const [words, setWords] = useState(variant.creative.text);
+  const [words, setWords] = useState(variant?.creative.text ?? '');
   const [tab, setTab] = useState<Tab>('piece');
   const [caption, setCaption] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -140,7 +147,9 @@ export function VideoEditor({
   const size = useMemo(() => frameSize(edit, clip), [edit, clip]);
   // The preview is drawn at up to 720p; the export at full size from the same instructions.
   const previewSize = useMemo(() => frameSize(edit, clip, 720), [edit, clip]);
-  const { player, total, placed, missing } = useEditedVideo(canvas, host, url, edit, previewSize, { words, brand });
+  // Before the run there are no ad words yet: the preview shows where each ad's own will go.
+  const shownWords = variant ? words : WORDS_TO_COME;
+  const { player, total, placed, missing } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand });
   const t = useTime(player.clock);
   const duration = clip.duration;
   const sequence = useMemo(() => sequenceOf(edit), [edit]);
@@ -179,9 +188,9 @@ export function VideoEditor({
     previewSequence: (next) => history.preview(withSequence(next)),
   };
 
-  const flags = [...guardrailWarnings(words, variant.copy, platforms).filter((f) => f.startsWith('image text')), ...videoWarnings(edit)];
+  const flags = [...(variant ? guardrailWarnings(words, variant.copy, platforms).filter((f) => f.startsWith('image text')) : []), ...videoWarnings(edit)];
   const saving = compactEdit(edit);
-  const changed = JSON.stringify(saving) !== JSON.stringify(compactEdit(started)) || words.trim() !== variant.creative.text;
+  const changed = JSON.stringify(saving) !== JSON.stringify(compactEdit(started)) || (variant !== undefined && words.trim() !== variant.creative.text);
 
   /** Takes back the files uploaded here that `kept` does not use. */
   function tidy(kept: VideoEdit | null) {
@@ -193,11 +202,19 @@ export function VideoEditor({
   function close() {
     if (changed && !leaving) return setLeaving(true);
     if (busy === 'exporting') exporting.current?.abort();
-    tidy(variant.videoEdit ?? null);
+    tidy(variant ? (variant.videoEdit ?? null) : (clip.edit ?? null));
     onClose();
   }
 
   async function save() {
+    if (!variant) {
+      // Before the run: the edit goes with the clip, and every ad starts from it.
+      const next = isUntouched(saving, duration) ? null : saving;
+      tidy(next);
+      onApply?.(next);
+      toast(next ? 'Every ad from this clip starts from this edit' : 'The ads start from the clip as it is');
+      return onClose();
+    }
     const text = words.trim();
     if (!text && edit.text.show) return setProblem('The video needs some words, or switch them off under Text.');
     if (text.length > LIMITS.creativeText) return setProblem(`Keep the words under ${LIMITS.creativeText} characters.`);
@@ -212,12 +229,13 @@ export function VideoEditor({
       }
       warnings = saved.value.warnings;
     }
-    const next = isUntouched(saving, duration) ? null : saving;
+    // With an edit made at upload, "no edits" is saved as such: saving nothing would bring that edit back.
+    const next = isUntouched(saving, duration) && !clip.edit ? null : saving;
     const result = await saveVideoEditAction(variant.id, next);
     setBusy(null);
     if (!result.ok) return setProblem(result.error);
     tidy(next);
-    onSaved({ videoEdit: next, creativeText: text || variant.creative.text, ...(warnings ? { warnings } : {}) });
+    onSaved?.({ videoEdit: next, creativeText: text || variant.creative.text, ...(warnings ? { warnings } : {}) });
     toast(result.sample ? 'Saved for this session' : `Variant ${variant.label} video saved`);
   }
 
@@ -244,13 +262,13 @@ export function VideoEditor({
         clip: file,
         media,
         edit,
-        words: words.trim(),
+        words: shownWords.trim(),
         brand: { name: brand.name, website: brand.website },
         size,
         onProgress: setProgress,
         signal: controller.signal,
       });
-      const name = `qgr-${slug(setTitle)}-${variant.label.toLowerCase()}-${edit.aspect === 'original' ? 'original' : edit.aspect.replace(':', 'x')}.${target.extension}`;
+      const name = `qgr-${slug(setTitle)}-${variant ? variant.label.toLowerCase() : 'clip'}-${edit.aspect === 'original' ? 'original' : edit.aspect.replace(':', 'x')}.${target.extension}`;
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = name;
@@ -373,12 +391,8 @@ export function VideoEditor({
     >
       <header className={styles.dialogHead}>
         <div>
-          <h2 id="editor-title">
-            Edit video · Variant {variant.label}
-          </h2>
-          <p className="muted small">
-            {variant.angle} · {clip.name}
-          </p>
+          <h2 id="editor-title">{variant ? `Edit video · Variant ${variant.label}` : 'Edit video'}</h2>
+          <p className="muted small">{variant ? `${variant.angle} · ${clip.name}` : `${clip.name} · every ad made from this clip starts from this edit, and each can still be changed in Content`}</p>
         </div>
         <button type="button" className="icon-btn icon-btn-plain" aria-label="Close" onClick={close}>
           <Close size={18} aria-hidden />
@@ -526,13 +540,17 @@ export function VideoEditor({
                   <div className={styles.section}>
                     <label className={styles.row}>
                       <input type="checkbox" checked={edit.text.show} onChange={(e) => change({ text: { ...edit.text, show: e.target.checked } })} />
-                      <span>Show the variant’s words on the video</span>
+                      <span>{variant ? 'Show the variant’s words on the video' : 'Show each ad’s words on the video'}</span>
                     </label>
-                    <label className="field">
-                      <span className="label">Words</span>
-                      <input className="input" value={words} onChange={(e) => setWords(e.target.value)} maxLength={LIMITS.creativeText} disabled={!edit.text.show} />
-                      <span className="muted small">The same words as the variant’s image, eight words at most reads best.</span>
-                    </label>
+                    {variant ? (
+                      <label className="field">
+                        <span className="label">Words</span>
+                        <input className="input" value={words} onChange={(e) => setWords(e.target.value)} maxLength={LIMITS.creativeText} disabled={!edit.text.show} />
+                        <span className="muted small">The same words as the variant’s image, eight words at most reads best.</span>
+                      </label>
+                    ) : (
+                      <span className="muted small">The agents write each ad’s words; here you choose where and how long they show. Your own words go under Texts on the video.</span>
+                    )}
                     <Choices label="Where" options={TEXT_PLACES} value={edit.text.place} name={(p) => PLACE_LABEL[p]} disabled={!edit.text.show} onPick={(p) => change({ text: { ...edit.text, place: p } })} />
                     <div className="field">
                       <span className="label">How long</span>
@@ -890,7 +908,7 @@ export function VideoEditor({
               </button>
             )}
             <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy !== null || adding !== null || !changed} aria-busy={busy === 'saving'}>
-              {busy === 'saving' ? 'Saving…' : 'Save'}
+              {busy === 'saving' ? 'Saving…' : variant ? 'Save' : 'Use this edit'}
             </button>
           </>
         )}
@@ -899,5 +917,5 @@ export function VideoEditor({
   );
 }
 
-/** The edit a variant has, or the whole clip when it has none, kept as one object while nothing changes. */
-export const editOf = (variant: Variant, clip: Clip): VideoEdit => variant.videoEdit ?? defaultEdit(clip.duration);
+/** The edit a variant has, else the one made as its clip was uploaded, else the whole clip. */
+export const editOf = (variant: Variant, clip: Clip): VideoEdit => variant.videoEdit ?? clip.edit ?? defaultEdit(clip.duration);

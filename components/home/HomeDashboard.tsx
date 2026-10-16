@@ -25,6 +25,7 @@ export function HomeDashboard({
   timeZone,
   adsSource,
   activity,
+  brand,
 }: {
   user: User;
   runs: RunWithStatus[];
@@ -36,6 +37,7 @@ export function HomeDashboard({
   adsSource: AdsSetting;
   /** What the agents are doing now, as the top bar reads it. */
   activity: ActivityItem[];
+  brand: { name: string; website: string };
 }) {
   // A day picked on the calendar: its posts and runs show under the calendar.
   const [day, setDay] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function HomeDashboard({
           <p className="lead">Your AI marketing team is ready.</p>
         </header>
 
-        <StartRunCard adsSource={adsSource} />
+        <StartRunCard adsSource={adsSource} brand={brand} />
 
         <section className="section" aria-labelledby="recent-runs">
           <div className="section-head">
