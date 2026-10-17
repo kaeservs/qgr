@@ -332,6 +332,23 @@ describe('toAdSet', () => {
     expect(set.variants[1]).not.toHaveProperty('videoEdit');
     expect(set.variants[2]).not.toHaveProperty('videoEdit');
   });
+  it('starts every ad without its own edit from the edit made as the clip was uploaded', () => {
+    const own = JSON.parse(JSON.stringify({ ...defaultEdit(12), aspect: '1:1' })) as { [key: string]: Json };
+    const upload = JSON.parse(JSON.stringify({ ...defaultEdit(12), aspect: '9:16', keep: [{ start: 2, end: 8 }] })) as { [key: string]: Json };
+    const set = toAdSet({
+      id: 'set-1',
+      run_id: 'run-1',
+      strategy_id: 'strat-1',
+      title: 'Clip',
+      created_at: '2026-10-07T10:00:00Z',
+      ad_variants: [variant('A', { video_edit: own }), variant('B'), variant('C')],
+      runs: { media_path: CLIP_PATH_OK, media: { name: 'clip.mp4', duration: 12, width: 1280, height: 720, size: 1000, edit: upload } },
+    });
+    expect(set.clip?.edit).toMatchObject({ aspect: '9:16', keep: [{ start: 2, end: 8 }] });
+    expect(set.variants.map((v) => v.videoEdit?.aspect)).toEqual(['1:1', '9:16', '9:16']);
+    // An edit that no longer reads is left out, and the ads start from the whole clip.
+    expect(clipOf(CLIP_PATH_OK, { name: 'clip.mp4', duration: 12, width: 1, height: 1, size: 1, edit: { keep: [] } })).not.toHaveProperty('edit');
+  });
 });
 
 describe('clips', () => {
@@ -418,6 +435,14 @@ describe('toCreateRunArgs', () => {
       p_title: 'Video · explainer',
       p_platforms: ['meta'],
       p_goal: 'consultations',
+    });
+  });
+
+  it('sends the edit made as the clip was uploaded with the clip', () => {
+    const edit = { ...defaultEdit(42.5), aspect: '9:16' as const };
+    const clip = { path: CLIP_PATH_OK, name: 'explainer.mp4', duration: 42.5, width: 1920, height: 1080, size: 31_000_000, edit };
+    expect(toCreateRunArgs({ source: { kind: 'custom', type: 'video', clip, notes: 'Four steps of EB-5, in plain words.' }, platforms: ['meta'], goal: 'consultations' })).toMatchObject({
+      p_media: { name: 'explainer.mp4', edit: { aspect: '9:16' } },
     });
   });
 });

@@ -185,6 +185,10 @@ export function ClipCutter({ file, url, initialKeep, onCancel, onDone }: { file:
               Split where you want a cut to start and end, then remove the part between. Drag a part’s gold edges to trim it. <span className="kbd">S</span> splits,{' '}
               <span className="kbd">Delete</span> removes, <span className="kbd">Space</span> plays.
             </p>
+            <p className={styles.hint}>
+              This only trims the clip before the run. Once the agents have written the ads, open a variant in Content and press <strong>Edit video</strong> to add other
+              videos, pictures, title cards, effects, slow motion, transitions, text and music.
+            </p>
           </>
         )}
       </div>

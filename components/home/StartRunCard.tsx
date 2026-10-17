@@ -11,7 +11,10 @@ import { competitorInputFor, MAX_GUIDANCE, MIN_EXCERPT, MIN_NOTES, normalizeUrl 
 import { transcriptText } from '@/lib/transcribe';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { AdsSetting, CustomSourceType, Goal, Platform, RunSource } from '@/lib/types';
+import type { VideoEdit } from '@/lib/video/edit';
 import { PlatformIcon } from '../ui/PlatformIcon';
+import { ClipEditButton } from '../video/ClipEditButton';
+import type { FrameBrandWords } from '../video/ClipEditButton';
 import { ClipField } from '../video/ClipField';
 import type { ClipStatus } from '../video/ClipField';
 import { useClipTranscript } from '../video/useClipTranscript';
@@ -53,11 +56,14 @@ export function StartRunCard({
   initialUrl = '',
   adsSource = 'sample',
   fromVideo,
+  brand,
 }: {
   initialTab?: StartTab;
   initialUrl?: string;
   adsSource?: AdsSetting;
   fromVideo?: StartFromVideo | undefined;
+  /** The page's name and site, drawn on the video as the editor previews it. */
+  brand: FrameBrandWords;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -78,6 +84,10 @@ export function StartRunCard({
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>(fromVideo ? 'upload' : 'link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
   const [notes, setNotes] = useState(fromVideo?.notes ?? '');
+  // The edit made before the run, for the clip uploaded now; a new clip starts without one.
+  const [clipEdit, setClipEdit] = useState<{ path: string; edit: VideoEdit } | null>(null);
+  const readyClip = clipStatus.state === 'ready' ? clipStatus.clip : null;
+  const editFor = readyClip && clipEdit?.path === readyClip.path ? clipEdit.edit : null;
   const [transcript, hearAgain] = useClipTranscript(clipStatus);
   const heard = transcript.state === 'done' ? transcriptText(transcript.lines) : '';
   // What was said fills the notes once, if they are empty: the team reads it over before the run starts.
@@ -119,7 +129,7 @@ export function StartRunCard({
       if (clipStatus.state === 'working') return 'Wait for the clip to finish uploading.';
       if (clipStatus.state === 'failed') return clipStatus.error;
       if (notes.trim().length < MIN_NOTES) return `Say what is said in the clip, in at least ${MIN_NOTES} characters: the agents can’t watch it.`;
-      const clip = transcript.state === 'done' ? { ...clipStatus.clip, transcript: transcript.lines } : clipStatus.clip;
+      const clip = { ...clipStatus.clip, ...(transcript.state === 'done' ? { transcript: transcript.lines } : {}), ...(editFor ? { edit: editFor } : {}) };
       return { kind: 'custom', type: 'video', clip, notes: notes.trim() };
     }
     const normalized = normalizeUrl(url);
@@ -239,6 +249,16 @@ export function StartRunCard({
         {clipMode ? (
           <div className={styles.clipBlock}>
             <ClipField onStatus={setClipStatus} initial={fromVideo ? { url: fromVideo.url, name: fromVideo.name } : undefined} />
+            {clipStatus.state === 'ready' && (
+              <ClipEditButton
+                clip={{ ...clipStatus.clip, ...(transcript.state === 'done' ? { transcript: transcript.lines } : {}) }}
+                file={clipStatus.file}
+                edit={editFor}
+                onEdit={(edit) => setClipEdit(edit ? { path: clipStatus.clip.path, edit } : null)}
+                brand={brand}
+                title={title.trim() || clipStatus.clip.name}
+              />
+            )}
             <label className="field">
               <span className="label">What’s said in the clip?</span>
               <textarea

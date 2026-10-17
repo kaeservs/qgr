@@ -99,7 +99,8 @@
 .stage canvas {
   display: block;
   max-width: 100%;
-  max-height: min(52vh, 560px);
+  /* On a short laptop screen the preview gives way, so the tools and the pieces under it stay in view. */
+  max-height: min(52vh, 560px, calc(100vh - 420px));
   object-fit: contain;
 }
 
@@ -1016,4 +1017,18 @@
 .panelTabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.addLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* The editor's button under a clip before its run, with what the edit adds. */
+.clipEdit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
 }

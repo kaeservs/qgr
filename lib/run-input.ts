@@ -3,6 +3,9 @@ import { MAX_LINE, MAX_LINES } from './transcribe';
 import { CUSTOM_SOURCES, GOALS, PLATFORMS } from './types';
 import type { Clip, Goal, Platform, RunSource, TranscriptLine } from './types';
 import { length, MAX_CLIP_SECONDS } from './video/edit';
+import { parseVideoEdit } from './video/edit';
+import type { VideoEdit } from './video/edit';
+import { compactEdit } from './video/timeline';
 
 export interface NewRunInput {
   source: RunSource;
@@ -71,6 +74,13 @@ export function parseClip(raw: unknown): ParseResult<Clip> {
   const name = (typeof raw.name === 'string' ? raw.name : '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'Uploaded clip';
   const transcript = parseTranscript(raw.transcript, duration);
   if (!transcript.ok) return transcript;
+  // The edit made as it was uploaded, if any: checked as the studio's are.
+  let edit: VideoEdit | undefined;
+  if (raw.edit !== undefined && raw.edit !== null) {
+    const parsed = parseVideoEdit(raw.edit, duration);
+    if (!parsed.ok) return parsed;
+    edit = compactEdit(parsed.value);
+  }
   return {
     ok: true,
     value: {
@@ -81,6 +91,7 @@ export function parseClip(raw: unknown): ParseResult<Clip> {
       height: raw.height,
       size: raw.size,
       ...(transcript.value.length > 0 ? { transcript: transcript.value } : {}),
+      ...(edit ? { edit } : {}),
     },
   };
 }

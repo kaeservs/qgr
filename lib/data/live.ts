@@ -5,6 +5,7 @@ import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import { STAGE_ORDER } from '../pipeline';
 import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
+import { mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
 import { momentsConfig, picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
@@ -263,6 +264,16 @@ export const liveData: DataSource = {
     const pipeline = pipelineConfig();
     if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so runs can’t start.' };
     const supabase = await db();
+    // An edit made before the run goes with the clip: every file it names must be in edit-media, where the studio reads it.
+    const edit = 'clip' in input.source ? input.source.clip.edit : undefined;
+    if (edit) {
+      const paths = mediaOf(edit).map((m) => m.path);
+      if (paths.some((p) => p.startsWith('local:'))) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
+      if (paths.length > 0) {
+        const found = await supabase.storage.from(EDIT_MEDIA_BUCKET).createSignedUrls(paths, 60);
+        if (found.error || found.data.some((f) => f.error)) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
+      }
+    }
     const { data: id, error } = await supabase.rpc('create_run', toCreateRunArgs(input, page));
     if (error) return refused(error, 'The run could not be saved.');
     // The direction is the run's before n8n is told about it, so every agent reads it.

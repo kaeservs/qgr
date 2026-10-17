@@ -72,6 +72,12 @@ export const usePicture: DataSource['usePicture'] = (id, pictureId) => source().
 export const stopPicture: DataSource['stopPicture'] = (id) => source().stopPicture(id);
 export const removePicture: DataSource['removePicture'] = (id) => source().removePicture(id);
 export const retryPost: DataSource['retryPost'] = (id, place) => source().retryPost(id, place);
+/** The page's name and site as a video frame names them. */
+export async function getFrameBrand(): Promise<{ name: string; website: string }> {
+  const brand = await getBrandProfile();
+  return { name: brand.pageName, website: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, '') };
+}
+
 export const createPostUpload: DataSource['createPostUpload'] = (extension) => source().createPostUpload(extension);
 export const createEditMediaUpload: DataSource['createEditMediaUpload'] = (extension) => source().createEditMediaUpload(extension);
 export const deleteEditMedia: DataSource['deleteEditMedia'] = (path) => source().deleteEditMedia(path);

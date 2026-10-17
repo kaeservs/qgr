@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Check, ChevronLeft, ChevronRight, FileVideo, Pause, Play, Plus, RotateCcw, Scissors, Search, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Clapperboard, ChevronRight, FileVideo, Pause, Play, Plus, RotateCcw, Scissors, Search, Trash2, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,8 +9,10 @@ import { cx } from '@/lib/cx';
 import { clipTranscript, clock, MAX_MOMENT_SECONDS, MIN_MOMENT_SECONDS, momentOf, momentSeconds, momentText, nudge, sameFile } from '@/lib/long-video';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { GOALS, PLATFORMS } from '@/lib/types';
-import type { Goal, LongVideoWithTranscript, Moment, Platform } from '@/lib/types';
+import type { Clip, Goal, LongVideoWithTranscript, Moment, Platform } from '@/lib/types';
 import { frameSize } from '@/lib/video/edit';
+import type { VideoEdit } from '@/lib/video/edit';
+import { VideoEditor } from '../video/VideoEditor';
 import { keepLocalFile, localFile } from '@/lib/video/local-files';
 import { LiveRefresh } from '../ui/LiveRefresh';
 import { useToast } from '../ui/Toast';
@@ -24,13 +26,20 @@ const key = (m: Pick<Moment, 'first' | 'last'>) => `${m.first}-${m.last}`;
 
 type Making = { key: string; label: string } | null;
 
+/** A moment cut into its own clip on this computer: kept for the editor and for Make ads, so it is cut once. */
+interface Cut {
+  blob: Blob;
+  clip: Omit<Clip, 'path'>;
+  extension: string;
+}
+
 /**
  * A long video's moments: what the agent picked (and the team's own), each to
  * watch, nudge a line at either end and tick. The ticked ones are cut from the
  * file on this computer, uploaded as clips and started as runs, one by one;
  * each run is kept on its moment. The file is never uploaded whole.
  */
-export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
+export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript; brand: { name: string; website: string } }) {
   const router = useRouter();
   const toast = useToast();
   const [file, setFile] = useState<File | null>(null);
@@ -41,6 +50,10 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
   const [platforms, setPlatforms] = useState<Platform[]>(['meta', 'linkedin']);
   const [goal, setGoal] = useState<Goal>('consultations');
   const [making, setMaking] = useState<Making>(null);
+  // Each moment's clip once cut, and the edit made to it before its run, by the moment's lines.
+  const cuts = useRef(new Map<string, Cut>());
+  const [edits, setEdits] = useState<Map<string, VideoEdit>>(new Map());
+  const [editing, setEditing] = useState<{ key: string; clip: Clip; url: string } | null>(null);
   const [made, setMade] = useState<{ title: string; runId: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<'again' | 'remove' | null>(null);
@@ -139,9 +152,11 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
   }
 
   /** One moment cut from the file, uploaded as a clip and started as a run. */
-  async function makeOne(m: Moment): Promise<string> {
+  /** The moment cut into a clip of its own on this computer, once: the editor and Make ads share it. */
+  async function cutOf(m: Moment, label: (what: string) => void): Promise<Cut> {
+    const known = cuts.current.get(key(m));
+    if (known) return known;
     if (!file) throw new Error('Pick the video first.');
-    const label = (what: string) => setMaking({ key: key(m), label: `${m.title}: ${what}` });
     label('cutting 0%');
     const { bitrateToFit, probeClip, render } = await import('@/lib/video/render');
     const info = await probeClip(file);
@@ -168,10 +183,38 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
       made = await cut();
     }
     if (made.blob.size > MAX_CLIP_BYTES) throw new Error('Even made smaller, this moment is over 50 MB. Make it shorter.');
+    const piece: Cut = {
+      blob: made.blob,
+      extension: made.target.extension,
+      clip: { name: `${video.title} · ${m.title}.${made.target.extension}`, duration: seconds, width: size.width, height: size.height, size: made.blob.size, transcript: clipTranscript(video.transcript, m.first, m.last) },
+    };
+    cuts.current.set(key(m), piece);
+    return piece;
+  }
+
+  /** Opens the editor on a moment's clip, cutting it first: the edit goes with the clip into its run. */
+  async function editMoment(m: Moment) {
+    if (!file) return setError('Pick the video first: the clips are cut from it on this computer.');
+    setError(null);
+    try {
+      const cut = await cutOf(m, (what) => setMaking({ key: key(m), label: `${m.title}: ${what}` }));
+      const edit = edits.get(key(m));
+      setEditing({ key: key(m), clip: { path: '', ...cut.clip, ...(edit ? { edit } : {}) }, url: URL.createObjectURL(cut.blob) });
+    } catch (err) {
+      setError(`${m.title}: ${err instanceof Error ? err.message : 'the clip could not be made.'}`);
+    } finally {
+      setMaking(null);
+    }
+  }
+
+  async function makeOne(m: Moment): Promise<string> {
+    const label = (what: string) => setMaking({ key: key(m), label: `${m.title}: ${what}` });
+    const cut = await cutOf(m, label);
+    const edit = edits.get(key(m));
 
     label('uploading 0%');
     const { uploadClip } = await import('@/lib/video/upload');
-    const up = await uploadClip(made.blob, (share) => label(`uploading ${Math.round(share * 100)}%`));
+    const up = await uploadClip(cut.blob, (share) => label(`uploading ${Math.round(share * 100)}%`));
 
     label('starting the run');
     const words = momentText(video.transcript, m.first, m.last);
@@ -184,7 +227,7 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
         source: {
           kind: 'custom',
           type: 'video',
-          clip: { path: up.path, name: `${video.title} · ${m.title}.${made.target.extension}`, duration: seconds, width: size.width, height: size.height, size: made.blob.size, transcript: clipTranscript(video.transcript, m.first, m.last) },
+          clip: { path: up.path, ...cut.clip, ...(edit ? { edit } : {}) },
           notes,
         },
         platforms,
@@ -378,6 +421,10 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
                     {playing === k ? <Pause size={15} aria-hidden /> : <Play size={15} aria-hidden />}
                     {playing === k ? 'Pause' : 'Play'}
                   </button>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => void editMoment(m)} disabled={!url || making !== null} aria-busy={making?.key === k && !making.label.includes('upload')}>
+                    <Clapperboard size={15} aria-hidden />
+                    {edits.has(k) ? 'Edited · change' : 'Edit video'}
+                  </button>
                   <span className={styles.nudges} aria-label="Move the start or the end by a line">
                     Start
                     <button type="button" className="icon-btn" aria-label="Start a line earlier" onClick={() => change(m, nudge(video.transcript, m, 'start', -1))}>
@@ -516,6 +563,26 @@ export function MomentsBoard({ video }: { video: LongVideoWithTranscript }) {
         </ol>
         {found.length > 1500 && <p className="muted small">Showing the first 1,500 lines that match. Find words to narrow it.</p>}
       </section>
+      {editing && (
+        <VideoEditor
+          clip={editing.clip}
+          url={editing.url}
+          brand={brand}
+          setTitle={editing.clip.name}
+          onClose={() => {
+            URL.revokeObjectURL(editing.url);
+            setEditing(null);
+          }}
+          onApply={(edit) =>
+            setEdits((was) => {
+              const next = new Map(was);
+              if (edit) next.set(editing.key, edit);
+              else next.delete(editing.key);
+              return next;
+            })
+          }
+        />
+      )}
     </div>
   );
 }
