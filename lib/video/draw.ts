@@ -3,6 +3,8 @@
 // lib/video/compose.ts draws whole frames from them. Every size is a share of
 // the frame, so a small preview and a 1080p export look the same.
 
+import { LOGO } from '../spot';
+import type { Hit, Spot } from '../spot';
 import type { Corner, Size } from './edit';
 
 /** The brand's colours, as app/globals.css has them. A canvas can't read CSS variables in an export. */
@@ -85,8 +87,13 @@ export function arcs(ctx: Ctx, size: Size, unit: number) {
   ctx.restore();
 }
 
-/** The mark and the page's name in a pill. Returns its height, for what sits below or above it. */
-export function logo(ctx: Ctx, size: Size, unit: number, corner: Corner, brand: FrameBrand): number {
+/**
+ * The mark and the page's name in a pill, in its corner, or centred on the
+ * spot a person dragged it to at its size there. Returns where it drew it, for
+ * what sits below or above it and for the editor's handle.
+ */
+export function logo(ctx: Ctx, size: Size, frameUnit: number, corner: Corner, brand: FrameBrand, at?: Spot): Hit {
+  const unit = frameUnit * (at?.scale ?? 1);
   const height = unit * 7;
   const markSize = unit * 4.6;
   ctx.font = `600 ${unit * 2.9}px ${TEXT}`;
@@ -94,9 +101,9 @@ export function logo(ctx: Ctx, size: Size, unit: number, corner: Corner, brand: 
   const textWidth = ctx.measureText(name).width;
   const pad = unit * 1.3;
   const width = pad + (brand.mark ? markSize + unit * 1.1 : 0) + textWidth + pad * 1.3;
-  const margin = unit * 5;
-  const x = corner.endsWith('left') ? margin : size.width - margin - width;
-  const y = corner.startsWith('top') ? margin : size.height - margin - height;
+  const margin = frameUnit * 5;
+  const x = at ? at.x * size.width - width / 2 : corner.endsWith('left') ? margin : size.width - margin - width;
+  const y = at ? at.y * size.height - height / 2 : corner.startsWith('top') ? margin : size.height - margin - height;
   ctx.fillStyle = 'rgb(14 15 44 / 0.55)';
   roundedRect(ctx, x, y, width, height, height / 2);
   ctx.fill();
@@ -109,7 +116,7 @@ export function logo(ctx: Ctx, size: Size, unit: number, corner: Corner, brand: 
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
   ctx.fillText(name, cursor, y + height / 2 + unit * 0.15);
-  return height;
+  return { id: LOGO, x, y, width, height };
 }
 
 export interface Block {

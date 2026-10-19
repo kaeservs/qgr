@@ -2,6 +2,7 @@
 // Supabase source (`data/live.ts`) both produce these shapes, so pages never
 // know which one they are reading.
 
+import type { CreativeDesign } from './creative/design';
 import type { VideoEdit } from './video/edit';
 
 export const PLATFORMS = ['meta', 'linkedin', 'x'] as const;
@@ -256,6 +257,8 @@ export interface Variant {
   pictures?: PictureChoice[];
   /** How this variant uses its run's clip, when the run started from one. Absent: the whole clip as it is. */
   videoEdit?: VideoEdit;
+  /** A picture ad's own layout: where its words and logo sit, and the texts added. Absent: the style's layout. */
+  design?: CreativeDesign;
 }
 
 export interface VariantPicture {

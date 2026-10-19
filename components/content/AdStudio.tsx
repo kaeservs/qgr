@@ -1,12 +1,12 @@
 'use client';
 
-import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, ImagePlus, LoaderCircle, Lock, MousePointerClick, Pencil, RotateCcw, Send, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Check, Clapperboard, Copy, ImagePlus, LayoutTemplate, LoaderCircle, Lock, MousePointerClick, Pencil, RotateCcw, Send, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { approveVariantAction, saveVariantAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
-import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
+import { describeWarning, designWarnings, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import { PLATFORM_LABEL, PLATFORM_OF, postText } from '@/lib/platforms';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone } from '@/lib/schedule';
@@ -20,6 +20,8 @@ import { StatusPill } from '../ui/StatusPill';
 import { useToast } from '../ui/Toast';
 import { VideoEditor } from '../video/VideoEditor';
 import type { SavedVideo } from '../video/VideoEditor';
+import { DesignEditor } from './DesignEditor';
+import type { SavedDesign } from './DesignEditor';
 import { PictureDialog } from './PictureDialog';
 import type { PictureChange } from './PictureDialog';
 import { POST_PREVIEW } from './PostPreviews';
@@ -152,10 +154,12 @@ export function AdStudio({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'approving' | null>(null);
   const [videoOf, setVideoOf] = useState<string | null>(null);
+  const [designOf, setDesignOf] = useState<string | null>(null);
   const selected = variants.find((v) => v.id === selectedId);
   const editingVideo = variants.find((v) => v.id === videoOf);
   const posting = variants.find((v) => v.id === postOf);
   const picturing = variants.find((v) => v.id === pictureOf);
+  const designing = variants.find((v) => v.id === designOf);
   // A variant waiting to post can't change: what goes out is what was approved.
   const locked = selected ? postState(posts, selected.id).waiting : null;
   // One object for every variant with no edit, so previews don't redraw for nothing.
@@ -170,6 +174,19 @@ export function AdStudio({
       const was = map.get(id);
       return was ? new Map(map).set(id, apply(was)) : map;
     });
+  }
+  function designSaved(id: string, saved: SavedDesign) {
+    // A new layout takes the approval back (save_variant_design does the same): approve it again before it is posted.
+    const apply = (v: Variant): Variant => {
+      const { design: _was, ...rest } = unapproved(v);
+      return { ...rest, ...(saved.design ? { design: saved.design } : {}), creative: { ...v.creative, text: saved.creativeText }, ...(saved.warnings ? { warnings: saved.warnings } : {}) };
+    };
+    update(id, apply);
+    setSaved((map) => {
+      const was = map.get(id);
+      return was ? new Map(map).set(id, apply(was)) : map;
+    });
+    setDesignOf(null);
   }
   const isDirty = (v: Variant) => !sameWords(v, saved.get(v.id));
   const unapproved = (v: Variant): Variant => {
@@ -397,6 +414,20 @@ export function AdStudio({
                 </button>
               )}
               {!clip && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy !== null}
+                  onClick={async () => {
+                    // The design editor saves the words too, so what is on screen is saved first.
+                    if (await persist(selected)) setDesignOf(selected.id);
+                  }}
+                >
+                  <LayoutTemplate size={15} aria-hidden />
+                  Design…
+                </button>
+              )}
+              {!clip && (
                 <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => setPictureOf(selected.id)}>
                   {selected.picture?.status === 'making' ? <LoaderCircle size={15} className="spin" aria-hidden /> : <ImagePlus size={15} aria-hidden />}
                   {selected.picture?.status === 'making' ? 'Making a picture…' : 'Picture…'}
@@ -439,7 +470,8 @@ export function AdStudio({
           const copy = v.copy[platform];
           const Preview = PREVIEW[platform];
           const PostPreview = view.kind === 'post' ? POST_PREVIEW[view.place] : null;
-          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts), ...videoWarnings(v.videoEdit)];
+          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts), ...videoWarnings(v.videoEdit), ...designWarnings(v.design)];
+          const design = v.design && !clip ? { layout: v.design, brandName: frameBrand.name } : undefined;
           const state = postState(posts, v.id);
           const angle = angleOf(strategy, v);
           const editable = isSelected && busy === null && !state.waiting;
@@ -518,6 +550,7 @@ export function AdStudio({
                     onText={(text) => update(v.id, (x) => withPost(x, view.place, text))}
                     onCreative={(text) => update(v.id, (x) => ({ ...x, creative: { ...x.creative, text } }))}
                     video={video}
+                    design={design}
                   />
                 ) : copy ? (
                   <Preview
@@ -534,6 +567,7 @@ export function AdStudio({
                     }
                     onCreative={(text) => update(v.id, (x) => ({ ...x, creative: { ...x.creative, text } }))}
                     video={video}
+                    design={design}
                   />
                 ) : (
                   <p className={cx('muted small', styles.noCopy)}>No {PLATFORM_LABEL[platform]} copy in this variant.</p>
@@ -578,6 +612,16 @@ export function AdStudio({
           waitingToPost={postState(posts, picturing.id).waiting !== null}
           onChange={(change) => pictureChanged(picturing.id, change)}
           onClose={() => setPictureOf(null)}
+        />
+      )}
+
+      {designing && !clip && (
+        <DesignEditor
+          variant={designing}
+          brandName={frameBrand.name}
+          waitingToPost={postState(posts, designing.id).waiting !== null}
+          onClose={() => setDesignOf(null)}
+          onSaved={(saved) => designSaved(designing.id, saved)}
         />
       )}
 

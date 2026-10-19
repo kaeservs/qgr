@@ -49,7 +49,7 @@ const COMPETITOR =
   'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
-const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit';
+const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit, design';
 const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}), runs!ad_sets_run_id_fkey(media_path, media)` as const;
 /** The studio's ad set: each variant with the pictures made for it, to choose again. */
 const AD_SET_STUDIO =
@@ -391,6 +391,12 @@ export const liveData: DataSource = {
     });
     if (error) return refused(error, 'Your changes could not be saved.');
     return { ok: true, value: { warnings }, sample: false };
+  },
+
+  saveDesign: async (variantId, design) => {
+    const { error } = await (await db()).rpc('save_variant_design', { p_variant_id: variantId, p_design: design as unknown as Json });
+    if (error) return refused(error, 'The design could not be saved.');
+    return { ok: true, value: null, sample: false };
   },
 
   saveVideoEdit: async (variantId, edit) => {

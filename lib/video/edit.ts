@@ -8,6 +8,8 @@
 // caption stays with the words it shows when the cut changes. `text.until` and
 // `cover` are the edited video's seconds, counted from its first frame.
 
+import { parseSpot } from '../spot';
+import type { Spot } from '../spot';
 import type { ParseResult } from '../run-input';
 import { keepOfSequence, layout, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
 import type { Look, Music, Overlay, Segment } from './timeline';
@@ -61,10 +63,16 @@ export interface VideoEdit {
   fit: 'fill' | 'fit';
   /** What a crop keeps in view, from 0 (left, top) to 1 (right, bottom). */
   focus: { x: number; y: number };
-  /** The variant's words over the video. `until` is when they leave, in edited seconds; null keeps them up. */
-  text: { show: boolean; place: TextPlace; until: number | null };
+  /**
+   * The variant's words over the video. `until` is when they leave, in edited
+   * seconds; null keeps them up. `spot`, once a person drags them, is where
+   * they sit instead of their place.
+   */
+  text: { show: boolean; place: TextPlace; until: number | null; spot?: Spot };
   captions: Caption[];
   logo: Corner | null;
+  /** Where the logo sits once a person drags it, instead of its corner, and its size. */
+  logoSpot?: Spot;
   /** 0 is silent, 1 the clip as recorded. */
   volume: number;
   /** A closing card with the call to action, after the last part. */
@@ -406,9 +414,10 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
     aspect,
     fit,
     focus: { x: clamp(focus.x, 0, 1), y: clamp(focus.y, 0, 1) },
-    text: { show: text.show, place: text.place, until },
+    text: { show: text.show, place: text.place, until, ...(parseSpot(text.spot) ? { spot: parseSpot(text.spot) as Spot } : {}) },
     captions,
     logo,
+    ...(logo !== null && parseSpot(raw.logoSpot) ? { logoSpot: parseSpot(raw.logoSpot) as Spot } : {}),
     volume: Math.round(volume * 100) / 100,
     endCard,
     cover: 0,

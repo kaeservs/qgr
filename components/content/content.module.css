@@ -664,3 +664,139 @@
     max-width: 280px;
   }
 }
+
+/* ---------- A picture ad's own layout ---------- */
+
+.designDialog {
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.designLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 20px;
+  align-items: start;
+}
+
+.designMain {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.designShapes {
+  display: inline-flex;
+  justify-self: start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--indigo-50);
+}
+
+.designShape {
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.designShapeOn {
+  background: var(--surface);
+  color: var(--indigo);
+  box-shadow: 0 1px 2px rgb(14 15 44 / 0.08);
+}
+
+.designStage {
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--text);
+}
+
+/* The canvas and its handles, the same size as the canvas shows. */
+.designCanvas {
+  position: relative;
+  max-width: 100%;
+}
+
+.designCanvas canvas {
+  display: block;
+  max-width: 100%;
+  max-height: min(56vh, 560px);
+  height: auto;
+}
+
+.designPanel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.designPicked {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--gold-50);
+  border: 1px solid var(--gold-100);
+}
+
+.designPickedTitle {
+  margin: 0;
+  font-size: 13px;
+}
+
+.designPicked input[type='range'] {
+  width: 100%;
+  accent-color: var(--indigo);
+}
+
+.designRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.designTexts {
+  display: grid;
+  gap: 8px;
+}
+
+.designTextsTitle {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.designTextList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.designTextList li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px auto;
+  gap: 6px;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.designTextOn {
+  background: var(--gold-50);
+}
+
+@media (max-width: 760px) {
+  .designLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

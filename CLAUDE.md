@@ -48,6 +48,10 @@ A video run can start from a link or from a clip uploaded from the computer,
 cut in the browser first; in the studio every variant of such a run is a video
 made from that clip, edited and exported to MP4 in the browser (Video below).
 
+A picture ad's words, its logo and texts a person adds can be dragged where
+they should sit and sized ("Design…" in the studio), and so can a video's
+words, logo and texts in the video editor (Movable words and logo below).
+
 Every variant carries the short ad copy for each platform and a post in full
 for each place (Facebook, Instagram, LinkedIn), and every agent reads the
 team's brand memory: voice and rules, topics, format notes, picture style and
@@ -68,7 +72,8 @@ posts that work (Brand memory below).
                POST /api/edit-media/links → links to read them
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
-               save_variant_words(), approve_variant(), save_video_edit(), update_brand_profile(),
+               save_variant_words(), approve_variant(), save_video_edit(), save_variant_design(),
+               update_brand_profile(),
                update_brand_memory(), add_brand_example(), remove_brand_example(), remember_post(),
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
@@ -149,7 +154,7 @@ posts that work (Brand memory below).
   with a team check first (`private.require_team_member()`): `create_run`,
   `report_start_failure` (n8n could not be reached), `set_run_guidance`,
   `save_variant_words` (`save_variant` stays for pages opened before it),
-  `approve_variant`, `save_video_edit`, `update_brand_profile`,
+  `approve_variant`, `save_video_edit`, `save_variant_design`, `update_brand_profile`,
   `update_brand_memory`, `add_brand_example`, `remove_brand_example`, `remember_post`,
   `continue_run` and `report_continue_failure`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
@@ -681,6 +686,38 @@ posts that work (Brand memory below).
 - `mediabunny` and `@mediabunny/aac-encoder` are pinned to the same release,
   one at least two weeks old when it was taken.
 
+### Movable words and logo (`lib/creative/design.ts`, `lib/spot.ts`)
+
+- A spot is where a thing sits: its centre as a share of the frame's width
+  and height, and its size against its usual one (0.4 to 3), so it holds on a
+  preview and on the full-size file alike (`lib/spot.ts`, `clampSpot`).
+- A picture ad's own layout (`ad_variants.design`, `CreativeDesign`): whether
+  its logo shows, up to six texts a person adds (120 characters each; gold,
+  white, indigo or on a band) and the spots of the words, the logo and each
+  text, kept per shape (Meta's square, LinkedIn's wide), since a place that
+  suits one rarely suits the other. Anything without a spot sits where the
+  style puts it, so a plain design (saved as null) draws exactly as before.
+  `parseDesign` is the app's check, `save_variant_design` the database's; a
+  new layout takes an approval back and waits while a post waits (rule 10).
+  The texts added are flagged like any words (`designWarnings`).
+- `drawCreative` draws the layout and returns where it drew each thing (`Hit`).
+  The studio's "Design…" (`DesignEditor`) draws with it, so what is moved is
+  what is posted; a variant with a layout shows in the studio's previews as
+  that drawing (`CreativeCanvas`) rather than the CSS design, and its words
+  are changed there. The publish dialog draws the posted file with the same
+  layout.
+- The video editor: the variant's words (`text.spot`), the logo (`logoSpot`,
+  only while the logo shows) and each text over the video (`overlay.spot`)
+  take a spot when dragged on the paused preview; picking a place or a corner
+  puts them back there. `drawTimelineFrame` returns where it drew them, which
+  `useEditedVideo` keeps while paused for the handles; the export draws the
+  same frame. The logo dragged away from its corner no longer pushes the
+  words down.
+- The handles are one component (`components/ui/DragLayer.tsx`): a button over
+  each thing drawn, dragged with the pointer or nudged with the arrow keys
+  (Shift for further), with the picked thing's size and "back in its place"
+  beside the picture.
+
 ### Long videos (`/videos`, `long_videos`, "QGR · Moments")
 
 - A long recording (a webinar, a talk: up to three hours) is turned into
@@ -772,7 +809,7 @@ posts that work (Brand memory below).
 10. **What was approved is what goes out.** A post copies the approved words
     and goes with a file made from the approved variant, shown before it is
     sent. Editing an approved variant takes its approval away, and so does a
-    new picture or going back to the design; one waiting to post cannot be
+    new picture, a new layout or going back to the design; one waiting to post cannot be
     edited, or change its picture, until its post is cancelled.
 11. **Never post twice by accident.** A place that may have gone out
     (`unknown`) is never sent again by itself: a person checks the Page, then

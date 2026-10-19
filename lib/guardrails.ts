@@ -86,6 +86,14 @@ export function videoWarnings(
   return warnings;
 }
 
+/** The same checks on the texts a person adds to a picture ad's design. */
+export function designWarnings(design: { texts: readonly { text: string }[] } | undefined): string[] {
+  if (!design) return [];
+  const warnings: string[] = [];
+  for (const [rule, says] of RULES) if (design.texts.some((t) => rule.test(t.text))) warnings.push(`a text on the picture ${says}`);
+  return warnings;
+}
+
 /** The platforms a copy object covers, in the dashboard's order. */
 export const copyPlatforms = (copy: Partial<Record<Platform, PlatformCopy>>): Platform[] => PLATFORMS.filter((p) => copy[p] !== undefined);
 

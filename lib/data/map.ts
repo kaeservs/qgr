@@ -56,6 +56,7 @@ import type {
   VariantPicture,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
+import { parseDesign } from '../creative/design';
 import { scanLabel } from '../schedule';
 import { initialsOf } from './source';
 import type { RunWithStatus } from './source';
@@ -180,6 +181,7 @@ export interface AdSetRow {
     warnings: string[];
     approved_at: string | null;
     video_edit: Json | null;
+    design?: Json | null;
     /** Read for the studio only: the pictures made for it, marked once past the eight kept. */
     variant_pictures?: { id: string; path: string; prompt: string | null; created_at: string; removed_at: string | null }[];
   }[];
@@ -518,6 +520,8 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
       if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
       // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
       const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      // A layout that no longer reads is dropped: the picture goes back to the style's.
+      const design = !clip && v.design ? parseDesign(v.design) : null;
       const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
       const picture = pictureOf(v);
       const pictures = picturesOf(v, pictureUrl);
@@ -537,6 +541,7 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
           ...(pictures.length > 0 ? { pictures } : {}),
           // Without its own edit, an ad starts from the one made as the clip was uploaded.
           ...(edit?.ok ? { videoEdit: edit.value } : clip?.edit ? { videoEdit: clip.edit } : {}),
+          ...(design?.ok && design.value ? { design: design.value } : {}),
         },
       ];
     });

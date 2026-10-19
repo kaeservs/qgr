@@ -380,6 +380,16 @@ describe('toAdSet', () => {
     // An edit that no longer reads is left out, and the ads start from the whole clip.
     expect(clipOf(CLIP_PATH_OK, { name: 'clip.mp4', duration: 12, width: 1, height: 1, size: 1, edit: { keep: [] } })).not.toHaveProperty('edit');
   });
+
+  it('reads a picture ad’s design, leaving out a plain or unreadable one, and any on a clip’s ads', () => {
+    const design = { logo: false, texts: [{ id: 't1', text: 'Book a free consultation', look: 'banner' }], spots: { square: { words: { x: 0.5, y: 0.3, scale: 1.4 }, t1: { x: 0.5, y: 0.9 }, gone: { x: 0, y: 0 } } } };
+    const row = (ad_variants: AdSetRow['ad_variants'], runs: AdSetRow['runs'] = null) => toAdSet({ id: 's', run_id: 'r', strategy_id: 't', title: 'T', created_at: '2026-10-07T10:00:00Z', ad_variants, runs });
+    const set = row([variant('A', { design }), variant('B', { design: { logo: true, texts: [], spots: {} } }), variant('C', { design: { logo: 'yes' } }), variant('D')]);
+    expect(set.variants[0]?.design).toEqual({ logo: false, texts: [{ id: 't1', text: 'Book a free consultation', look: 'banner' }], spots: { square: { words: { x: 0.5, y: 0.3, scale: 1.4 }, t1: { x: 0.5, y: 0.9, scale: 1 } } } });
+    for (const v of set.variants.slice(1)) expect(v).not.toHaveProperty('design');
+    const clip = row([variant('A', { design })], { media_path: CLIP_PATH_OK, media: { name: 'clip.mp4', duration: 12, width: 1280, height: 720, size: 1000 } });
+    expect(clip.variants[0]).not.toHaveProperty('design');
+  });
 });
 
 describe('clips', () => {
