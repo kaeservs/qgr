@@ -169,6 +169,12 @@ if (ctx.report) {
     insights: ctx.report.insights,
     winning_hooks: (ctx.report.hooks || []).map(function (h) { return { text: h.text, days_running: h.days_running, variations: h.variations }; }),
   };
+  // The competitor's ads the team picked for this run, when they picked some.
+  if (Array.isArray(ctx.chosen_ads) && ctx.chosen_ads.length > 0) {
+    material.competitor_report.chosen_ads = ctx.chosen_ads.map(function (a) {
+      return a.headline ? { text: a.text, headline: a.headline } : { text: a.text };
+    });
+  }
 }
 const page = run.page && run.page.ok ? run.page : null;
 if (clip) {

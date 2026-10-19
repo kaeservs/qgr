@@ -1,6 +1,10 @@
 // Turns raw ads into what Claude reads. Days running are computed here from
 // each ad's start date: the model is never asked to count or estimate.
+// Screenshots go on as they are: their ads are read out of the pictures.
 const src = $input.first().json;
+if (Array.isArray(src.shots) && src.shots.length > 0) {
+  return [{ json: src }];
+}
 const now = Date.now();
 const day = 24 * 60 * 60 * 1000;
 const ads = (src.ads || [])

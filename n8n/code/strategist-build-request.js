@@ -66,6 +66,17 @@ const examples = (p.examples || []).slice(0, 8).map(function (e) {
 });
 const TOPICS_RULE = 'brand.topics is what QGR usually posts about: keep the angles within it unless the material points somewhere better, and say so in why.';
 const EXAMPLES_RULE = 'posts_that_work are posts the team kept because they worked for QGR: let them inform the angles and hooks, without copying them.';
+// The competitor's ads the team picked for this run, from the report. Only
+// when they picked some: without them the request is exactly as before.
+const chosenAds = (p.chosenAds || []).map(function (a) {
+  const ad = { platform: a.platform, format: a.format, text: a.text };
+  if (a.headline) ad.headline = a.headline;
+  if (a.cta) ad.cta = a.cta;
+  if (a.angle) ad.angle = a.angle;
+  if (a.days_running !== null && a.days_running !== undefined) ad.days_running = a.days_running;
+  return ad;
+});
+const CHOSEN_RULE = "competitor_report.chosen_ads are the competitor's ads the QGR team picked for this run. Build the angles on them first: each answers one where it can (a better version of its promise, or the gap it leaves), with based_on_hook set to that ad's opening words, word for word. The rest of the report is context.";
 const RESULTS_RULE = "our_past_posts is how QGR's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
 
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
@@ -81,6 +92,7 @@ if (p.report) {
     winning_hooks: p.report.hooks,
     website_summary: p.report.website_summary,
   };
+  if (chosenAds.length > 0) material.competitor_report.chosen_ads = chosenAds;
 } else {
   material.source = { type: run.input, title: (p.page && p.page.title) || run.title, text: p.sourceText || '' };
   if (run.url) material.source.url = run.url;
@@ -149,6 +161,7 @@ return [{
       system: [system]
         .concat(
           run.guidance ? [DIRECTION_RULE] : [],
+          p.report && chosenAds.length > 0 ? [CHOSEN_RULE] : [],
           p.brand && p.brand.topics && p.brand.topics.length > 0 ? [TOPICS_RULE] : [],
           examples.length > 0 ? [EXAMPLES_RULE] : [],
           pastPosts.length > 0 ? [RESULTS_RULE] : [],

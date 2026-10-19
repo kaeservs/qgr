@@ -40,6 +40,10 @@ The tracker scans the tracked competitors on the team's schedule, and the
 strategist and the Content Agent can each be switched off, so a run waits for
 a person before them (Switches and scans below).
 
+A competitor run can also start from screenshots of their ads, which Claude
+reads; and any few of a report's ads, ticked on the competitor page, start a
+run of their own at the strategist (Screenshots and chosen ads below).
+
 A video run can start from a link or from a clip uploaded from the computer,
 cut in the browser first; in the studio every variant of such a run is a video
 made from that clip, edited and exported to MP4 in the browser (Video below).
@@ -55,6 +59,7 @@ posts that work (Brand memory below).
             ── pages read lib/data.ts → Supabase as the signed-in teammate (RLS)
             ── POST /api/link-check → reads a pasted link as it is typed (lib/page)
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
+            ── POST /api/competitor-shots → a signed upload link for a screenshot of a competitor's ad
             ── a clip's words: heard in the browser (lib/speech.ts, public/speech/whisper-worker.js)
             ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
                when the team gave a direction → POST the n8n webhook { runId, startAt }
@@ -69,7 +74,8 @@ posts that work (Brand memory below).
                ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
                update_agent_settings(), set_pictures_auto(), set_pictures_model(),
                set_ads_source(), update_publishing_settings(), set_post_for_real(),
-               set_competitor_tracked()
+               set_competitor_tracked(), start_run_from_ads() then set_run_guidance() and
+               the n8n webhook at the strategist
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
         asking pipeline_next() before each of the last two
     n8n "QGR · Scheduled scans", hourly → start_due_scans() → each run → Run pipeline
@@ -151,7 +157,7 @@ posts that work (Brand memory below).
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
   `set_ads_source`, `update_publishing_settings`, `set_post_for_real`,
   `set_competitor_tracked`, `create_long_video`, `ask_moments_again`,
-  `remove_long_video`, `record_moment_run`.
+  `remove_long_video`, `record_moment_run`, `start_run_from_ads`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
@@ -164,6 +170,11 @@ posts that work (Brand memory below).
   clips that no run uses (a clip cut again or taken away). `create_run` checks
   the clip has finished uploading; any teammate's clip may start a run, so
   anyone can retry one. A clip a run uses is never replaced or removed.
+- Screenshots of competitors' ads live in the private bucket `competitor-shots`
+  (10 MB; PNG, JPEG or WebP) at `shots/{uploader}/{uuid}.{ext}`. A member reads
+  any and uploads only into their own folder; the uploader removes one only
+  while no run names it (`runs.files`). `create_run` checks a screenshot run's
+  files are there.
 - The file a post goes out with lives in the private bucket `post-media` (50 MB,
   JPEG or MP4) at `posts/{uploader}/{uuid}.{ext}`. A member uploads only into
   their own folder and removes a file only while no post waits on it; n8n
@@ -370,7 +381,8 @@ posts that work (Brand memory below).
 - With Apify, "Plan the scan" names the page of Meta's Ad Library to read: a
   pasted link to the library as it is; for a website (or a run from the
   uploaded ads the start card once took, which were only ever file names), a
-  keyword search for the competitor's name. A link to another library
+  keyword search for the competitor's name. A run from screenshots reads those
+  whichever source is chosen (below). A link to another library
   (LinkedIn's, X's, Google's) stops the scan and says why: the actor reads
   Meta's only. "Apify: their Meta ads" runs Apify's Facebook Ads Library
   Scraper and waits for it (`run-sync-get-dataset-items`, 60 ads and 240 s at
@@ -385,6 +397,41 @@ posts that work (Brand memory below).
 - Each ad keeps its page in Meta's Ad Library (`competitor_ads.ad_url`), shown
   as "See the ad" on the competitor page, the only link a competitor's ad is
   shown with. Nothing from Apify is stored but the report.
+- The report keeps every ad the tracker read (`competitor_ads`, up to 60, in
+  its order: longest-running first), with its headline, call to action, the
+  angle Claude gave it and, from screenshots, the screenshot. Reports from
+  before kept four examples.
+
+### Screenshots and chosen ads (`competitor-shots`, `start_run_from_ads`)
+
+- A competitor run can start from screenshots of their ads (the start card's
+  "Screenshots of their ads": pasted, dropped or picked, up to ten, each
+  uploaded at once to `competitor-shots` through `/api/competitor-shots`). The
+  run's input is `upload`, its files the screenshots and its competitor the
+  name the team typed. In the tracker, "Screenshots?" sends it past the ad
+  sources: "Sign the screenshots" signs them for 15 minutes, and the request
+  hands Claude each one by its link after its number, asking it first to read
+  every ad out of them (`ads_read`: the words as written, headline, button,
+  platform, format) and then to report as on any ads. Nothing is guessed:
+  words cut off are left out, and an ad's days running are counted in code
+  only from a start date the screenshot shows (Meta's Ad Library's "Started
+  running on"); otherwise they are not known (`days_known`), and the
+  dashboard and the agents say nothing in their place. The report says it was
+  read from screenshots (`data_source: upload`). A competitor known only from
+  screenshots has no website to scan: "Add screenshots" starts another run.
+- On the competitor page, any few of the latest report's ads (up to 20) can be
+  ticked and made into a run ("Make ads from these"): `start_run_from_ads`
+  records it with the report it came from (`runs.source_report_id`) and the
+  ads chosen (`runs.chosen_ad_ids`), the tracker skipped, and the app starts
+  the pipeline at the strategist. `agent_begin` hands that report and the
+  chosen ads, in the order chosen, to the strategist and the Content Agent;
+  the strategist builds its angles on them first (`competitor_report.
+  chosen_ads`, with one rule), the Content Agent reads their words. Without
+  chosen ads both requests are exactly as before (`n8n/code.test.ts`).
+- Tested in `supabase/competitors.test.ts` and end to end in
+  `n8n/pipeline.test.ts`; the screenshots' signing answer follows Storage's
+  batch signing endpoint (`[{ path, signedURL, error }]`): check the first
+  real run's against `tracker-screenshot-ads.js`.
 
 ### Posting (`posts`, `post_targets`, "QGR · Publisher")
 
@@ -717,6 +764,8 @@ posts that work (Brand memory below).
    because the agents cannot watch it. A scheduled scan reuses the website as
    it was last read. Apify reads Meta's Ad Library for the tracker and nothing
    else: a pasted ad link is handed to it only when it is the library's own.
+   Screenshots the team uploaded reach Claude through links Storage signs
+   for 15 minutes, never a link someone pasted.
 9. **A clip is never changed.** Every edit is instructions on a variant; the
    clip in Storage stays as it was uploaded, and the captions and end card are
    flagged against the guardrails like any other words on an ad.

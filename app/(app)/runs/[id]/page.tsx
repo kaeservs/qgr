@@ -15,6 +15,7 @@ import { getClipUrl, getRun, usingSampleData } from '@/lib/data';
 import { formatDate, formatTime } from '@/lib/format';
 import { GO_AHEAD, STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
+import { SHOT_PATH } from '@/lib/run-input';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
 import type { Run, StageKey } from '@/lib/types';
 import { length } from '@/lib/video/edit';
@@ -50,6 +51,20 @@ function outputLink(key: StageKey, run: Run): { href: string; label: string } | 
 
 function SourceBlock({ run, clipUrl }: { run: Run; clipUrl: string | null }) {
   const { source } = run;
+  if (run.chosenAds && run.output.competitorId) {
+    return (
+      <p className={styles.pageRead}>
+        <CircleCheck size={15} aria-hidden />
+        <span>
+          Built on {run.chosenAds === 1 ? 'one ad' : `${run.chosenAds} ads`} chosen from{' '}
+          <Link href={`/competitors/${run.output.competitorId}`} className="link">
+            the report on this competitor
+          </Link>
+          . The Competitor Tracker was skipped: the report was already there.
+        </span>
+      </p>
+    );
+  }
   if ('clip' in source) {
     const { clip } = source;
     return (
@@ -73,6 +88,21 @@ function SourceBlock({ run, clipUrl }: { run: Run; clipUrl: string | null }) {
     );
   }
   if (source.kind === 'competitor' && source.input === 'upload') {
+    // Screenshots are read by the tracker; runs from before named bare files it never saw.
+    if (source.files.every((f) => SHOT_PATH.test(f))) {
+      return (
+        <p className="muted small">
+          {source.files.length} screenshot{source.files.length === 1 ? '' : 's'} of {source.name}’s ads.{' '}
+          {run.output.competitorId ? (
+            <Link href={`/competitors/${run.output.competitorId}`} className="link">
+              See the ads read from them
+            </Link>
+          ) : (
+            'The ads read from them show on the competitor’s report.'
+          )}
+        </p>
+      );
+    }
     return (
       <ul className={styles.fileList}>
         {source.files.map((f) => (
@@ -205,12 +235,14 @@ export default async function RunPage({ params }: Props) {
                 <h3 className={styles.stageName}>{STAGE_INFO[key].name}</h3>
                 <p className={styles.stageText}>
                   {stage.status === 'skipped'
-                    ? 'Skipped: a custom run has no competitor to track.'
+                    ? run.chosenAds
+                      ? 'Skipped: the run is built on ads chosen from its report.'
+                      : 'Skipped: a custom run has no competitor to track.'
                     : stage.status === 'failed'
                       ? stage.error
                       : stage.status === 'waiting'
                         ? HELD[key]
-                        : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && run.source.kind === 'custom' ? 'Waiting to start.' : WAITING[key]))}
+                        : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && (run.source.kind === 'custom' || run.chosenAds) ? 'Waiting to start.' : WAITING[key]))}
                 </p>
                 {/* The whole card opens the agent's result. */}
                 {link && (
@@ -222,7 +254,7 @@ export default async function RunPage({ params }: Props) {
                 {stage.status === 'failed' && (
                   <div className={styles.stageActions}>
                     <GoAheadButton runId={run.id} label={GO_AHEAD[key].again} again />
-                    {run.source.kind === 'competitor' && run.source.input === 'upload' ? (
+                    {run.chosenAds ? null : run.source.kind === 'competitor' && run.source.input === 'upload' && !run.source.files.every((f) => SHOT_PATH.test(f)) ? (
                       <Link href="/runs/new" className="btn btn-quiet btn-sm">
                         Start from their link
                       </Link>

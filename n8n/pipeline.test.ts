@@ -101,7 +101,7 @@ function conforms(value: unknown, schema: Json, path = '$'): string[] {
 /** What the Messages API returns: the answer as JSON text, after a thinking block, with usage. */
 function claude(body: Json, answer: (material: Json, schema: Json) => Json): Json {
   const schema = (body.output_config as { format: { schema: Json } }).format.schema;
-  const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n')) as Json;
+  const material = materialOf(body);
   const reply = answer(material, schema);
   expect(conforms(reply, schema), 'the answer fits the schema the request sent').toEqual([]);
   return {
@@ -112,7 +112,12 @@ function claude(body: Json, answer: (material: Json, schema: Json) => Json): Jso
   };
 }
 
-const materialOf = (body: Json) => JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n')) as Json;
+/** The JSON material a request sends, after its one-line preface: the message itself, or its first text block when pictures follow. */
+function materialOf(body: Json): Json {
+  const content = (body.messages as { content: string | { type: string; text?: string }[] }[])[0]!.content;
+  const text = typeof content === 'string' ? content : (content.find((b) => b.type === 'text')?.text ?? '');
+  return JSON.parse(text.split('\n').slice(1).join('\n')) as Json;
+}
 
 const trackerAnswer = (material: Json): Json => {
   const ads = material.ads as { id: string }[];
@@ -250,7 +255,7 @@ async function dashboardRun(runId: string): Promise<RunRow> {
         'id', r.id, 'title', r.title, 'kind', r.kind, 'input', r.input, 'url', r.url, 'competitor_name', r.competitor_name,
         'files', r.files, 'excerpt', r.excerpt, 'platforms', r.platforms, 'goal', r.goal, 'summary', r.summary,
         'competitor_id', r.competitor_id, 'created_at', r.created_at, 'approved_at', r.approved_at,
-        'page_ok', r.page -> 'ok', 'page_url', r.page ->> 'url', 'page_title', r.page ->> 'title', 'page_words', r.page -> 'words', 'page_error', r.page ->> 'error',
+        'page_ok', r.page -> 'ok', 'page_url', r.page ->> 'url', 'page_title', r.page ->> 'title', 'page_words', r.page -> 'words', 'page_error', r.page ->> 'error', 'chosen_ad_ids', r.chosen_ad_ids,
         'run_stages', (select json_agg(json_build_object('stage', s.stage, 'status', s.status, 'summary', s.summary, 'error', s.error, 'finished_at', s.finished_at, 'waiting_since', s.waiting_since)) from public.run_stages s where s.run_id = r.id),
         'strategies', (select json_build_object('id', st.id, 'strategy_angles', coalesce((select json_agg(json_build_object('id', a.id)) from public.strategy_angles a where a.strategy_id = st.id), '[]')) from public.strategies st where st.run_id = r.id),
         'ad_sets', (select json_build_object('id', ad.id, 'ad_variants', coalesce((select json_agg(json_build_object('id', v.id)) from public.ad_variants v where v.ad_set_id = ad.id), '[]')) from public.ad_sets ad where ad.run_id = r.id),
@@ -268,8 +273,9 @@ async function dashboardCompetitor(competitorId: string): Promise<CompetitorRow>
       `select json_build_object('id', c.id, 'name', c.name, 'domain', c.domain, 'competitor_reports', coalesce((
         select json_agg(json_build_object(
           'id', cr.id, 'data_source', cr.data_source, 'active_ads', cr.active_ads, 'platforms', cr.platforms, 'insights', cr.insights, 'angles', cr.angles, 'created_at', cr.created_at,
-          'hooks', coalesce((select json_agg(json_build_object('id', h.id, 'rank', h.rank, 'text', h.text, 'platform', h.platform, 'format', h.format, 'days_running', h.days_running, 'variations', h.variations)) from public.hooks h where h.report_id = cr.id), '[]'),
-          'competitor_ads', coalesce((select json_agg(json_build_object('id', a.id, 'platform', a.platform, 'format', a.format, 'text', a.text, 'days_running', a.days_running, 'ad_url', a.ad_url)) from public.competitor_ads a where a.report_id = cr.id), '[]')
+          'hooks', coalesce((select json_agg(json_build_object('id', h.id, 'rank', h.rank, 'text', h.text, 'platform', h.platform, 'format', h.format, 'days_running', h.days_running, 'variations', h.variations, 'days_known', h.days_known)) from public.hooks h where h.report_id = cr.id), '[]'),
+          'competitor_ads', coalesce((select json_agg(json_build_object('id', a.id, 'platform', a.platform, 'format', a.format, 'text', a.text, 'days_running', a.days_running, 'ad_url', a.ad_url,
+            'headline', a.headline, 'cta', a.cta, 'angle', a.angle, 'screenshot_path', a.screenshot_path, 'position', a.position, 'days_known', a.days_known)) from public.competitor_ads a where a.report_id = cr.id), '[]')
         )) from public.competitor_reports cr where cr.competitor_id = c.id), '[]')) from public.competitors c where c.id = $1`,
       [competitorId],
     ),
@@ -462,6 +468,7 @@ describe('a competitor run, from their website to three ads', () => {
       [63, 'https://www.facebook.com/ads/library/?id=5550002'],
       [41, 'https://www.facebook.com/ads/library/?id=5550003'],
       [20, 'https://www.facebook.com/ads/library/?id=5550004'],
+      [7, 'https://www.facebook.com/ads/library/?id=5550005'],
     ]);
   });
 
@@ -495,6 +502,86 @@ describe('a competitor run, from their website to three ads', () => {
     expect((JSON.parse(String((tracker.body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n')) as Json).website_text).toBe('');
     // The activity names the site that was read: here the local stand-in for atlas.example.
     expect(await events(runId)).toContain('Could not read 127.0.0.1: The site turned the reader away (403).');
+  });
+});
+
+describe('a competitor from screenshots of their ads, and a run on a few of them', () => {
+  const STORAGE = 'https://project.supabase.co/storage/v1';
+  const shot = (n: number) => `shots/${teammate}/0b6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d${String(n).padStart(2, '0')}.png`;
+  // What Claude reads out of the pictures, then reports on, as it would from the request it was sent.
+  const shotsAnswer = (material: Json): Json => {
+    expect(material).toMatchObject({ screenshots: 2, competitor: { name_hint: 'Meridian EB-5' } });
+    const started = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+    const read = (id: string, n: number, text: string, started_on = '') => ({ id, shot: n, platform: 'meta', format: 'image', page_name: 'Meridian EB-5', text, headline: 'Talk to us', cta: 'Learn more', started_on });
+    return {
+      ads_read: [read('a1', 1, 'Your kids should not age out while you wait.', started), read('a2', 1, 'Families plan EB-5 early.'), read('a3', 2, 'Rural projects, explained.')],
+      competitor_name: 'Meridian EB-5 Advisors LLC',
+      summary: 'They lead with children.',
+      website_summary: '',
+      insights: ['Two of three ads lead with families: a small sample.'],
+      hooks: [{ text: 'Your kids should not age out while you wait.', ad_ids: ['a1', 'a2'] }, { text: 'Rural projects, explained.', ad_ids: ['a3'] }],
+      ad_angles: [{ ad_id: 'a1', angle: 'Family & education' }, { ad_id: 'a2', angle: 'Family & education' }, { ad_id: 'a3', angle: 'Process explained' }],
+    };
+  };
+
+  it('reads the ads out of the screenshots and keeps each with its picture, then a run on two of them skips the tracker', async () => {
+    const files = [shot(1), shot(2)];
+    await t.asUser(teammate, async () => {
+      for (const f of files) await t.db.query(`insert into storage.objects (bucket_id, name) values ('competitor-shots', $1)`, [f]);
+    });
+    const runId = await startRun({ source: { kind: 'competitor', input: 'upload', name: 'Meridian EB-5', files }, platforms: ['meta'], goal: 'consultations' });
+
+    // The tracker, in the workflow's order down the "Screenshots?" branch.
+    const beginJson = await begin(runId, 'tracker');
+    const plan = step('tracker-plan.js', beginJson);
+    expect(plan.screenshots).toEqual(files);
+    const signed = { statusCode: 200, body: files.map((path) => ({ path, signedURL: `/object/sign/competitor-shots/${path}?token=t`, error: null })) };
+    const shots = step('tracker-screenshot-ads.js', signed, { 'Plan the scan': plan }, { __STORAGE__: STORAGE });
+    const prepared = step('tracker-prepare-ads.js', shots);
+    const { body } = step('tracker-build-request.js', prepared) as { body: Json };
+    const answer = step('tracker-read-answer.js', claude(body, shotsAnswer), { 'Prepare the ads': prepared });
+    expect(answer.ok, String(answer.p_error)).toBe(true);
+    await rpc('agent_finish_tracker', { p_run_id: answer.p_run_id, p_report: answer.p_report, p_usage: answer.p_usage });
+
+    const run = toRun(await dashboardRun(runId));
+    expect(run.stages.tracker).toMatchObject({ status: 'done', summary: 'Read 3 ads from 2 screenshots and found 2 hooks.' });
+    expect(run.activity.map((e) => e.text)).toContain('2 screenshots of their ads');
+    const competitor = toCompetitor(await dashboardCompetitor(run.output.competitorId!), (path) => `https://signed.example/${path}`);
+    expect(competitor).toMatchObject({ name: 'Meridian EB-5', dataSource: 'upload', activeAds: 3 });
+    expect(competitor!.hooks.map((h) => [h.text, h.daysRunning])).toEqual([
+      ['Your kids should not age out while you wait.', 30],
+      ['Rural projects, explained.', null],
+    ]);
+    expect(competitor!.examples.map((a) => [a.text, a.daysRunning, a.angle, a.screenshot])).toEqual([
+      ['Your kids should not age out while you wait.', 30, 'Family & education', `https://signed.example/${files[0]}`],
+      ['Families plan EB-5 early.', null, 'Family & education', `https://signed.example/${files[0]}`],
+      ['Rural projects, explained.', null, 'Process explained', `https://signed.example/${files[1]}`],
+    ]);
+
+    // A person ticks two of the ads and builds a run on them alone.
+    const [first, second, third] = competitor!.examples;
+    const fromAds = await t.asUser(teammate, () =>
+      t.value<string>(`select public.start_run_from_ads($1, $2, array['meta'], 'consultations')`, [competitor!.reportId, [third!.id, first!.id]]),
+    );
+    const chosenRun = toRun(await dashboardRun(fromAds));
+    expect(chosenRun).toMatchObject({ title: 'Meridian EB-5 · 2 chosen ads', chosenAds: 2, stages: { tracker: { status: 'skipped' } }, output: { competitorId: competitor!.id } });
+
+    const strategist = await runStrategist(fromAds);
+    expect(strategist.failed).toBeNull();
+    const material = materialOf(strategist.body);
+    expect((material.competitor_report as Json).chosen_ads).toEqual([
+      { platform: 'meta', format: 'image', text: 'Rural projects, explained.', headline: 'Talk to us', cta: 'Learn more', angle: 'Process explained' },
+      { platform: 'meta', format: 'image', text: 'Your kids should not age out while you wait.', headline: 'Talk to us', cta: 'Learn more', angle: 'Family & education', days_running: 30 },
+    ]);
+    expect(String(strategist.body.system)).toContain('competitor_report.chosen_ads');
+    expect(JSON.stringify(material)).not.toContain(second!.text);
+
+    const { body: contentBody } = await runContent(fromAds);
+    expect((materialOf(contentBody).competitor_report as Json).chosen_ads).toEqual([
+      { text: 'Rural projects, explained.', headline: 'Talk to us' },
+      { text: 'Your kids should not age out while you wait.', headline: 'Talk to us' },
+    ]);
+    expect(toRun(await dashboardRun(fromAds)).stages).toMatchObject({ strategist: { status: 'done' }, content: { status: 'done' } });
   });
 });
 
@@ -573,7 +660,7 @@ describe('the switches and the schedule, down to the ads', () => {
     const page = await readPage(`${siteUrl}/`, { policy: local });
     const first = await startRun({ source: { kind: 'competitor', input: 'website', url: 'horizonvisa.example' }, platforms: ['meta', 'linkedin'], goal: 'webinar' }, page);
     await runTracker(first);
-    await t.db.query(`update public.competitors set tracked = (domain = 'horizonvisa.example')`);
+    await t.db.query(`update public.competitors set tracked = coalesce(domain = 'horizonvisa.example', false)`);
 
     // The strategist waits after a scan; the content agent goes on by itself.
     await settings({ strategist: false, content: true, every: 'day' });

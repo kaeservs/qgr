@@ -7,14 +7,27 @@ import { parseVideoEdit } from './video/edit';
 import type { VideoEdit } from './video/edit';
 import { compactEdit } from './video/timeline';
 
-export interface NewRunInput {
-  source: RunSource;
+/** What every run takes besides where it starts from. */
+export interface RunOptions {
   title?: string;
   platforms: Platform[];
   goal: Goal;
   /** The team's direction for the agents: what to make of the source, which hooks to focus on. */
   guidance?: string;
 }
+
+export interface NewRunInput extends RunOptions {
+  source: RunSource;
+}
+
+/** A run built on a few of a report's ads, chosen by a person: it starts at the strategist. */
+export interface NewAdsRun extends RunOptions {
+  reportId: string;
+  adIds: string[];
+}
+
+/** The most ads a run can be built on. The database holds the same limit. */
+export const MAX_CHOSEN_ADS = 20;
 
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -30,6 +43,12 @@ const MAX_TITLE = 120;
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 /** Where an uploaded clip is kept: the uploader's own folder, a fresh name, a video extension. */
 export const CLIP_PATH = new RegExp(`^uploads/${UUID}/${UUID}\\.(mp4|webm|mov)$`);
+/** Where a screenshot of a competitor's ad is kept (bucket competitor-shots). The database checks the same. */
+export const SHOT_PATH = new RegExp(`^shots/${UUID}/${UUID}\\.(jpg|png|webp)$`);
+/** Screenshots a run reads at most, and how big each may be: the bucket refuses more than 10 MB. */
+export const MAX_SHOTS = 10;
+export const MAX_SHOT_BYTES = 10 * 1024 * 1024;
+const MAX_NAME = 80;
 
 /**
  * Accepts what people paste: `horizonvisa.com`, `www.x.com/...` or a full URL.
@@ -121,9 +140,18 @@ function parseSource(raw: unknown): ParseResult<RunSource> {
       if (!url) return { ok: false, error: 'Paste a full website or ad link, like horizonvisa.com.' };
       return { ok: true, value: { kind: 'competitor', input: raw.input, url } };
     }
-    // Uploaded ads were only ever their file names: the tracker never saw them. A
-    // link to their ads in Meta's Ad Library reads the real ones (runs from before keep showing).
-    if (raw.input === 'upload') return { ok: false, error: 'Uploading their ads is gone: paste their website, or the link to their ads in Meta’s Ad Library.' };
+    // Screenshots of their ads, uploaded here: the tracker has Claude read the ads out of them.
+    if (raw.input === 'upload') {
+      const name = typeof raw.name === 'string' ? raw.name.replace(/\s+/g, ' ').trim() : '';
+      if (!name) return { ok: false, error: 'Say whose ads these are.' };
+      if (name.length > MAX_NAME) return { ok: false, error: 'That name is too long.' };
+      const files = Array.isArray(raw.files) ? raw.files : [];
+      if (files.length === 0) return { ok: false, error: 'Add at least one screenshot of their ads.' };
+      if (files.length > MAX_SHOTS) return { ok: false, error: `Add up to ${MAX_SHOTS} screenshots.` };
+      if (!files.every((f): f is string => typeof f === 'string' && SHOT_PATH.test(f))) return { ok: false, error: 'A screenshot was not uploaded here.' };
+      if (new Set(files).size !== files.length) return { ok: false, error: 'A screenshot is there twice.' };
+      return { ok: true, value: { kind: 'competitor', input: 'upload', name, files } };
+    }
     return { ok: false, error: 'Unknown competitor input.' };
   }
 
@@ -154,10 +182,30 @@ function parseSource(raw: unknown): ParseResult<RunSource> {
 /** Validates a new-run request. The browser checks the same rules first; this is the one that counts. */
 export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
   if (!isRecord(body)) return { ok: false, error: 'The request was empty.' };
-
   const source = parseSource(body.source);
   if (!source.ok) return source;
+  const options = parseRunOptions(body);
+  if (!options.ok) return options;
+  return { ok: true, value: { source: source.value, ...options.value } };
+}
 
+/** A row's id as the app passes it around (the database checks it is a uuid; the sample data's are words). */
+const RECORD_ID = /^[\w-]{1,64}$/;
+
+/** Validates a run built on chosen ads: the report's id and up to 20 of its ads' ids, and the usual options. */
+export function parseAdsRun(body: unknown): ParseResult<NewAdsRun> {
+  if (!isRecord(body)) return { ok: false, error: 'The request was empty.' };
+  if (typeof body.reportId !== 'string' || !RECORD_ID.test(body.reportId)) return { ok: false, error: 'That report is not there any more.' };
+  const ids = Array.isArray(body.adIds) ? body.adIds : [];
+  if (ids.length === 0) return { ok: false, error: 'Choose at least one of their ads.' };
+  if (ids.length > MAX_CHOSEN_ADS) return { ok: false, error: `Choose up to ${MAX_CHOSEN_ADS} ads.` };
+  if (!ids.every((id): id is string => typeof id === 'string' && RECORD_ID.test(id)) || new Set(ids).size !== ids.length) return { ok: false, error: 'Choose ads from this report.' };
+  const options = parseRunOptions(body);
+  if (!options.ok) return options;
+  return { ok: true, value: { reportId: body.reportId, adIds: ids, ...options.value } };
+}
+
+function parseRunOptions(body: Record<string, unknown>): ParseResult<RunOptions> {
   const platforms = Array.isArray(body.platforms) ? [...new Set(body.platforms.filter((p) => includes(PLATFORMS, p)))] : [];
   if (platforms.length === 0) return { ok: false, error: 'Pick at least one platform.' };
 
@@ -173,7 +221,6 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
   return {
     ok: true,
     value: {
-      source: source.value,
       platforms: PLATFORMS.filter((p) => platforms.includes(p)),
       goal: body.goal,
       ...(title ? { title } : {}),

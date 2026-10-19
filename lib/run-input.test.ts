@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { linkToRead, MAX_GUIDANCE, MIN_EXCERPT, normalizeUrl, parseNewRun, runTitle } from './run-input';
+import { linkToRead, MAX_GUIDANCE, MIN_EXCERPT, normalizeUrl, parseAdsRun, parseNewRun, runTitle } from './run-input';
 
 describe('normalizeUrl', () => {
   it('accepts what people paste', () => {
@@ -30,11 +30,21 @@ describe('parseNewRun', () => {
     expect(r).toEqual({ ok: true, value: { source: { kind: 'competitor', input: 'website', url: 'https://horizonvisa.com/' }, platforms: ['meta', 'x'], goal: 'consultations' } });
   });
 
-  it('no longer starts a run from uploaded ads, and says what to paste instead', () => {
-    expect(parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: 'Atlas', files: ['a.png'] } })).toEqual({
-      ok: false,
-      error: 'Uploading their ads is gone: paste their website, or the link to their ads in Meta’s Ad Library.',
-    });
+  it('starts a run from screenshots of their ads uploaded here, named for whose they are', () => {
+    const shot = (n: number, ext = 'png') => `shots/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a${String(n).padStart(2, '0')}.${ext}`;
+    const source = (s: Record<string, unknown>) => parseNewRun({ ...base, source: { kind: 'competitor', input: 'upload', name: '  Atlas   Visa ', files: [shot(1), shot(2, 'jpg')], ...s } });
+    expect(source({})).toEqual({ ok: true, value: { source: { kind: 'competitor', input: 'upload', name: 'Atlas Visa', files: [shot(1), shot(2, 'jpg')] }, platforms: ['meta', 'x'], goal: 'consultations' } });
+    const error = (s: Record<string, unknown>) => {
+      const r = source(s);
+      return r.ok ? null : r.error;
+    };
+    expect(error({ name: ' ' })).toBe('Say whose ads these are.');
+    expect(error({ files: [] })).toBe('Add at least one screenshot of their ads.');
+    expect(error({ files: Array.from({ length: 11 }, (_, i) => shot(i)) })).toBe('Add up to 10 screenshots.');
+    // Runs from before named bare files the tracker never saw.
+    expect(error({ files: ['a.png'] })).toBe('A screenshot was not uploaded here.');
+    expect(error({ files: [shot(1, 'gif')] })).toBe('A screenshot was not uploaded here.');
+    expect(error({ files: [shot(1), shot(1)] })).toBe('A screenshot is there twice.');
   });
 
   it('accepts a custom link and refuses a short pasted text', () => {
@@ -124,5 +134,29 @@ describe('linkToRead', () => {
     expect(linkToRead({ kind: 'competitor', input: 'upload', name: 'Atlas', files: ['a.png'] })).toBeNull();
     expect(linkToRead({ kind: 'custom', type: 'blog', url: 'https://journal.example/post' })).toBe('https://journal.example/post');
     expect(linkToRead({ kind: 'custom', type: 'text', excerpt: 'x'.repeat(60) })).toBeNull();
+  });
+});
+
+describe('parseAdsRun', () => {
+  const base = { reportId: '0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09', adIds: ['a-1', 'a-2'], platforms: ['x', 'meta'], goal: 'webinar' };
+  const error = (body: Record<string, unknown>) => {
+    const r = parseAdsRun({ ...base, ...body });
+    return r.ok ? null : r.error;
+  };
+
+  it('takes a report’s id, up to 20 of its ads and the usual choices', () => {
+    expect(parseAdsRun({ ...base, guidance: ' Lead with families. ', title: ' Push ' })).toEqual({
+      ok: true,
+      value: { reportId: base.reportId, adIds: ['a-1', 'a-2'], platforms: ['meta', 'x'], goal: 'webinar', title: 'Push', guidance: 'Lead with families.' },
+    });
+  });
+
+  it('refuses no ads, too many, the same twice, and anything that is not an id', () => {
+    expect(error({ adIds: [] })).toBe('Choose at least one of their ads.');
+    expect(error({ adIds: Array.from({ length: 21 }, (_, i) => `a-${i}`) })).toBe('Choose up to 20 ads.');
+    expect(error({ adIds: ['a-1', 'a-1'] })).toBe('Choose ads from this report.');
+    expect(error({ adIds: ['a 1'] })).toBe('Choose ads from this report.');
+    expect(error({ reportId: '../x' })).toBe('That report is not there any more.');
+    expect(error({ platforms: [] })).toBe('Pick at least one platform.');
   });
 });

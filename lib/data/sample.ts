@@ -58,7 +58,7 @@ const brand: BrandProfile = {
 function startedFrom(input: NewRunInput): string {
   const { source } = input;
   if (source.kind === 'competitor') {
-    if (source.input === 'upload') return `Run started from ${source.files.length} uploaded ad${source.files.length === 1 ? '' : 's'}`;
+    if (source.input === 'upload') return `Run started from ${source.files.length} screenshot${source.files.length === 1 ? '' : 's'} of their ads: sample data keeps no uploads`;
     return source.input === 'website' ? `Run started from ${hostOf(source.url)}` : 'Run started from an ad link';
   }
   return `Run started from ${{ podcast: 'a podcast episode', blog: 'a blog post', video: 'a video', text: 'pasted text' }[source.type]}`;
@@ -130,6 +130,37 @@ export const sampleData: DataSource = {
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },
+  startRunFromAds: async (input) => {
+    const competitor = competitorList().find((c) => c.reportId === input.reportId);
+    if (!competitor) return { ok: false, status: 400, error: 'That report is not there any more.' };
+    const chosen = competitor.examples.filter((a) => input.adIds.includes(a.id));
+    if (chosen.length !== input.adIds.length) return { ok: false, status: 400, error: 'Choose ads from this report.' };
+    const now = new Date().toISOString();
+    const list = runList();
+    const next = Math.max(...list.map((r) => Number(r.id.slice(2)) || 0)) + 1;
+    const ads = `${chosen.length} ad${chosen.length === 1 ? '' : 's'}`;
+    list.push({
+      id: `r-${next}`,
+      title: input.title ?? `${competitor.name} · ${chosen.length} chosen ad${chosen.length === 1 ? '' : 's'}`,
+      source: competitor.domain ? { kind: 'competitor', input: 'website', url: `https://${competitor.domain}/` } : { kind: 'competitor', input: 'upload', name: competitor.name, files: [] },
+      platforms: input.platforms,
+      goal: input.goal,
+      createdAt: now,
+      stages: { tracker: { status: 'skipped' }, strategist: { status: 'queued' }, content: { status: 'queued' } },
+      output: { competitorId: competitor.id },
+      counts: {},
+      chosenAds: chosen.length,
+      activity: [
+        { at: now, text: 'Run started' },
+        { at: now, text: `Competitor Tracker skipped: built on ${ads} chosen from the report on ${competitor.name}` },
+        { at: now, text: 'Sample data: the agents don’t run here' },
+      ],
+      ...(input.guidance ? { guidance: input.guidance } : {}),
+    });
+    return { ok: true, value: { id: `r-${next}` }, sample: true };
+  },
+  createShotUpload: async (extension) => ({ ok: true, value: { path: `shots/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
+  deleteShot: async () => ({ ok: true, value: null, sample: true }),
   saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy), edit.posts) }, sample: true }),
   approveVariant: async () => ({ ok: true, value: null, sample: true }),
   saveBrandProfile: async () => ({ ok: true, value: null, sample: true }),

@@ -43,10 +43,10 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
-  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url))';
+  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit';
@@ -61,6 +61,8 @@ const MEDIA_BUCKET = 'run-media';
 /** The files posts go out with, made in the browser. Removed once every place has its post. */
 const POST_BUCKET = 'post-media';
 const EDIT_MEDIA_BUCKET = 'edit-media';
+/** Screenshots of competitors' ads, uploaded by the team; the tracker reads the ads out of them. */
+const SHOTS_BUCKET = 'competitor-shots';
 /** The pictures an image model made for ads, uploaded by n8n. */
 const PICTURE_BUCKET = 'ad-pictures';
 /** Long enough to read a page and post from it. */
@@ -110,7 +112,7 @@ const competitors = cache(async () => {
     .limit(1, { referencedTable: 'competitor_reports' });
   if (error) readFailed('competitors', error);
   return data
-    .map(toCompetitor)
+    .map((row) => toCompetitor(row))
     .filter((c) => c !== null)
     .sort((a, b) => b.lastScanAt.localeCompare(a.lastScanAt));
 });
@@ -232,7 +234,28 @@ export const liveData: DataSource = {
   getRuns: async () => (await runRows()).map(toRun),
   getRun: (id) => runById(id),
   getCompetitors: () => competitors(),
-  getCompetitor: async (id) => (await competitors()).find((c) => c.id === id) ?? null,
+  getCompetitor: async (id) => {
+    if (!UUID.test(id)) return null;
+    const supabase = await db();
+    const { data, error } = await supabase
+      .from('competitors')
+      .select(COMPETITOR)
+      .eq('id', id)
+      .order('created_at', { referencedTable: 'competitor_reports', ascending: false })
+      .limit(1, { referencedTable: 'competitor_reports' })
+      .maybeSingle();
+    if (error) readFailed('the competitor', error);
+    if (!data) return null;
+    // Screenshots are private: each is shown through a link signed as the viewer, all in one call.
+    const paths = [...new Set(data.competitor_reports.flatMap((r) => r.competitor_ads.flatMap((a) => (a.screenshot_path ? [a.screenshot_path] : []))))];
+    const links = new Map<string, string>();
+    if (paths.length > 0) {
+      const { data: signed, error: signError } = await supabase.storage.from(SHOTS_BUCKET).createSignedUrls(paths, PICTURE_SECONDS);
+      if (signError) console.error('Signing screenshots failed', signError);
+      for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+    }
+    return toCompetitor(data, (path) => links.get(path));
+  },
   getStrategies: () => strategies(),
   getStrategy: async (id) => (await strategies()).find((s) => s.id === id) ?? null,
   getStrategyForCompetitor: async (competitorId) => (await strategies()).find((s) => s.competitorIds.includes(competitorId)) ?? null,
@@ -292,6 +315,57 @@ export const liveData: DataSource = {
       if (reportError) console.error('Recording that the run could not start failed', reportError);
     }
     return { ok: true, value: { id }, sample: false };
+  },
+
+  startRunFromAds: async (input) => {
+    const pipeline = pipelineConfig();
+    if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so runs can’t start.' };
+    const supabase = await db();
+    const { data: id, error } = await supabase.rpc('start_run_from_ads', {
+      p_report_id: input.reportId,
+      p_ad_ids: input.adIds,
+      p_platforms: input.platforms,
+      p_goal: input.goal,
+      ...(input.title ? { p_title: input.title } : {}),
+    });
+    if (error) return refused(error, 'The run could not be saved.');
+    if (input.guidance) {
+      const { error: guidanceError } = await supabase.rpc('set_run_guidance', { p_run_id: id, p_guidance: input.guidance });
+      if (guidanceError) {
+        const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: 'The direction for the agents could not be saved, so the run did not start.' });
+        if (reportError) console.error('Recording that the run could not start failed', reportError);
+        return refused(guidanceError, 'The direction for the agents could not be saved.');
+      }
+    }
+    // The tracker is skipped: the report is already there.
+    const started = await startPipeline(pipeline, id, 'strategist');
+    if (!started.ok) {
+      const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: started.error });
+      if (reportError) console.error('Recording that the run could not start failed', reportError);
+    }
+    return { ok: true, value: { id }, sample: false };
+  },
+
+  createShotUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to upload.' };
+    const path = `shots/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    const { data, error } = await (await db()).storage.from(SHOTS_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing a screenshot upload link failed', error);
+      return { ok: false, status: 500, error: 'The screenshot could not be uploaded.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deleteShot: async (path) => {
+    // Storage refuses (by its policy) a screenshot that is not the caller's or that a run uses.
+    const { data, error } = await (await db()).storage.from(SHOTS_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing a screenshot failed', error);
+      return { ok: false, status: 500, error: 'The screenshot could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That screenshot is in use or already gone.' };
   },
 
   saveVariant: async (variantId, edit) => {

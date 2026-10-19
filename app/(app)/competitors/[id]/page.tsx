@@ -1,9 +1,9 @@
-import { ArrowLeft, ArrowRight, Clock3, ExternalLink, FlaskConical, Layers, Radar } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock3, ExternalLink, FlaskConical, ImagePlus, Images, Layers, Radar } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { AdThumb } from '@/components/competitors/AdThumb';
 import { AngleBars } from '@/components/competitors/AngleBars';
+import { ChooseAds } from '@/components/competitors/ChooseAds';
 import { TrackedSwitch } from '@/components/competitors/TrackedSwitch';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlatformIcon, PlatformIcons } from '@/components/ui/PlatformIcon';
@@ -26,10 +26,12 @@ export default async function CompetitorPage({ params }: Props) {
   const [c, now, strategy] = await Promise.all([getCompetitor(id), getNow(), getStrategyForCompetitor(id)]);
   if (!c) notFound();
 
-  const hooks = [...c.hooks].sort((a, b) => b.daysRunning - a.daysRunning);
-  const longest = hooks[0]?.daysRunning ?? 0;
-  // A competitor known only from ads uploaded before that tab went has no site to scan: start from a link instead.
-  const rescan = c.domain ? `/runs/new?url=${encodeURIComponent(c.domain)}` : '/runs/new';
+  // Ranked by how long they have run; one whose days are not known (a screenshot rarely shows them) comes after.
+  const hooks = [...c.hooks].sort((a, b) => (b.daysRunning ?? -1) - (a.daysRunning ?? -1));
+  const longest = hooks[0]?.daysRunning ?? null;
+  const shots = c.dataSource === 'upload';
+  // A competitor known from screenshots has no site to scan: more screenshots, then.
+  const rescan = c.domain ? `/runs/new?url=${encodeURIComponent(c.domain)}` : `/runs/new?shots=${encodeURIComponent(c.name)}`;
 
   return (
     <div className="page">
@@ -59,8 +61,8 @@ export default async function CompetitorPage({ params }: Props) {
         <div className="page-actions">
           {c.domain && <TrackedSwitch competitorId={c.id} name={c.name} tracked={c.tracked} />}
           <Link href={rescan} className="btn btn-ghost">
-            <Radar size={17} aria-hidden />
-            Scan again
+            {c.domain ? <Radar size={17} aria-hidden /> : <ImagePlus size={17} aria-hidden />}
+            {c.domain ? 'Scan again' : 'Add screenshots'}
           </Link>
           {strategy ? (
             <Link href={`/strategy/${strategy.id}`} className="btn btn-primary">
@@ -85,9 +87,18 @@ export default async function CompetitorPage({ params }: Props) {
         </p>
       )}
 
+      {shots && (
+        <p className={styles.sampleNote}>
+          <Images size={17} aria-hidden />
+          <span>
+            <strong>Read from screenshots.</strong> The tracker read these ads from screenshots the team uploaded. How long an ad has run shows only where its screenshot said when it started.
+          </span>
+        </p>
+      )}
+
       <dl className={styles.kpis}>
         <div className="card">
-          <dt>Active ads</dt>
+          <dt>{shots ? 'Ads read' : 'Active ads'}</dt>
           <dd>{c.activeAds}</dd>
         </div>
         <div className="card">
@@ -97,8 +108,8 @@ export default async function CompetitorPage({ params }: Props) {
         <div className="card">
           <dt>Longest running</dt>
           <dd>
-            {longest}
-            <span> days</span>
+            {longest ?? '—'}
+            {longest !== null && <span> days</span>}
           </dd>
         </div>
         <div className="card">
@@ -125,7 +136,9 @@ export default async function CompetitorPage({ params }: Props) {
           <h2 id="angles" className="card-title">
             Angles in their ads
           </h2>
-          <p className="muted small">Share of {c.activeAds} active ads</p>
+          <p className="muted small">
+            Share of {c.activeAds} {shots ? 'ads read' : 'active ads'}
+          </p>
           <AngleBars angles={c.angles} total={c.activeAds} />
         </section>
       </div>
@@ -135,7 +148,7 @@ export default async function CompetitorPage({ params }: Props) {
           <h2 id="hooks" className="display h2">
             Winning hooks
           </h2>
-          <span className="muted small">Ranked by how long they’ve kept running</span>
+          <span className="muted small">{shots ? 'Ranked by how long they’ve kept running, where a screenshot shows it' : 'Ranked by how long they’ve kept running'}</span>
         </div>
         <ol className={`card ${styles.hooks}`}>
           {hooks.map((h, i) => (
@@ -156,13 +169,19 @@ export default async function CompetitorPage({ params }: Props) {
                 </p>
               </div>
               <div className={styles.hookDays}>
-                <span className={styles.hookDaysValue}>
-                  <Clock3 size={14} aria-hidden />
-                  {h.daysRunning} days
-                </span>
-                <span className={styles.meter} aria-hidden>
-                  <span style={{ width: `${(h.daysRunning / longest) * 100}%` }} />
-                </span>
+                {h.daysRunning !== null && longest ? (
+                  <>
+                    <span className={styles.hookDaysValue}>
+                      <Clock3 size={14} aria-hidden />
+                      {h.daysRunning} days
+                    </span>
+                    <span className={styles.meter} aria-hidden>
+                      <span style={{ width: `${(h.daysRunning / longest) * 100}%` }} />
+                    </span>
+                  </>
+                ) : (
+                  <span className="muted small">{h.daysRunning === 0 ? 'Started today' : 'Days not shown'}</span>
+                )}
               </div>
             </li>
           ))}
@@ -175,12 +194,9 @@ export default async function CompetitorPage({ params }: Props) {
             Their ads
           </h2>
           {c.dataSource === 'apify' && <span className="muted small">Active in Meta’s Ad Library, read through Apify</span>}
+          {shots && <span className="muted small">Each as its screenshot, with the words the tracker read from it</span>}
         </div>
-        <div className={styles.gallery}>
-          {c.examples.map((ad) => (
-            <AdThumb key={ad.id} ad={ad} />
-          ))}
-        </div>
+        <ChooseAds competitor={c.name} reportId={c.reportId} ads={c.examples} />
       </section>
     </div>
   );

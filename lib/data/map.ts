@@ -100,6 +100,8 @@ export interface RunRow {
   media_path: string | null;
   media: Json | null;
   guidance: string | null;
+  /** Set on a run built on a few of a report's ads, chosen by a person. */
+  chosen_ad_ids?: string[] | null;
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -120,8 +122,22 @@ export interface CompetitorRow {
     insights: string[];
     angles: Json;
     created_at: string;
-    hooks: { id: string; rank: number; text: string; platform: string; format: string; days_running: number; variations: number }[];
-    competitor_ads: { id: string; platform: string; format: string; text: string; days_running: number; ad_url: string | null }[];
+    hooks: { id: string; rank: number; text: string; platform: string; format: string; days_running: number; variations: number; days_known: boolean }[];
+    competitor_ads: {
+      id: string;
+      platform: string;
+      format: string;
+      text: string;
+      days_running: number;
+      ad_url: string | null;
+      headline: string | null;
+      cta: string | null;
+      angle: string | null;
+      screenshot_path: string | null;
+      /** The tracker's order; null on reports from before it kept every ad. */
+      position: number | null;
+      days_known: boolean;
+    }[];
   }[];
 }
 
@@ -349,6 +365,7 @@ export function toRun(row: RunRow): RunWithStatus {
     activity: [...(row.run_events ?? [])].sort((a, b) => a.at.localeCompare(b.at)).map((e) => ({ at: e.at, text: e.text })),
     ...(pageOf(row) ? { page: pageOf(row) as PageSummary } : {}),
     ...(row.guidance ? { guidance: row.guidance } : {}),
+    ...(row.chosen_ad_ids && row.chosen_ad_ids.length > 0 ? { chosenAds: row.chosen_ad_ids.length } : {}),
   };
   return { ...run, status: runStatus(run) };
 }
@@ -389,34 +406,46 @@ export function toNotices(rows: RunRow[], limit = 6): Notice[] {
 
 // ---------------------------------------------------------------- reports, strategies, ads
 
-export function toCompetitor(row: CompetitorRow): Competitor | null {
+/**
+ * The competitor and their latest report. A screenshot is shown through a link
+ * signed for the viewer (`shotUrl`); lists sign none.
+ */
+export function toCompetitor(row: CompetitorRow, shotUrl: (path: string) => string | undefined = () => undefined): Competitor | null {
   const report = [...row.competitor_reports].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   if (!report) return null;
   const hooks = [...report.hooks]
     .sort((a, b) => a.rank - b.rank)
     .flatMap((h): Hook[] =>
-      isOneOf(PLATFORMS, h.platform) ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_running, variations: h.variations }] : [],
-    );
-  const examples = [...report.competitor_ads]
-    .sort((a, b) => b.days_running - a.days_running)
-    .flatMap((a, i): AdExample[] =>
-      isOneOf(PLATFORMS, a.platform)
-        ? [
-            {
-              id: a.id,
-              platform: a.platform,
-              format: formatOf(a.format),
-              text: a.text,
-              daysRunning: a.days_running,
-              tone: TONES[i % TONES.length] ?? 'slate',
-              ...(a.ad_url && LIBRARY_AD.test(a.ad_url) ? { url: a.ad_url } : {}),
-            },
-          ]
+      isOneOf(PLATFORMS, h.platform)
+        ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_known ? h.days_running : null, variations: h.variations }]
         : [],
     );
+  // In the tracker's order (longest-running first); reports from before it kept every ad, by days.
+  const examples = [...report.competitor_ads]
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || b.days_running - a.days_running)
+    .flatMap((a, i): AdExample[] => {
+      if (!isOneOf(PLATFORMS, a.platform)) return [];
+      const shot = a.screenshot_path ? shotUrl(a.screenshot_path) : undefined;
+      return [
+        {
+          id: a.id,
+          platform: a.platform,
+          format: formatOf(a.format),
+          text: a.text,
+          daysRunning: a.days_known ? a.days_running : null,
+          tone: TONES[i % TONES.length] ?? 'slate',
+          ...(a.headline ? { headline: a.headline } : {}),
+          ...(a.cta ? { cta: a.cta } : {}),
+          ...(a.angle ? { angle: a.angle } : {}),
+          ...(a.ad_url && LIBRARY_AD.test(a.ad_url) ? { url: a.ad_url } : {}),
+          ...(shot ? { screenshot: shot } : {}),
+        },
+      ];
+    });
   return {
     id: row.id,
     name: row.name,
+    reportId: report.id,
     tracked: row.tracked ?? true,
     ...(row.domain ? { domain: row.domain } : {}),
     ...(isOneOf(SOURCES, report.data_source) ? { dataSource: report.data_source } : {}),
