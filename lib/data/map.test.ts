@@ -123,6 +123,7 @@ describe('toNotices', () => {
 });
 
 describe('toCompetitor', () => {
+  const before = { headline: null, cta: null, angle: null, screenshot_path: null, position: null, days_known: true };
   const row: CompetitorRow = {
     id: 'comp-1',
     name: 'Horizon Visa Partners',
@@ -137,14 +138,15 @@ describe('toCompetitor', () => {
         angles: [{ label: 'Timeline & urgency', ads: 4 }, { label: 7 }, 'junk'],
         created_at: '2026-10-07T10:00:00Z',
         hooks: [
-          { id: 'h2', rank: 2, text: 'Second', platform: 'meta', format: 'image', days_running: 20, variations: 1 },
-          { id: 'h1', rank: 1, text: 'First', platform: 'meta', format: 'video', days_running: 63, variations: 5 },
-          { id: 'h3', rank: 3, text: 'Elsewhere', platform: 'tiktok', format: 'video', days_running: 9, variations: 1 },
+          { id: 'h2', rank: 2, text: 'Second', platform: 'meta', format: 'image', days_running: 0, variations: 1, days_known: false },
+          { id: 'h1', rank: 1, text: 'First', platform: 'meta', format: 'video', days_running: 63, variations: 5, days_known: true },
+          { id: 'h3', rank: 3, text: 'Elsewhere', platform: 'tiktok', format: 'video', days_running: 9, variations: 1, days_known: true },
         ],
+        // A report from before the tracker kept every ad: no order, no headline, no screenshot.
         competitor_ads: [
-          { id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5, ad_url: 'https://www.facebook.com/ads/library/?id=1111111111' },
-          { id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40, ad_url: null },
-          { id: 'a3', platform: 'meta', format: 'video', text: 'Odd link', days_running: 2, ad_url: 'https://scam.example/ads/library/?id=1' },
+          { ...before, id: 'a1', platform: 'meta', format: 'image', text: 'Short', days_running: 5, ad_url: 'https://www.facebook.com/ads/library/?id=1111111111' },
+          { ...before, id: 'a2', platform: 'linkedin', format: 'document', text: 'Long', days_running: 40, ad_url: null },
+          { ...before, id: 'a3', platform: 'meta', format: 'video', text: 'Odd link', days_running: 2, ad_url: 'https://scam.example/ads/library/?id=1' },
         ],
       },
     ],
@@ -162,6 +164,35 @@ describe('toCompetitor', () => {
     ]);
     // An ad is linked to its page in Meta's Ad Library, and to nothing else.
     expect(c?.examples.map((a) => a.url ?? null)).toEqual([null, 'https://www.facebook.com/ads/library/?id=1111111111', null]);
+  });
+
+  it('keeps the tracker’s order, what it read of each ad, and a signed link to its screenshot', () => {
+    const report = row.competitor_reports[0]!;
+    const shot = 'shots/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.png';
+    const c = toCompetitor(
+      {
+        ...row,
+        competitor_reports: [
+          {
+            ...report,
+            data_source: 'upload',
+            competitor_ads: [
+              { ...before, id: 'b2', platform: 'meta', format: 'image', text: 'Second', days_running: 0, ad_url: null, position: 1, days_known: false, screenshot_path: shot },
+              { ...before, id: 'b1', platform: 'meta', format: 'video', text: 'First', days_running: 30, ad_url: null, position: 0, headline: 'Plan now', cta: 'Learn more', angle: 'Family & education' },
+            ],
+          },
+        ],
+      },
+      (path) => (path === shot ? 'https://signed.example/shot' : undefined),
+    );
+    expect(c?.reportId).toBe('rep-1');
+    expect(c?.dataSource).toBe('upload');
+    expect(c?.examples).toEqual([
+      { id: 'b1', platform: 'meta', format: 'video', text: 'First', daysRunning: 30, tone: 'slate', headline: 'Plan now', cta: 'Learn more', angle: 'Family & education' },
+      { id: 'b2', platform: 'meta', format: 'image', text: 'Second', daysRunning: null, tone: 'teal', screenshot: 'https://signed.example/shot' },
+    ]);
+    // A hook whose days are not known says nothing in their place.
+    expect(c?.hooks.map((h) => h.daysRunning)).toEqual([63, null]);
   });
 
   it('leaves out a competitor with no report, and a domain it does not have', () => {

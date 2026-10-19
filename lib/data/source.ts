@@ -4,7 +4,7 @@
 
 import { STAGE_INFO } from '../pipeline';
 import type { NewLongVideo } from '../long-video';
-import type { NewRunInput } from '../run-input';
+import type { NewAdsRun, NewRunInput } from '../run-input';
 import type {
   AiVideo,
   LongVideo,
@@ -91,6 +91,10 @@ export const EDIT_MEDIA_TYPES = {
 } as const;
 export type EditMediaExtension = keyof typeof EDIT_MEDIA_TYPES;
 
+/** The kinds of picture Storage keeps screenshots of competitors' ads as (bucket competitor-shots). */
+export const SHOT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as const;
+export type ShotExtension = keyof typeof SHOT_TYPES;
+
 /** The kinds of file Storage keeps clips as (bucket run-media). */
 export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
 export type ClipExtension = keyof typeof CLIP_TYPES;
@@ -121,6 +125,12 @@ export interface DataSource {
 
   /** Records a run, with what was read from its link, and hands it to the agents. */
   createRun(input: NewRunInput, page: PageRead | null): Promise<Saved<{ id: string }>>;
+  /** Records a run built on a few of a report's ads and hands it to the strategist: the report is already there. */
+  startRunFromAds(input: NewAdsRun): Promise<Saved<{ id: string }>>;
+  /** Where the browser uploads a screenshot of a competitor's ad: a fresh path in the teammate's own folder and a signed link. */
+  createShotUpload(extension: ShotExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a screenshot taken away before its run started. Storage refuses one a run uses. */
+  deleteShot(path: string): Promise<Saved>;
   /** Saves an edit and returns the guardrail flags for the new words. */
   saveVariant(variantId: string, edit: VariantEdit): Promise<Saved<{ warnings: string[] }>>;
   approveVariant(variantId: string): Promise<Saved>;

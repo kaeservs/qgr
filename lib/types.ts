@@ -114,6 +114,8 @@ export interface Run {
   page?: PageSummary;
   /** The team's direction for the agents, given when the run started. */
   guidance?: string;
+  /** A run built on a few of a report's ads, chosen by a person: how many. It starts at the strategist. */
+  chosenAds?: number;
 }
 
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';
@@ -124,8 +126,11 @@ export interface Hook {
   text: string;
   platform: Platform;
   format: AdFormat;
-  /** How long the ad has kept running: advertisers stop paying for ads that do not work. */
-  daysRunning: number;
+  /**
+   * How long the ad has kept running: advertisers stop paying for ads that do
+   * not work. Null when it is not known: a screenshot rarely shows it.
+   */
+  daysRunning: number | null;
   variations: number;
 }
 
@@ -140,10 +145,17 @@ export interface AdExample {
   platform: Platform;
   format: AdFormat;
   text: string;
-  daysRunning: number;
+  /** Null when it is not known: a screenshot rarely shows when an ad started. */
+  daysRunning: number | null;
   tone: 'slate' | 'teal' | 'plum' | 'sand';
+  headline?: string;
+  cta?: string;
+  /** The angle the tracker gave it. */
+  angle?: string;
   /** The ad in Meta's Ad Library, when Apify read it there. Sample ads have none. */
   url?: string;
+  /** A link to the screenshot it was read from, signed for the viewer. */
+  screenshot?: string;
 }
 
 /** Where a report's ads came from. 'placeholder' means sample ads, read while the team's ads source is 'sample'. */
@@ -159,9 +171,11 @@ export type PictureModel = (typeof PICTURE_MODELS)[number];
 export interface Competitor {
   id: string;
   name: string;
+  /** The latest report, whose ads a person can choose a run from. */
+  reportId: string;
   /** Scanned on the team's schedule. Off for a competitor the team no longer follows. */
   tracked: boolean;
-  /** Absent for a competitor known only from uploaded ads. */
+  /** Absent for a competitor known only from screenshots of their ads or a library link. */
   domain?: string;
   /** Where the latest report's ads came from. */
   dataSource?: AdSource;

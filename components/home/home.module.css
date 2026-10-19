@@ -934,3 +934,122 @@ a.nextScan:hover {
   border: 0;
   background: none;
 }
+
+/* Screenshots of a competitor's ads, before the run. */
+.shotsField {
+  display: grid;
+  gap: 10px;
+}
+
+.shotsDrop {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  border: 1.5px dashed var(--indigo-200);
+  border-radius: 14px;
+  background: var(--indigo-50);
+  color: var(--indigo);
+  text-align: center;
+}
+
+.shotsDrop:focus-visible,
+.shotsDropOver {
+  border-color: var(--indigo);
+  outline: none;
+  background: var(--surface);
+}
+
+.shotsLabel {
+  margin: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.shotsDrop :global(.muted) {
+  max-width: 46ch;
+  margin: 0;
+}
+
+.shotsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shot {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+
+.shotFailed img {
+  opacity: 0.35;
+}
+
+.shotNum {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgb(14 15 44 / 0.72);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.shotState {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--text-2);
+  font-size: 11px;
+}
+
+.shotFailed .shotState {
+  color: var(--fail);
+}
+
+.shotRemove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.92);
+  color: var(--text);
+}
+
+.shotRemove:hover {
+  color: var(--indigo);
+}

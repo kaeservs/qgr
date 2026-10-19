@@ -16,6 +16,8 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const type = typeof params.type === 'string' && (TABS as readonly string[]).includes(params.type) ? (params.type as StartTab) : 'competitor';
   const url = typeof params.url === 'string' ? params.url : '';
+  // More screenshots of a competitor known from screenshots: their name, ready.
+  const shotsFor = typeof params.shots === 'string' ? params.shots.slice(0, 80) : undefined;
   const [settings, video, brand] = await Promise.all([getTeamSettings(), typeof params.video === 'string' ? getAiVideo(params.video) : null, getFrameBrand()]);
   // A finished AI video starts a run as if it were uploaded: the agents read what it shows, in words.
   const fromVideo: StartFromVideo | undefined =
@@ -30,10 +32,10 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
       <header className="page-head">
         <div>
           <h1 className="display h1">New run</h1>
-          <p className="lead">Start from a competitor, or from your own content.</p>
+          <p className="lead">Start from a competitor (their website, an ad link or screenshots of their ads), or from your own content.</p>
         </div>
       </header>
-      <StartRunCard initialTab={type} initialUrl={url} adsSource={settings.adsSource} fromVideo={fromVideo} brand={brand} />
+      <StartRunCard initialTab={shotsFor !== undefined ? 'competitor' : type} initialUrl={url} shotsFor={shotsFor} adsSource={settings.adsSource} fromVideo={fromVideo} brand={brand} />
       <section className={`card card-pad ${styles.howItWorks}`} aria-labelledby="how">
         <h2 id="how" className="card-title">
           How a run works

@@ -206,6 +206,32 @@ const tracker = `${IMPORTS}
 ${subTrigger}
 ${beginNode('tracker')}
 ${codeNode('plan', 'Plan the scan', code('tracker-plan.js'), `{ runId: 'run-id', input: 'website', url: 'https://example.com/', domain: 'example.com', competitorHint: 'example', websiteText: 'Example', files: [], platforms: ['meta'], adsSource: 'sample', library: null, guidance: null, brand: null }`, "\n    onError: 'continueErrorOutput',")}
+${ifTrue('fromShots', 'Screenshots?', '{{ $json.screenshots.length > 0 }}')}
+
+// The team's screenshots, signed for a quarter of an hour so Claude can fetch
+// them from the private bucket.
+const signShots = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Sign the screenshots',
+    onError: 'continueRegularOutput',
+    parameters: {
+      method: 'POST',
+      url: '${SUPABASE_STORAGE}/object/sign/competitor-shots',
+      authentication: 'predefinedCredentialType',
+      nodeCredentialType: 'supabaseApi',
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ expiresIn: 900, paths: $json.screenshots }) }}'),
+      options: { timeout: 30000, response: { response: { fullResponse: true, neverError: true } } },
+    },
+    credentials: { supabaseApi: newCredential('Supabase QGR') },
+  },
+  output: [{ statusCode: 200, body: [{ path: 'shots/user/file.png', signedURL: '/object/sign/competitor-shots/shots/user/file.png?token=token', error: null }] }],
+});
+${codeNode('shotAds', 'Screenshot ads', code('tracker-screenshot-ads.js', { __STORAGE__: SUPABASE_STORAGE }), `{ runId: 'run-id', dataSource: 'upload', ads: [], shots: [{ n: 1, path: 'shots/user/file.png', url: '${SUPABASE_STORAGE}/object/sign/competitor-shots/shots/user/file.png?token=token' }] }`, "\n    onError: 'continueErrorOutput',")}
 ${ifTrue('realAds', 'Real ads?', '{{ $json.adsSource === "apify" }}')}
 
 const apify = node({
@@ -245,13 +271,14 @@ ${failTail('tracker')}
 const noteWebsite = sticky('## Their website\\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
 const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Custom Auth, JSON {"headers": {"Authorization": "Bearer <token>"}}, allowed domain api.apify.com); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\\nClaude groups ads into hooks by id and names each ad\\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
+const noteShots = sticky('## Screenshots of their ads\\nA run the team started from screenshots (a feed, Meta\\'s Ad Library, LinkedIn) skips the ad sources: Storage signs the pictures for 15 minutes and Claude reads each ad out of them first. A screenshot rarely shows how long an ad has run, so days running are counted only from a start date the screenshot shows.', [fromShots, signShots, shotAds], { color: 4 });
 const noteModel = sticky('## Claude\\nHaiku 5.5 while the app is being built (about a cent a run), medium effort, JSON constrained by a schema. A refusal stands: Haiku has no fallback model. No temperature. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
 
 export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(realAds.onTrue(apify.onError(whyFailed)).onFalse(sampleAds))
+  .to(fromShots.onTrue(signShots).onFalse(realAds.onTrue(apify.onError(whyFailed)).onFalse(sampleAds)))
   .add(apify)
   .to(apifyAds.onError(whyFailed))
   .to(prepareAds.onError(whyFailed))
@@ -261,12 +288,16 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .to(answerOk.onTrue(save.onError(whyFailed).to(done)).onFalse(whyFailed))
   .add(sampleAds)
   .to(prepareAds)
+  .add(signShots)
+  .to(shotAds.onError(whyFailed))
+  .to(prepareAds)
   .add(whyFailed)
   .to(markFailed)
   .to(failed)
   .add(noteWebsite)
   .add(noteApify)
   .add(noteNumbers)
+  .add(noteShots)
   .add(noteModel);
 `;
 

@@ -2,7 +2,7 @@
 
 import { ArrowRight, AudioLines, FileText, LoaderCircle, Mic, Newspaper, Radar, Video, WandSparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
@@ -16,6 +16,8 @@ import { PlatformIcon } from '../ui/PlatformIcon';
 import { ClipEditButton } from '../video/ClipEditButton';
 import type { FrameBrandWords } from '../video/ClipEditButton';
 import { ClipField } from '../video/ClipField';
+import { ShotsField } from './ShotsField';
+import type { ShotsStatus } from './ShotsField';
 import type { ClipStatus } from '../video/ClipField';
 import { useClipTranscript } from '../video/useClipTranscript';
 import { LinkStatus, useLinkCheck } from './LinkCheck';
@@ -56,10 +58,13 @@ export function StartRunCard({
   initialUrl = '',
   adsSource = 'sample',
   fromVideo,
+  shotsFor,
   brand,
 }: {
   initialTab?: StartTab;
   initialUrl?: string;
+  /** Opens on screenshots of this competitor's ads. */
+  shotsFor?: string | undefined;
   adsSource?: AdsSetting;
   fromVideo?: StartFromVideo | undefined;
   /** The page's name and site, drawn on the video as the editor previews it. */
@@ -83,6 +88,15 @@ export function StartRunCard({
   // A video is a link to read, or a clip uploaded from here.
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>(fromVideo ? 'upload' : 'link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
+  // A competitor is their website or ad link, or screenshots of their ads uploaded from here.
+  const [competitorFrom, setCompetitorFrom] = useState<'link' | 'shots'>(shotsFor !== undefined ? 'shots' : 'link');
+  const [competitorName, setCompetitorName] = useState(shotsFor ?? '');
+  const [shots, setShots] = useState<ShotsStatus>({ paths: [], uploading: false, sample: false });
+  const onShots = useCallback((status: ShotsStatus) => {
+    setShots(status);
+    // A screenshot added answers "add a screenshot".
+    if (status.paths.length > 0 || status.uploading) setError(null);
+  }, []);
   const [notes, setNotes] = useState(fromVideo?.notes ?? '');
   // The edit made before the run, for the clip uploaded now; a new clip starts without one.
   const [clipEdit, setClipEdit] = useState<{ path: string; edit: VideoEdit } | null>(null);
@@ -97,9 +111,10 @@ export function StartRunCard({
 
   const source = SOURCES.find((s) => s.key === sourceType) ?? SOURCES[0];
   const clipMode = tab === 'custom' && sourceType === 'video' && videoFrom === 'upload';
+  const shotsMode = tab === 'competitor' && competitorFrom === 'shots';
 
   // The link the run will read, if this tab reads one.
-  const readsLink = tab === 'competitor' || (tab === 'custom' && sourceType !== 'text' && !clipMode);
+  const readsLink = (tab === 'competitor' && !shotsMode) || (tab === 'custom' && sourceType !== 'text' && !clipMode);
   const normalizedUrl = readsLink ? normalizeUrl(url) : null;
   // An ad library link is Apify's to read, so the run does not fetch it.
   const adLibrary = tab === 'competitor' && normalizedUrl !== null && competitorInputFor(normalizedUrl) === 'ad_link';
@@ -123,6 +138,12 @@ export function StartRunCard({
     if (tab === 'custom' && sourceType === 'text') {
       if (excerpt.trim().length < MIN_EXCERPT) return `Paste at least ${MIN_EXCERPT} characters.`;
       return { kind: 'custom', type: 'text', excerpt: excerpt.trim() };
+    }
+    if (shotsMode) {
+      if (!competitorName.trim()) return 'Say whose ads these are.';
+      if (shots.uploading) return 'Wait for the screenshots to finish uploading.';
+      if (shots.paths.length === 0) return 'Add at least one screenshot of their ads.';
+      return { kind: 'competitor', input: 'upload', name: competitorName.trim(), files: shots.paths };
     }
     if (clipMode) {
       if (clipStatus.state === 'empty') return 'Add the clip first.';
@@ -194,6 +215,30 @@ export function StartRunCard({
       </div>
 
       <form id={`${id}-panel`} role="tabpanel" aria-labelledby={`${id}-tab-${tab}`} className={styles.startBody} onSubmit={onSubmit} noValidate>
+        {tab === 'competitor' && (
+          <div className={styles.videoFrom} role="radiogroup" aria-label="Their ads">
+            {(
+              [
+                ['link', 'Website or ad link'],
+                ['shots', 'Screenshots of their ads'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="radio"
+                aria-checked={competitorFrom === key}
+                className={cx(styles.videoFromOption, competitorFrom === key && styles.videoFromOn)}
+                onClick={() => {
+                  setCompetitorFrom(key);
+                  setError(null);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         {tab === 'custom' && (
           <div className={styles.sourceTypes} role="radiogroup" aria-label="Source">
             {SOURCES.map(({ key, label, icon: Icon }) => (
@@ -246,7 +291,25 @@ export function StartRunCard({
           </p>
         )}
 
-        {clipMode ? (
+        {shotsMode ? (
+          <div className={styles.clipBlock}>
+            <label className="field">
+              <span className="label">Whose ads are these?</span>
+              <input className="input" placeholder="E.g. Horizon Visa Partners" value={competitorName} onChange={(e) => setCompetitorName(e.target.value)} maxLength={80} autoComplete="organization" />
+            </label>
+            <ShotsField onStatus={onShots} />
+            <p className="muted small">
+              The Competitor Tracker reads each ad out of the pictures: its words, headline and button. How long an ad has run shows only when the screenshot says when it started, as Meta’s Ad Library does.
+              {shots.sample && ' Sample data keeps no uploads, so the screenshots stay in this browser.'}
+            </p>
+            <div className={styles.clipGo}>
+              <button type="submit" className={cx('btn btn-primary', styles.go)} disabled={busy || shots.uploading} aria-busy={busy || shots.uploading}>
+                {busy ? 'Starting…' : shots.uploading ? 'Uploading…' : 'Start run'}
+                {!busy && !shots.uploading && <ArrowRight size={17} aria-hidden />}
+              </button>
+            </div>
+          </div>
+        ) : clipMode ? (
           <div className={styles.clipBlock}>
             <ClipField onStatus={setClipStatus} initial={fromVideo ? { url: fromVideo.url, name: fromVideo.name } : undefined} />
             {clipStatus.state === 'ready' && (

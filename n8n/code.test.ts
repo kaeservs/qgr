@@ -167,7 +167,12 @@ describe('Competitor Tracker', () => {
       { label: 'Family & education', ads: 2 },
       { label: 'Timeline & urgency', ads: 1 },
     ]);
-    expect((report.ads as unknown[]).length).toBe(4);
+    // Every ad is kept, longest-running first, with its angle, for a person to choose from.
+    const ads = report.ads as Json[];
+    expect(ads).toHaveLength(10);
+    expect(ads[0]).toMatchObject({ text: "Your kids shouldn't age out while you wait.", days_running: 63, headline: 'Plan your EB-5 timeline', cta: 'Book now', angle: 'Family & education' });
+    expect(ads[0]).not.toHaveProperty('days_known');
+    expect(ads[9]).toMatchObject({ days_running: 6, angle: null });
     expect(out.p_usage).toMatchObject({ model: 'claude-haiku-5-5', input_tokens: 5000, output_tokens: 1500 });
   });
 
@@ -181,6 +186,92 @@ describe('Competitor Tracker', () => {
 
   it('refuses to report when there are no active ads', () => {
     expect(() => run('tracker-prepare-ads.js', { ...raw, ads: [] })).toThrow('No active ads');
+  });
+});
+
+describe('Competitor Tracker, reading screenshots of their ads', () => {
+  const STORAGE = 'https://project.supabase.co/storage/v1';
+  const files = ['shots/0b6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d01/1c6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d01.png', 'shots/0b6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d01/2c6f7a4e-1f2a-4c3b-9d8e-7f6a5b4c3d02.jpg'];
+  const shotRun = { id: 'run-9', kind: 'competitor', input: 'upload', url: null, competitor_name: 'Horizon Visa', files, platforms: ['meta'], goal: 'consultations', title: 'Horizon · 2 screenshots', page: null };
+  const signed = { statusCode: 200, body: files.map((path) => ({ path, signedURL: `/object/sign/competitor-shots/${path}?token=t`, error: null })) };
+
+  it('reads the screenshots whichever ads source the team chose, and only real ones', () => {
+    for (const ads_source of ['sample', 'apify']) {
+      expect(run('tracker-plan.js', { run: shotRun, brand, ads_source })).toMatchObject({ screenshots: files, library: null, competitorHint: 'Horizon Visa' });
+    }
+    // Runs from before screenshots named bare files, with nothing to read.
+    expect(run('tracker-plan.js', { run: { ...shotRun, files: ['ad1.png'] }, brand })).toMatchObject({ screenshots: [] });
+    expect(run('tracker-plan.js', { run: { ...shotRun, input: 'website', url: 'https://h.example/', files: null }, brand })).toMatchObject({ screenshots: [] });
+  });
+
+  const plan = run('tracker-plan.js', { run: shotRun, brand });
+  const shots = run('tracker-screenshot-ads.js', signed, { 'Plan the scan': plan }, { __STORAGE__: STORAGE });
+  const prepared = run('tracker-prepare-ads.js', shots);
+
+  it('hands Claude each screenshot through a link Storage signed, after its number', () => {
+    expect(shots).toMatchObject({ dataSource: 'upload', ads: [] });
+    expect(prepared).toEqual(shots);
+    const { body } = run('tracker-build-request.js', prepared) as { body: Json };
+    assertRequest(body, 'medium');
+    const content = (body.messages as { content: Json[] }[])[0]!.content;
+    expect(content.slice(1)).toEqual([
+      { type: 'text', text: 'Screenshot 1:' },
+      { type: 'image', source: { type: 'url', url: `${STORAGE}/object/sign/competitor-shots/${files[0]}?token=t` } },
+      { type: 'text', text: 'Screenshot 2:' },
+      { type: 'image', source: { type: 'url', url: `${STORAGE}/object/sign/competitor-shots/${files[1]}?token=t` } },
+    ]);
+    const material = JSON.parse(String(content[0]!.text).split('\n').slice(1).join('\n'));
+    expect(material).toMatchObject({ screenshots: 2, competitor: { name_hint: 'Horizon Visa' } });
+    expect(material).not.toHaveProperty('ads');
+    expect(String(body.system)).toContain('First read every ad in the screenshots into ads_read');
+    const schema = (body.output_config as { format: { schema: { required: string[] } } }).format.schema;
+    expect(schema.required[0]).toBe('ads_read');
+  });
+
+  it('stops with a reason when Storage would not sign them', () => {
+    expect(() => run('tracker-screenshot-ads.js', { statusCode: 400, body: { error: 'not found' } }, { 'Plan the scan': plan }, { __STORAGE__: STORAGE })).toThrow('The screenshots could not be read from storage (400)');
+    const one = { statusCode: 200, body: [signed.body[0]] };
+    expect(() => run('tracker-screenshot-ads.js', one, { 'Plan the scan': plan }, { __STORAGE__: STORAGE })).toThrow('could not be read');
+  });
+
+  it('keeps the ads Claude read, with their screenshot, counting days only from a start date shown', () => {
+    const read = (id: string, shot: number, text: string, started_on = '') => ({ id, shot, platform: 'meta', format: 'image', page_name: 'Horizon Visa', text, headline: '', cta: 'Learn more', started_on });
+    const started = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const answer = {
+      ads_read: [
+        read('a1', 1, '  Your kids should not   age out. '),
+        read('a2', 2, 'Plan before the bulletin moves.', started),
+        read('a3', 3, 'A screenshot that was never sent.'),
+        read('a4', 1, ''),
+        read('a1', 2, 'The same id again.'),
+        read('a5', 2, 'A start date in the future.', '2999-01-01'),
+      ],
+      competitor_name: 'Horizon Visa Partners LLC',
+      summary: 'They lead with children.',
+      website_summary: '',
+      insights: ['Only two ads: a small sample.'],
+      hooks: [{ text: 'Your kids should not age out.', ad_ids: ['a1'] }, { text: 'Plan before the bulletin moves.', ad_ids: ['a2', 'a5'] }],
+      ad_angles: [{ ad_id: 'a1', angle: 'Family & education' }, { ad_id: 'a2', angle: 'Timeline & urgency' }],
+    };
+    const out = run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared });
+    expect(out.ok).toBe(true);
+    const report = out.p_report as Json;
+    // The competitor is who the team named.
+    expect(report).toMatchObject({ competitor: { name: 'Horizon Visa', domain: null }, data_source: 'upload', active_ads: 3, platforms: ['meta'] });
+    expect(report.hooks).toEqual([
+      { text: 'Plan before the bulletin moves.', platform: 'meta', format: 'image', days_running: 20, variations: 2 },
+      { text: 'Your kids should not age out.', platform: 'meta', format: 'image', days_running: 0, variations: 1, days_known: false },
+    ]);
+    expect(report.ads).toEqual([
+      { platform: 'meta', format: 'image', text: 'Plan before the bulletin moves.', days_running: 20, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Timeline & urgency', screenshot_path: files[1] },
+      { platform: 'meta', format: 'image', text: 'Your kids should not age out.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Family & education', days_known: false, screenshot_path: files[0] },
+      { platform: 'meta', format: 'image', text: 'A start date in the future.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: null, days_known: false, screenshot_path: files[1] },
+    ]);
+  });
+
+  it('fails with a reason when no ad could be read', () => {
+    const answer = { ads_read: [], competitor_name: '', summary: '', website_summary: '', insights: ['x'], hooks: [], ad_angles: [] };
+    expect(run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared })).toMatchObject({ ok: false, p_error: 'Claude found no ads it could read in the screenshots.' });
   });
 });
 
@@ -403,6 +494,24 @@ describe('Ad Strategist', () => {
     const { body } = run('strategist-build-request.js', plan) as { body: Json };
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
     expect(material.source.note).toBe('An uploaded video clip of 0:07, which the ads will use. The text is what is said in it: a transcript the team read over before the run started.');
+  });
+
+  it('builds on the ads the team chose from the report, and asks exactly as before without them', () => {
+    const chosen_ads = [
+      { platform: 'meta', format: 'image', text: 'Your kids should not age out.', headline: 'Plan now', cta: 'Learn more', angle: 'Family & education', days_running: null },
+      { platform: 'meta', format: 'video', text: 'The H-1B lottery is not a plan.', headline: null, cta: null, angle: null, days_running: 41 },
+    ];
+    const { body } = run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, chosen_ads })) as { body: Json };
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.competitor_report.chosen_ads).toEqual([
+      { platform: 'meta', format: 'image', text: 'Your kids should not age out.', headline: 'Plan now', cta: 'Learn more', angle: 'Family & education' },
+      { platform: 'meta', format: 'video', text: 'The H-1B lottery is not a plan.', days_running: 41 },
+    ]);
+    expect(String(body.system)).toContain("competitor_report.chosen_ads are the competitor's ads the QGR team picked");
+    const plain = (run('strategist-build-request.js', run('strategist-plan.js', competitorCtx)) as { body: Json }).body;
+    const empty = (run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, chosen_ads: null })) as { body: Json }).body;
+    expect(empty).toEqual(plain);
+    expect(String(plain.system)).not.toContain('chosen_ads');
   });
 
   describe('how QGR’s own posts did', () => {

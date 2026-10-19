@@ -278,32 +278,53 @@ export type Database = {
       competitor_ads: {
         Row: {
           ad_url: string | null
+          angle: string | null
+          cta: string | null
+          days_known: boolean
           days_running: number
           format: string
+          headline: string | null
           id: string
           media_url: string | null
+          page_name: string | null
           platform: string
+          position: number | null
           report_id: string
+          screenshot_path: string | null
           text: string
         }
         Insert: {
           ad_url?: string | null
+          angle?: string | null
+          cta?: string | null
+          days_known?: boolean
           days_running: number
           format: string
+          headline?: string | null
           id?: string
           media_url?: string | null
+          page_name?: string | null
           platform: string
+          position?: number | null
           report_id: string
+          screenshot_path?: string | null
           text: string
         }
         Update: {
           ad_url?: string | null
+          angle?: string | null
+          cta?: string | null
+          days_known?: boolean
           days_running?: number
           format?: string
+          headline?: string | null
           id?: string
           media_url?: string | null
+          page_name?: string | null
           platform?: string
+          position?: number | null
           report_id?: string
+          screenshot_path?: string | null
           text?: string
         }
         Relationships: [
@@ -399,6 +420,7 @@ export type Database = {
       }
       hooks: {
         Row: {
+          days_known: boolean
           days_running: number
           format: string
           id: string
@@ -409,6 +431,7 @@ export type Database = {
           variations: number
         }
         Insert: {
+          days_known?: boolean
           days_running: number
           format: string
           id?: string
@@ -419,6 +442,7 @@ export type Database = {
           variations: number
         }
         Update: {
+          days_known?: boolean
           days_running?: number
           format?: string
           id?: string
@@ -721,6 +745,7 @@ export type Database = {
       runs: {
         Row: {
           approved_at: string | null
+          chosen_ad_ids: string[] | null
           competitor_id: string | null
           competitor_name: string | null
           created_at: string
@@ -736,12 +761,14 @@ export type Database = {
           media_path: string | null
           page: Json | null
           platforms: string[]
+          source_report_id: string | null
           summary: string | null
           title: string
           url: string | null
         }
         Insert: {
           approved_at?: string | null
+          chosen_ad_ids?: string[] | null
           competitor_id?: string | null
           competitor_name?: string | null
           created_at?: string
@@ -757,12 +784,14 @@ export type Database = {
           media_path?: string | null
           page?: Json | null
           platforms: string[]
+          source_report_id?: string | null
           summary?: string | null
           title: string
           url?: string | null
         }
         Update: {
           approved_at?: string | null
+          chosen_ad_ids?: string[] | null
           competitor_id?: string | null
           competitor_name?: string | null
           created_at?: string
@@ -778,6 +807,7 @@ export type Database = {
           media_path?: string | null
           page?: Json | null
           platforms?: string[]
+          source_report_id?: string | null
           summary?: string | null
           title?: string
           url?: string | null
@@ -788,6 +818,13 @@ export type Database = {
             columns: ["competitor_id"]
             isOneToOne: false
             referencedRelation: "competitors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "runs_source_report_id_fkey"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "competitor_reports"
             referencedColumns: ["id"]
           },
         ]
@@ -1269,6 +1306,16 @@ export type Database = {
           p_platforms: string[]
           p_title: string
           p_url?: string
+        }
+        Returns: string
+      }
+      start_run_from_ads: {
+        Args: {
+          p_ad_ids: string[]
+          p_goal: string
+          p_platforms: string[]
+          p_report_id: string
+          p_title?: string
         }
         Returns: string
       }

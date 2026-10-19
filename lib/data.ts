@@ -36,6 +36,9 @@ export const getBrandProfile: DataSource['getBrandProfile'] = () => source().get
 export const getBrandMemory: DataSource['getBrandMemory'] = () => source().getBrandMemory();
 
 export const createRun: DataSource['createRun'] = (input, page) => source().createRun(input, page);
+export const startRunFromAds: DataSource['startRunFromAds'] = (input) => source().startRunFromAds(input);
+export const createShotUpload: DataSource['createShotUpload'] = (extension) => source().createShotUpload(extension);
+export const deleteShot: DataSource['deleteShot'] = (path) => source().deleteShot(path);
 export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().saveVariant(id, edit);
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);

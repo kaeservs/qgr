@@ -6,7 +6,7 @@ import { PlatformIcons } from '../ui/PlatformIcon';
 import styles from './competitors.module.css';
 
 export function CompetitorCard({ competitor: c, now }: { competitor: Competitor; now: string }) {
-  const top = [...c.hooks].sort((a, b) => b.daysRunning - a.daysRunning)[0];
+  const top = [...c.hooks].sort((a, b) => (b.daysRunning ?? -1) - (a.daysRunning ?? -1))[0];
   return (
     <article className={styles.compCard}>
       <div className={styles.compHead}>
@@ -17,7 +17,7 @@ export function CompetitorCard({ competitor: c, now }: { competitor: Competitor;
               {c.name}
             </Link>
           </h2>
-          <span className="muted small">{c.domain ?? 'From uploaded ads'}</span>
+          <span className="muted small">{c.domain ?? (c.dataSource === 'upload' ? 'From screenshots of their ads' : 'From their ads')}</span>
         </div>
         <PlatformIcons platforms={c.platforms} />
       </div>

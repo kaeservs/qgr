@@ -20,6 +20,7 @@ export const user: User = {
 export const competitors: Competitor[] = [
   {
     id: 'c-horizon',
+    reportId: 'cr-horizon',
     tracked: true,
     name: 'Horizon Visa Partners',
     domain: 'horizonvisa.example',
@@ -55,6 +56,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-atlas',
+    reportId: 'cr-atlas',
     tracked: true,
     name: 'Atlas Residency Group',
     domain: 'atlasresidency.example',
@@ -86,6 +88,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-meridian',
+    reportId: 'cr-meridian',
     tracked: true,
     name: 'Meridian EB-5 Advisors',
     domain: 'meridianeb5.example',
@@ -115,6 +118,7 @@ export const competitors: Competitor[] = [
   },
   {
     id: 'c-northstar',
+    reportId: 'cr-northstar',
     tracked: false,
     name: 'Northstar Global',
     domain: 'northstarglobal.example',
