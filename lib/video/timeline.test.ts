@@ -15,17 +15,19 @@ import {
   parseMusic,
   parseOverlays,
   parseSequence,
+  placeAt,
   removePiece,
   sequenceOf,
   sequenceSeconds,
   setTransition,
   splitPiece,
+  spotIn,
   timelineSeconds,
   trimPiece,
   wordAt,
 } from './timeline';
 import type { Segment } from './timeline';
-import { defaultEdit } from './edit';
+import { defaultEdit, parseVideoEdit } from './edit';
 
 const clip = (id: string, start: number, end: number, extra: Partial<Extract<Segment, { kind: 'clip' }>> = {}): Segment => ({ id, kind: 'clip', media: null, start, end, speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT, ...extra });
 const PICTURE = { path: 'media/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000002.jpg', name: 'office.jpg', width: 1600, height: 900 };
@@ -221,5 +223,35 @@ describe('saving an edit', () => {
     expect(reordered.sequence).toHaveLength(2);
     expect(reordered.keep).toEqual([{ start: 0, end: 5 }, { start: 10, end: 20 }]);
     expect(compactEdit({ ...base, sequence: [clip('a', 0, 5, { effects: { ...DEFAULT_EFFECTS, filter: 'bw' } })] }).sequence).toHaveLength(1);
+  });
+});
+
+describe('what a person drags on the video', () => {
+  const overlay = { id: 'o1', text: 'Ask us', start: 0, end: 5, place: 'top' as const, style: 'banner' as const, animation: 'fade' as const, size: 'medium' as const };
+  const base = { ...defaultEdit(20), overlays: [overlay] };
+
+  it('puts the words, the logo and a text where they are dragged, and back in their places', () => {
+    let edit = placeAt(base, 'words', { x: 0.5, y: 0.7, scale: 1.4 });
+    edit = placeAt(edit, 'logo', { x: 1.3, y: 0.9, scale: 0.1 });
+    edit = placeAt(edit, 'o1', { x: 0.2, y: 0.2, scale: 1 });
+    expect(spotIn(edit, 'words')).toEqual({ x: 0.5, y: 0.7, scale: 1.4 });
+    // Kept on the frame, and no smaller than allowed.
+    expect(spotIn(edit, 'logo')).toEqual({ x: 1, y: 0.9, scale: 0.4 });
+    expect(spotIn(edit, 'o1')).toEqual({ x: 0.2, y: 0.2, scale: 1 });
+    expect(placeAt(edit, 'ghost', { x: 0, y: 0, scale: 1 })).toEqual(edit);
+    let back = placeAt(placeAt(placeAt(edit, 'words', null), 'logo', null), 'o1', null);
+    expect(back).toEqual(base);
+    back = placeAt(back, 'logo', null);
+    expect(back).not.toHaveProperty('logoSpot');
+  });
+
+  it('keeps where things were dragged when the edit is read back, and drops a logo spot with no logo', () => {
+    const edit = placeAt(placeAt(placeAt(base, 'words', { x: 0.5, y: 0.7, scale: 1.4 }), 'logo', { x: 0.8, y: 0.1, scale: 1 }), 'o1', { x: 0.3, y: 0.6, scale: 2 });
+    const read = parseVideoEdit(JSON.parse(JSON.stringify(edit)), 20);
+    expect(read.ok && read.value.text.spot).toEqual({ x: 0.5, y: 0.7, scale: 1.4 });
+    expect(read.ok && read.value.logoSpot).toEqual({ x: 0.8, y: 0.1, scale: 1 });
+    expect(read.ok && read.value.overlays?.[0]?.spot).toEqual({ x: 0.3, y: 0.6, scale: 2 });
+    const hidden = parseVideoEdit(JSON.parse(JSON.stringify({ ...edit, logo: null })), 20);
+    expect(hidden.ok && hidden.value).not.toHaveProperty('logoSpot');
   });
 });

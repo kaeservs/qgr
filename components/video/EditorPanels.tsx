@@ -28,6 +28,7 @@ import {
   lookOf,
   movePiece,
   newId,
+  placeAt,
   pieceName,
   pieceSeconds,
   removePiece,
@@ -437,7 +438,7 @@ export function OverlaysPanel({ c, total, t, selected, onSelect, onSeek }: { c: 
             </div>
             {selected === o.id && (
               <>
-                <Choices label="Where" options={PLACES} value={o.place} name={(v) => PLACE_LABEL[v]} onPick={(v) => c.set({ overlays: withOverlay(o.id, { place: v }) })} />
+                <Choices label="Where" options={PLACES} value={o.place} name={(v) => PLACE_LABEL[v]} onPick={(v) => c.set({ overlays: (placeAt(c.edit, o.id, null).overlays ?? list).map((x) => (x.id === o.id ? { ...x, place: v } : x)) })} />
                 <Choices label="Style" options={OVERLAY_STYLES} value={o.style} name={(v) => OVERLAY_STYLE_LABEL[v]} onPick={(v) => c.set({ overlays: withOverlay(o.id, { style: v }) })} />
                 <Choices label="Comes in" options={ANIMATIONS} value={o.animation} name={(v) => ANIMATION_LABEL[v]} onPick={(v) => c.set({ overlays: withOverlay(o.id, { animation: v }) })} />
                 <Choices label="Size" options={TEXT_SIZES} value={o.size} name={(v) => SIZE_LABEL[v]} onPick={(v) => c.set({ overlays: withOverlay(o.id, { size: v }) })} />

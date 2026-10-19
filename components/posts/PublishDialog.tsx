@@ -72,7 +72,7 @@ async function drawPicture(ratio: CreativeRatio, variant: Variant, brandName: st
   canvas.height = size.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new RenderError('This browser can’t draw the picture.');
-  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, mark }, picture);
+  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, mark }, picture, variant.design ?? null);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
   if (!blob) throw new RenderError('This browser can’t make the picture.');
   return { blob, url: URL.createObjectURL(blob), canvas };

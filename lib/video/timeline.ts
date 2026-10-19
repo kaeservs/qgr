@@ -17,6 +17,8 @@
 //
 // Pure, and tested (timeline.test.ts).
 
+import { clampSpot, LOGO, parseSpot, WORDS } from '../spot';
+import type { Spot } from '../spot';
 import type { Caption, Part, VideoEdit } from './edit';
 
 
@@ -146,6 +148,8 @@ export interface Overlay {
   style: OverlayStyle;
   animation: Animation;
   size: TextSize;
+  /** Where it sits once a person drags it, instead of its place, and its size. */
+  spot?: Spot;
 }
 
 export interface Look {
@@ -363,6 +367,37 @@ export function trimPiece(sequence: readonly Segment[], id: string, edge: 'start
   });
 }
 
+// ---------------------------------------------------------------- what a person drags
+
+/** Where the words, the logo or a text sits once dragged; undefined while it keeps its place. */
+export function spotIn(edit: VideoEdit, id: string): Spot | undefined {
+  if (id === WORDS) return edit.text.spot;
+  if (id === LOGO) return edit.logoSpot;
+  return edit.overlays?.find((o) => o.id === id)?.spot;
+}
+
+/** Puts the words, the logo or a text at `spot`, or back in its place (null). */
+export function placeAt(edit: VideoEdit, id: string, spot: Spot | null): VideoEdit {
+  const at = spot ? clampSpot(spot) : null;
+  if (id === WORDS) {
+    const { spot: _was, ...text } = edit.text;
+    return { ...edit, text: at ? { ...text, spot: at } : text };
+  }
+  if (id === LOGO) {
+    const { logoSpot: _was, ...rest } = edit;
+    return at ? { ...rest, logoSpot: at } : rest;
+  }
+  if (!edit.overlays?.some((o) => o.id === id)) return edit;
+  return {
+    ...edit,
+    overlays: edit.overlays.map((o) => {
+      if (o.id !== id) return o;
+      const { spot: _was, ...rest } = o;
+      return at ? { ...rest, spot: at } : rest;
+    }),
+  };
+}
+
 export const setEffects = (sequence: readonly Segment[], id: string, effects: Partial<Effects>): Segment[] => replace(sequence, id, (s) => ({ ...s, effects: { ...s.effects, ...effects } }));
 
 export const setTransition = (sequence: readonly Segment[], id: string, transition: Partial<Transition>): Segment[] =>
@@ -508,6 +543,7 @@ export function parseOverlays(raw: unknown, total: number): Overlay[] | string {
       style: isOneOf(OVERLAY_STYLES, r.style) ? r.style : 'banner',
       animation: isOneOf(ANIMATIONS, r.animation) ? r.animation : 'fade',
       size: isOneOf(TEXT_SIZES, r.size) ? r.size : 'medium',
+      ...(parseSpot(r.spot) ? { spot: parseSpot(r.spot) as Spot } : {}),
     });
   }
   return out.sort((a, b) => a.start - b.start);

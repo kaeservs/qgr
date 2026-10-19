@@ -1,0 +1,39 @@
+/* Handles over a canvas, the same size as it shows. */
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.handle {
+  position: absolute;
+  padding: 0;
+  border: 1.5px dashed rgb(255 255 255 / 0.55);
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(14 15 44 / 0.35);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.handle:hover,
+.handle:focus-visible {
+  border-color: #fff;
+  outline: none;
+}
+
+.handle:active {
+  cursor: grabbing;
+}
+
+.handleOn {
+  border: 2px solid var(--gold);
+  box-shadow: 0 0 0 1px rgb(14 15 44 / 0.5);
+}
+
+.handle:disabled {
+  cursor: default;
+  border-color: transparent;
+  box-shadow: none;
+}

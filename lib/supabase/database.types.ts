@@ -65,6 +65,7 @@ export type Database = {
           copy: Json
           creative_style: string
           creative_text: string
+          design: Json | null
           id: string
           image_prompt: string | null
           image_url: string | null
@@ -89,6 +90,7 @@ export type Database = {
           copy: Json
           creative_style: string
           creative_text: string
+          design?: Json | null
           id?: string
           image_prompt?: string | null
           image_url?: string | null
@@ -113,6 +115,7 @@ export type Database = {
           copy?: Json
           creative_style?: string
           creative_text?: string
+          design?: Json | null
           id?: string
           image_prompt?: string | null
           image_url?: string | null
@@ -1238,6 +1241,10 @@ export type Database = {
           p_variant_id: string
           p_warnings: string[]
         }
+        Returns: undefined
+      }
+      save_variant_design: {
+        Args: { p_design: Json; p_variant_id: string }
         Returns: undefined
       }
       save_variant_words: {

@@ -10,6 +10,8 @@
 // <video> while previewing, from the decoder while exporting), or null while it
 // is not ready, which draws the brand's indigo in its place.
 
+import { WORDS } from '../spot';
+import type { Hit } from '../spot';
 import { captionAt, placePicture } from './edit';
 import type { Caption, Size, VideoEdit } from './edit';
 import { BRAND_COLORS, DISPLAY, TEXT, arcs, background, block, endCard, logo, roundedRect, wrap } from './draw';
@@ -347,18 +349,19 @@ function place(bands: Bands, where: 'top' | 'middle' | 'bottom', height: number,
   return (size.height - height) / 2;
 }
 
-function overlay(ctx: Ctx, size: Size, unit: number, o: Overlay, time: number, bands: Bands) {
+function overlay(ctx: Ctx, size: Size, unit: number, o: Overlay, time: number, bands: Bands): Hit {
   const style = OVERLAY_LOOK[o.style];
-  const fontSize = unit * OVERLAY_FONT[o.size];
+  const fontSize = unit * OVERLAY_FONT[o.size] * (o.spot?.scale ?? 1);
   const font = style.font === 'display' ? `600 ${fontSize}px ${DISPLAY}` : `600 ${fontSize * 0.78}px ${TEXT}`;
   const margin = unit * 5;
   const pad = style.fill ? { x: unit * 2.4, y: unit * 1.5 } : { x: 0, y: unit * 0.6 };
   const b = block(ctx, o.text, font, style.font === 'display' ? fontSize : fontSize * 0.78, size.width - margin * 2, 3, pad);
-  const top = place(bands, o.place, b.height, size);
+  // Where its place puts it, or centred on the spot a person dragged it to.
+  const top = o.spot ? o.spot.y * size.height - b.height / 2 : place(bands, o.place, b.height, size);
   const a = animate(o.animation, time - o.start, o.end - time, o.text.length);
   if (o.style === 'lower-third') {
     // Left-aligned, with a gold bar down its edge.
-    const x = margin;
+    const x = o.spot ? o.spot.x * size.width - (b.width + unit * 1.2) / 2 : margin;
     ctx.save();
     ctx.globalAlpha *= a.alpha;
     ctx.translate(-(1 - a.alpha) * unit * 6, a.dy * b.height * 6);
@@ -378,10 +381,12 @@ function overlay(ctx: Ctx, size: Size, unit: number, o: Overlay, time: number, b
       ctx.fillText(shown, x + unit * 1.2 + pad.x, top + pad.y + b.lineHeight * (i + 0.5));
     });
     ctx.restore();
-    return;
+    return { id: o.id, x, y: top, width: b.width + unit * 1.2, height: b.height };
   }
   ctx.font = font;
-  drawAnimated(ctx, b, size.width / 2, top, style.fill, style.color, unit * 1.6, a, style.outline ? unit * 1.1 : 0);
+  const centre = o.spot ? o.spot.x * size.width : size.width / 2;
+  drawAnimated(ctx, b, centre, top, style.fill, style.color, unit * 1.6, a, style.outline ? unit * 1.1 : 0);
+  return { id: o.id, x: centre - b.width / 2, y: top, width: b.width, height: b.height };
 }
 
 function captions(ctx: Ctx, size: Size, unit: number, list: readonly Caption[], clipTime: number | null, style: CaptionStyle, margin: number, bottom: number): number {
@@ -428,8 +433,12 @@ function captions(ctx: Ctx, size: Size, unit: number, list: readonly Caption[], 
 
 // ---------------------------------------------------------------- the frame
 
-/** Draws the frame of `scene` onto `ctx`, which is `size` large. */
-export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pictureOf: PictureOf): void {
+/**
+ * Draws the frame of `scene` onto `ctx`, which is `size` large. Returns where
+ * it drew what a person can drag: the words, the logo and the texts showing.
+ */
+export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pictureOf: PictureOf): Hit[] {
+  const hits: Hit[] = [];
   const { edit, placed, time } = scene;
   const look = lookOf(edit);
   const unit = Math.min(size.width, size.height) / 100;
@@ -442,7 +451,7 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
     if (edit.endCard) endCard(ctx, size, unit, edit.endCard.text, scene.brand);
     else background(ctx, size);
     ctx.restore();
-    return;
+    return hits;
   }
 
   const current = frame.current;
@@ -459,9 +468,13 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
   const gap = unit * 2;
   const bands: Bands = { top: margin, bottom: size.height - margin, gap };
   if (edit.logo) {
-    const height = logo(ctx, size, unit, edit.logo, scene.brand);
-    if (edit.logo.startsWith('top')) bands.top += height + gap;
-    else bands.bottom -= height + gap;
+    const hit = logo(ctx, size, unit, edit.logo, scene.brand, edit.logoSpot);
+    hits.push(hit);
+    // Dragged somewhere of its own, the logo leaves the bands to the words.
+    if (!edit.logoSpot) {
+      if (edit.logo.startsWith('top')) bands.top += hit.height + gap;
+      else bands.bottom -= hit.height + gap;
+    }
   }
   if (look.progressBar) bands.bottom -= unit * 1.5;
 
@@ -472,17 +485,20 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
 
   const words = scene.words.trim();
   if (edit.text.show && words && (edit.text.until === null || time < edit.text.until)) {
-    const fontSize = unit * 6.8;
+    const spot = edit.text.spot;
+    const fontSize = unit * 6.8 * (spot?.scale ?? 1);
     const b = block(ctx, words, `600 ${fontSize}px ${DISPLAY}`, fontSize, size.width - margin * 2, 3, { x: unit * 2.6, y: unit * 1.7 });
-    const top = place(bands, edit.text.place, b.height, size);
+    const top = spot ? spot.y * size.height - b.height / 2 : place(bands, edit.text.place, b.height, size);
+    const centre = spot ? spot.x * size.width : size.width / 2;
     const until = edit.text.until ?? scene.total - (edit.endCard?.seconds ?? 0);
     const a = animate(look.textAnimation, time, until - time, words.length);
     ctx.font = `600 ${fontSize}px ${DISPLAY}`;
-    drawAnimated(ctx, b, size.width / 2, top, 'rgb(28 27 157 / 0.92)', BRAND_COLORS.gold, unit * 2, a);
+    drawAnimated(ctx, b, centre, top, 'rgb(28 27 157 / 0.92)', BRAND_COLORS.gold, unit * 2, a);
+    hits.push({ id: WORDS, x: centre - b.width / 2, y: top, width: b.width, height: b.height });
   }
 
   for (const o of edit.overlays ?? []) {
-    if (time >= o.start && time < o.end) overlay(ctx, size, unit, o, time, bands);
+    if (time >= o.start && time < o.end) hits.push(overlay(ctx, size, unit, o, time, bands));
   }
 
   if (look.progressBar && scene.total > 0) {
@@ -492,4 +508,5 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
     ctx.fillRect(0, size.height - unit * 1, size.width * clamp(time / scene.total, 0, 1), unit * 1);
   }
   ctx.restore();
+  return hits;
 }

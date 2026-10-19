@@ -1,6 +1,7 @@
 'use server';
 
-import { approveVariant, askForPicture, removePicture, saveVariant, saveVideoEdit, stopPicture, usePicture } from '@/lib/data';
+import { parseDesign } from '@/lib/creative/design';
+import { approveVariant, askForPicture, removePicture, saveDesign, saveVariant, saveVideoEdit, stopPicture, usePicture } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { isRecordId, parsePicturePrompt, parseVariantEdit } from '@/lib/edit-input';
 import { checkTeam } from '@/lib/session';
@@ -38,6 +39,16 @@ export async function saveVideoEditAction(variantId: unknown, edit: unknown): Pr
   const parsed = parseVideoEdit(edit);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   return saveVideoEdit(variantId, parsed.value);
+}
+
+/** Saves a picture ad's own layout, or puts the style's back (null, or a plain design). */
+export async function saveDesignAction(variantId: unknown, design: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(variantId)) return GONE;
+  const parsed = parseDesign(design);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return saveDesign(variantId, parsed.value);
 }
 
 /** Asks the image model for a picture for a variant from a prompt, which becomes the variant's picture prompt. */

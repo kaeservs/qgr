@@ -8,7 +8,9 @@ import { COPY_LIMITS, CTA_OPTIONS } from '@/lib/platforms';
 import type { Platform, PlatformCopy, Variant } from '@/lib/types';
 import { VideoCreative } from '../video/VideoCreative';
 import type { CreativeVideo } from '../video/VideoCreative';
+import type { CreativeDesign } from '@/lib/creative/design';
 import { Creative } from './Creative';
+import { CreativeCanvas } from './CreativeCanvas';
 import { Editable } from './Editable';
 import styles from './previews.module.css';
 
@@ -34,11 +36,15 @@ export interface PreviewProps {
   onCreative: (text: string) => void;
   /** For a run that started from a clip: the variant's video, drawn in place of the image. */
   video?: (CreativeVideo & { label: string }) | undefined;
+  /** A picture ad's own layout, drawn as it will be posted, with the name its logo shows. */
+  design?: { layout: CreativeDesign; brandName: string } | undefined;
 }
 
 /** The image, or the video when the variant is one. */
-export function Visual({ creative, image, video, ratio, editable, onCreative }: Pick<PreviewProps, 'creative' | 'image' | 'video' | 'editable' | 'onCreative'> & { ratio: 'square' | 'wide' }) {
+export function Visual({ creative, image, video, design, ratio, editable, onCreative }: Pick<PreviewProps, 'creative' | 'image' | 'video' | 'design' | 'editable' | 'onCreative'> & { ratio: 'square' | 'wide' }) {
   if (video) return <VideoCreative video={video} words={creative.text} label={video.label} />;
+  // With a layout of its own, the picture is drawn as it will be posted; its words are changed in Design.
+  if (design) return <CreativeCanvas text={creative.text} style={creative.style} ratio={ratio} image={image} design={design.layout} brandName={design.brandName} />;
   return <Creative text={creative.text} style={creative.style} image={image} ratio={ratio} editable={editable} onChange={onCreative} />;
 }
 
@@ -56,7 +62,7 @@ function Cta({ platform, value, editable, onChange, className }: { platform: Pla
 
 export const Mark = ({ size }: { size: number }) => <Image src="/brand/qgr-mark.png" alt="" width={size} height={size} />;
 
-export function MetaPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video }: PreviewProps) {
+export function MetaPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video, design }: PreviewProps) {
   const limits = COPY_LIMITS.meta;
   return (
     <div className={styles.post}>
@@ -75,7 +81,7 @@ export function MetaPreview({ copy, creative, image, brand, editable, onCopy, on
       <div className={styles.body}>
         <Editable editable={editable} value={copy.text} onChange={(v) => onCopy('text', v)} label="Primary text" className={styles.text} limit={limits.text} multiline />
       </div>
-      <Visual creative={creative} image={image} video={video} ratio="square" editable={editable} onCreative={onCreative} />
+      <Visual creative={creative} image={image} video={video} design={design} ratio="square" editable={editable} onCreative={onCreative} />
       <div className={styles.metaBar}>
         <span className={styles.metaBarText}>
           <span className={styles.metaDomain}>{brand.domain}</span>
@@ -99,7 +105,7 @@ export function MetaPreview({ copy, creative, image, brand, editable, onCopy, on
   );
 }
 
-export function LinkedInPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video }: PreviewProps) {
+export function LinkedInPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video, design }: PreviewProps) {
   const limits = COPY_LIMITS.linkedin;
   return (
     <div className={styles.post}>
@@ -116,7 +122,7 @@ export function LinkedInPreview({ copy, creative, image, brand, editable, onCopy
       <div className={styles.body}>
         <Editable editable={editable} value={copy.text} onChange={(v) => onCopy('text', v)} label="Introductory text" className={styles.text} limit={limits.text} multiline />
       </div>
-      <Visual creative={creative} image={image} video={video} ratio="wide" editable={editable} onCreative={onCreative} />
+      <Visual creative={creative} image={image} video={video} design={design} ratio="wide" editable={editable} onCreative={onCreative} />
       <div className={styles.liBar}>
         <span className={styles.liBarText}>
           <Editable editable={editable} value={copy.headline} onChange={(v) => onCopy('headline', v)} label="Headline" className={styles.liHeadline} limit={limits.headline} />
@@ -142,7 +148,7 @@ export function LinkedInPreview({ copy, creative, image, brand, editable, onCopy
   );
 }
 
-export function XPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video }: PreviewProps) {
+export function XPreview({ copy, creative, image, brand, editable, onCopy, onCreative, video, design }: PreviewProps) {
   const limits = COPY_LIMITS.x;
   return (
     <div className={cx(styles.post, styles.xPost)}>
@@ -158,7 +164,7 @@ export function XPreview({ copy, creative, image, brand, editable, onCopy, onCre
         </header>
         <Editable editable={editable} value={copy.text} onChange={(v) => onCopy('text', v)} label="Post text" className={cx(styles.text, styles.xText)} limit={limits.text} multiline />
         <div className={styles.xCard}>
-          <Visual creative={creative} image={image} video={video} ratio="wide" editable={editable} onCreative={onCreative} />
+          <Visual creative={creative} image={image} video={video} design={design} ratio="wide" editable={editable} onCreative={onCreative} />
           <div className={styles.xCardFoot}>
             <span className={styles.liDomain}>{brand.domain}</span>
             <Editable editable={editable} value={copy.headline} onChange={(v) => onCopy('headline', v)} label="Card title" className={styles.xCardTitle} limit={limits.headline} />

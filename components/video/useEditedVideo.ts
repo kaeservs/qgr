@@ -9,6 +9,7 @@ import { editedSeconds } from '@/lib/video/edit';
 import type { Size, VideoEdit } from '@/lib/video/edit';
 import { frameAt, layout, mediaOf, musicGainAt, musicSourceAt, pieceGainAt, sequenceOf } from '@/lib/video/timeline';
 import type { Placed, Showing } from '@/lib/video/timeline';
+import type { Hit } from '@/lib/spot';
 import { playableUrl } from './media';
 import { useMediaUrls } from './useMediaUrls';
 
@@ -92,6 +93,8 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
   placed: Placed[];
   /** Files the edit uses that can't be shown here (none of them yet signed or still in this tab). */
   missing: number;
+  /** Where the words, the logo and the texts showing were drawn, in the canvas's pixels; empty while it plays. */
+  hits: Hit[];
 } {
   const assets = useFrameAssets();
   const sequence = useMemo(() => sequenceOf(edit), [edit]);
@@ -174,12 +177,20 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
     [image],
   );
 
+  // Where the words, the logo and the texts were drawn, for the editor's handles: kept only while paused.
+  const [hits, setHits] = useState<Hit[]>([]);
+  const lastHits = useRef('');
   const draw = useCallback(
     (t: number) => {
       const ctx = canvas.current?.getContext('2d');
       if (!ctx) return;
       const { edit: e, placed: p, total: all, size: s, words: w, assets: a } = live.current;
-      drawTimelineFrame(ctx, s, { edit: e, placed: p, total: all, words: w.words, brand: { ...w.brand, mark: a.mark }, time: t }, pictureOf);
+      const drawn = drawTimelineFrame(ctx, s, { edit: e, placed: p, total: all, words: w.words, brand: { ...w.brand, mark: a.mark }, time: t }, pictureOf);
+      const key = run.current ? '' : JSON.stringify(drawn);
+      if (key !== lastHits.current) {
+        lastHits.current = key;
+        setHits(run.current ? [] : drawn);
+      }
     },
     [canvas, pictureOf],
   );
@@ -347,5 +358,6 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
     total,
     placed,
     missing,
+    hits,
   };
 }

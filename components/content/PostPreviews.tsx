@@ -7,6 +7,7 @@ import { LIMITS } from '@/lib/edit-input';
 import type { Place, Variant } from '@/lib/types';
 import type { CreativeVideo } from '../video/VideoCreative';
 import { Editable } from './Editable';
+import type { CreativeDesign } from '@/lib/creative/design';
 import { Mark, Visual } from './Previews';
 import type { AdBrand } from './Previews';
 import styles from './previews.module.css';
@@ -28,13 +29,14 @@ export interface PostPreviewProps {
   onText: (value: string) => void;
   onCreative: (text: string) => void;
   video?: (CreativeVideo & { label: string }) | undefined;
+  design?: { layout: CreativeDesign; brandName: string } | undefined;
 }
 
 function FromCopy({ fromCopy }: { fromCopy: boolean }) {
   return fromCopy ? <p className={styles.fromCopy}>No post written for this place yet: its ad copy would go out. Write it here.</p> : null;
 }
 
-export function FacebookPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video }: PostPreviewProps) {
+export function FacebookPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video, design }: PostPreviewProps) {
   return (
     <div className={styles.post}>
       <header className={styles.head}>
@@ -53,7 +55,7 @@ export function FacebookPost({ text, fromCopy, creative, image, brand, editable,
         <FromCopy fromCopy={fromCopy} />
         <Editable editable={editable} value={text} onChange={onText} label="Facebook post" className={styles.text} limit={LIMITS.post} multiline />
       </div>
-      <Visual creative={creative} image={image} video={video} ratio="square" editable={editable} onCreative={onCreative} />
+      <Visual creative={creative} image={image} video={video} design={design} ratio="square" editable={editable} onCreative={onCreative} />
       <footer className={styles.actions} aria-hidden>
         <span>
           <ThumbsUp size={16} /> Like
@@ -69,7 +71,7 @@ export function FacebookPost({ text, fromCopy, creative, image, brand, editable,
   );
 }
 
-export function InstagramPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video }: PostPreviewProps) {
+export function InstagramPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video, design }: PostPreviewProps) {
   const handle = brand.name.toLowerCase().replace(/[^a-z0-9._]/g, '');
   return (
     <div className={styles.post}>
@@ -82,7 +84,7 @@ export function InstagramPost({ text, fromCopy, creative, image, brand, editable
         </span>
         <Ellipsis size={18} className={styles.more} aria-hidden />
       </header>
-      <Visual creative={creative} image={image} video={video} ratio="square" editable={editable} onCreative={onCreative} />
+      <Visual creative={creative} image={image} video={video} design={design} ratio="square" editable={editable} onCreative={onCreative} />
       <div className={styles.igActions} aria-hidden>
         <Heart size={20} />
         <MessageCircle size={20} />
@@ -98,7 +100,7 @@ export function InstagramPost({ text, fromCopy, creative, image, brand, editable
   );
 }
 
-export function LinkedInPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video }: PostPreviewProps) {
+export function LinkedInPost({ text, fromCopy, creative, image, brand, editable, onText, onCreative, video, design }: PostPreviewProps) {
   return (
     <div className={styles.post}>
       <header className={styles.head}>
@@ -115,7 +117,7 @@ export function LinkedInPost({ text, fromCopy, creative, image, brand, editable,
         <FromCopy fromCopy={fromCopy} />
         <Editable editable={editable} value={text} onChange={onText} label="LinkedIn post" className={styles.text} limit={LIMITS.post} multiline />
       </div>
-      <Visual creative={creative} image={image} video={video} ratio="wide" editable={editable} onCreative={onCreative} />
+      <Visual creative={creative} image={image} video={video} design={design} ratio="wide" editable={editable} onCreative={onCreative} />
       <footer className={styles.actions} aria-hidden>
         <span>
           <ThumbsUp size={16} /> Like

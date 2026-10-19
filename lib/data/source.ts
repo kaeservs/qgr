@@ -35,6 +35,7 @@ import type {
   User,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
+import type { CreativeDesign } from '../creative/design';
 
 export type RunWithStatus = Run & { status: RunStatus };
 
@@ -142,6 +143,8 @@ export interface DataSource {
   /** "This worked" on a post that went out: its words for that place become a post that works. */
   rememberPost(postId: string, place: Place, note?: string): Promise<Saved>;
 
+  /** Saves a picture ad's own layout; null puts back the style's. */
+  saveDesign(variantId: string, design: CreativeDesign | null): Promise<Saved>;
   /** Saves how a variant uses its run's clip; null puts back the whole clip as it is. */
   saveVideoEdit(variantId: string, edit: VideoEdit | null): Promise<Saved>;
   /** Long videos, newest first, without their transcripts. */

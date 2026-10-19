@@ -2,12 +2,17 @@
 // in CSS (components/content/Creative.tsx and previews.module.css), drawn
 // again at a post's size so the file that goes out looks like what was
 // approved. Every size is a share of the width, as the CSS's container units
-// are, so the drawing is the same at any size.
+// are, so the drawing is the same at any size. A variant with a layout of its
+// own (lib/creative/design.ts) is drawn only here, in the studio too, so what
+// is moved is exactly what is posted.
 
+import type { Hit, Spot } from '../spot';
 import type { CreativeStyle } from '../types';
 import { BRAND_COLORS, wrap } from '../video/draw';
 import type { Ctx } from '../video/draw';
 import type { Size } from '../video/edit';
+import { LOGO, WORDS } from './design';
+import type { CreativeDesign, DesignText } from './design';
 
 const DISPLAY = '"Oswald Variable", Oswald, Impact, "Arial Narrow", sans-serif';
 const TEXT = '"Lexend Variable", Lexend, system-ui, sans-serif';
@@ -115,17 +120,21 @@ export function balanced(ctx: Ctx, text: string, width: number, max: number): st
   return wrap(ctx, text, high, max);
 }
 
-/** The brand's chip: white, or indigo on the spotlight's light ground. */
-function chip(ctx: Ctx, size: Size, light: boolean, mark: CanvasImageSource | null, name: string) {
-  const k = size.width / PREVIEW_WIDTH;
+/** The brand's chip, measured: its size at `scale` of the usual. */
+function chipSize(ctx: Ctx, size: Size, mark: CanvasImageSource | null, name: string, scale: number) {
+  const k = (size.width / PREVIEW_WIDTH) * scale;
   const font = 11 * k;
   const markSize = mark ? 18 * k : 0;
   ctx.font = `500 ${font}px ${TEXT}`;
   const textWidth = ctx.measureText(name).width;
   const height = Math.max(markSize, font * 1.4) + 8 * k;
   const width = 5 * k + (mark ? markSize + 6 * k : 0) + textWidth + 10 * k;
-  const x = size.width * 0.06;
-  const y = size.width * 0.05;
+  return { k, font, markSize, width, height };
+}
+
+/** The brand's chip with its top left at (x, y): white, or indigo on the spotlight's light ground. */
+function chip(ctx: Ctx, size: Size, light: boolean, mark: CanvasImageSource | null, name: string, x: number, y: number, scale: number): Hit {
+  const { k, font, markSize, width, height } = chipSize(ctx, size, mark, name, scale);
   ctx.fillStyle = light ? BRAND_COLORS.indigo : 'rgb(255 255 255 / 0.95)';
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, height / 2);
@@ -135,52 +144,146 @@ function chip(ctx: Ctx, size: Size, light: boolean, mark: CanvasImageSource | nu
     ctx.drawImage(mark, cursor, y + (height - markSize) / 2, markSize, markSize);
     cursor += markSize + 6 * k;
   }
+  ctx.font = `500 ${font}px ${TEXT}`;
   ctx.fillStyle = light ? BRAND_COLORS.white : COLORS.indigoInk;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   ctx.fillText(name, cursor, y + height / 2);
+  return { id: LOGO, x, y, width, height };
+}
+
+/** An added text's look: its colour, and the band behind it if it has one. */
+const LOOK: Record<DesignText['look'], { color: string; band: string | null }> = {
+  gold: { color: BRAND_COLORS.gold, band: null },
+  white: { color: BRAND_COLORS.white, band: null },
+  indigo: { color: BRAND_COLORS.indigo, band: null },
+  banner: { color: BRAND_COLORS.gold, band: 'rgb(28 27 157 / 0.92)' },
+};
+
+/** An added text centred on (cx, cy), up to three lines. */
+function addedText(ctx: Ctx, size: Size, t: DesignText, cx: number, cy: number, scale: number): Hit {
+  const look = LOOK[t.look];
+  const fontSize = size.width * 0.046 * scale;
+  ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+  const lines = balanced(ctx, t.text, size.width * 0.84, 3);
+  const lineHeight = fontSize * 1.15;
+  const pad = look.band ? { x: fontSize * 0.55, y: fontSize * 0.3 } : { x: 0, y: 0 };
+  const width = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad.x * 2;
+  const height = lines.length * lineHeight + pad.y * 2;
+  const x = cx - width / 2;
+  const y = cy - height / 2;
+  if (look.band) {
+    ctx.fillStyle = look.band;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, fontSize * 0.3);
+    ctx.fill();
+  }
+  ctx.fillStyle = look.color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  lines.forEach((line, i) => ctx.fillText(line, cx, y + pad.y + lineHeight * (i + 0.5)));
+  return { id: t.id, x, y, width, height };
 }
 
 /**
  * Draws the picture onto `ctx`, which is `size` large: the design, or the
- * image model's picture under the words when the variant has one.
+ * image model's picture under the words when the variant has one, laid out as
+ * the variant's own design says where it has one. Returns where it drew each
+ * thing a person can move.
  */
-export function drawCreative(ctx: Ctx, size: Size, creative: CreativeArt, brand: { name: string; mark: CanvasImageSource | null }, picture: CreativePicture | null = null): void {
+export function drawCreative(
+  ctx: Ctx,
+  size: Size,
+  creative: CreativeArt,
+  brand: { name: string; mark: CanvasImageSource | null },
+  picture: CreativePicture | null = null,
+  design: CreativeDesign | null = null,
+): Hit[] {
   const { width: w, height: h } = size;
   const cq = w / 100;
+  const spots: Record<string, Spot> = design?.spots[creative.ratio] ?? {};
+  const hits: Hit[] = [];
   if (picture) cover(ctx, size, picture);
   else art(ctx, size, creative.style);
   // On a picture the spotlight's indigo words and rule give way to gold, as in the studio.
   const light = creative.style === 'spotlight' && !picture;
 
-  const fontSize = TYPE[creative.style][creative.ratio] * w;
-  const lineHeight = fontSize * 1.12;
-  const padX = 8 * cq;
-  const padY = 7 * cq;
-  const left = padX;
-  const right = creative.style === 'split' ? 46 * cq : padX;
-  const maxWidth = w - left - right;
-  ctx.font = `600 ${fontSize}px ${DISPLAY}`;
-  if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
-  const maxLines = Math.max(1, Math.floor((h - padY * 2) / lineHeight));
-  const lines = balanced(ctx, creative.text.trim(), maxWidth, maxLines);
-  const rule = light ? 3 * cq + 1.2 * cq : 0;
-  const block = lines.length * lineHeight + rule;
+  const text = creative.text.trim();
+  if (text) {
+    const placed = spots[WORDS];
+    const fontSize = TYPE[creative.style][creative.ratio] * w * (placed?.scale ?? 1);
+    const lineHeight = fontSize * 1.12;
+    const padX = 8 * cq;
+    const padY = 7 * cq;
+    const left = padX;
+    const right = creative.style === 'split' ? 46 * cq : padX;
+    const maxWidth = w - left - right;
+    ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
+    const maxLines = placed ? 6 : Math.max(1, Math.floor((h - padY * 2) / lineHeight));
+    const lines = balanced(ctx, text, placed ? Math.min(w * 0.92, maxWidth * Math.max(1, placed.scale)) : maxWidth, maxLines);
+    const ruleGap = 3 * cq;
+    const ruleHeight = 1.2 * cq;
+    const rule = light ? ruleGap + ruleHeight : 0;
+    const block = lines.length * lineHeight + rule;
+    const centred = creative.style === 'arcs';
+    const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
 
-  let top: number;
-  if (creative.style === 'arcs') top = (creative.ratio === 'wide' ? 13 : 18) * cq;
-  else top = padY + (h - padY * 2 - block) / 2;
+    // Where the style puts the block, or centred on the spot a person moved it to.
+    let top: number;
+    let blockLeft: number;
+    if (placed) {
+      top = placed.y * h - block / 2;
+      blockLeft = placed.x * w - widest / 2;
+    } else {
+      top = creative.style === 'arcs' ? (creative.ratio === 'wide' ? 13 : 18) * cq : padY + (h - padY * 2 - block) / 2;
+      blockLeft = centred ? w / 2 - widest / 2 : left;
+    }
 
-  ctx.fillStyle = light ? BRAND_COLORS.indigo : BRAND_COLORS.gold;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = creative.style === 'arcs' ? 'center' : 'left';
-  const x = creative.style === 'arcs' ? w / 2 : left;
-  lines.forEach((line, i) => ctx.fillText(line, x, top + lineHeight * (i + 0.5)));
-  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.fillStyle = light ? BRAND_COLORS.indigo : BRAND_COLORS.gold;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = centred ? 'center' : 'left';
+    const x = centred ? blockLeft + widest / 2 : blockLeft;
+    lines.forEach((line, i) => ctx.fillText(line, x, top + lineHeight * (i + 0.5)));
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 
-  if (light) {
-    ctx.fillStyle = BRAND_COLORS.gold;
-    ctx.fillRect(left, top + lines.length * lineHeight + 3 * cq, 18 * cq, 1.2 * cq);
+    if (light) {
+      ctx.fillStyle = BRAND_COLORS.gold;
+      ctx.fillRect(blockLeft, top + lines.length * lineHeight + ruleGap, 18 * cq, ruleHeight);
+    }
+    hits.push({ id: WORDS, x: blockLeft, y: top, width: widest, height: block });
   }
-  chip(ctx, size, light, brand.mark, brand.name);
+
+  // Added texts sit one above another from the bottom, unless moved.
+  let bottom = h - 6 * cq;
+  for (const t of design?.texts ?? []) {
+    const placed = spots[t.id];
+    if (placed) {
+      hits.push(addedText(ctx, size, t, placed.x * w, placed.y * h, placed.scale));
+      continue;
+    }
+    // Measured where it would sit, then drawn there: its height is known only once wrapped.
+    const probe = measureText(ctx, size, t);
+    const hit = addedText(ctx, size, t, w / 2, bottom - probe / 2, 1);
+    bottom = hit.y - 1.6 * cq;
+    hits.push(hit);
+  }
+
+  if (design?.logo ?? true) {
+    const placed = spots[LOGO];
+    const scale = placed?.scale ?? 1;
+    const { width, height } = chipSize(ctx, size, brand.mark, brand.name, scale);
+    const x = placed ? placed.x * w - width / 2 : w * 0.06;
+    const y = placed ? placed.y * h - height / 2 : w * 0.05;
+    hits.push(chip(ctx, size, light, brand.mark, brand.name, x, y, scale));
+  }
+  return hits;
+}
+
+/** An added text's height at its usual size, before it is drawn. */
+function measureText(ctx: Ctx, size: Size, t: DesignText): number {
+  const fontSize = size.width * 0.046;
+  ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+  const lines = balanced(ctx, t.text, size.width * 0.84, 3);
+  return lines.length * fontSize * 1.15 + (LOOK[t.look].band ? fontSize * 0.6 : 0);
 }

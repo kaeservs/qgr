@@ -25,12 +25,16 @@ import {
   lookOf,
   mediaOf,
   newId,
+  placeAt,
   removePiece,
   sequenceOf,
   splitPiece,
+  spotIn,
 } from '@/lib/video/timeline';
 import type { MediaRef, Placed, Segment } from '@/lib/video/timeline';
 import { UploadError, removeEditFile, uploadEditFile } from '@/lib/video/upload';
+import { LOGO, SCALE, WORDS } from '@/lib/spot';
+import { DragLayer } from '../ui/DragLayer';
 import { useToast } from '../ui/Toast';
 import { Choices, EffectsPanel, OverlaysPanel, PiecePanel, SoundPanel } from './EditorPanels';
 import type { Changes } from './EditorPanels';
@@ -128,6 +132,8 @@ export function VideoEditor({
   const [caption, setCaption] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  // The words, the logo or a text picked on the preview, to size or put back.
+  const [grabbed, setGrabbed] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'exporting' | null>(null);
   const [adding, setAdding] = useState<{ label: string; share: number } | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -149,7 +155,7 @@ export function VideoEditor({
   const previewSize = useMemo(() => frameSize(edit, clip, 720), [edit, clip]);
   // Before the run there are no ad words yet: the preview shows where each ad's own will go.
   const shownWords = variant ? words : WORDS_TO_COME;
-  const { player, total, placed, missing } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand });
+  const { player, total, placed, missing, hits } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand });
   const t = useTime(player.clock);
   const duration = clip.duration;
   const sequence = useMemo(() => sequenceOf(edit), [edit]);
@@ -186,6 +192,16 @@ export function VideoEditor({
     settle: () => history.settle(edit),
     setSequence: (next) => history.set(withSequence(next)),
     previewSequence: (next) => history.preview(withSequence(next)),
+  };
+
+  // What can be dragged on the preview, by name, for its handle and the picked strip.
+  const grabLabels: Record<string, string> = { [WORDS]: variant ? 'the words' : 'where the words go', [LOGO]: 'the logo', ...Object.fromEntries((edit.overlays ?? []).map((o) => [o.id, `“${o.text}”`])) };
+  /** Where a thing is now: where it was dragged to, or the middle of where it is drawn. */
+  const grabbedAt = (id: string) => {
+    const spot = spotIn(edit, id);
+    if (spot) return spot;
+    const hit = hits.find((h) => h.id === id);
+    return hit ? { x: (hit.x + hit.width / 2) / previewSize.width, y: (hit.y + hit.height / 2) / previewSize.height, scale: 1 } : null;
   };
 
   const flags = [...(variant ? guardrailWarnings(words, variant.copy, platforms).filter((f) => f.startsWith('image text')) : []), ...videoWarnings(edit)];
@@ -405,7 +421,23 @@ export function VideoEditor({
             <div className={styles.stage}>
               <div ref={host} className={styles.hiddenVideo} aria-hidden />
               {url ? (
-                <canvas ref={canvas} width={previewSize.width} height={previewSize.height} role="img" aria-label={`Preview: ${ASPECT_INFO[edit.aspect].label}, ${length(total)}`} onClick={() => player.toggle()} />
+                <div className={styles.stageCanvas}>
+                  <canvas ref={canvas} width={previewSize.width} height={previewSize.height} role="img" aria-label={`Preview: ${ASPECT_INFO[edit.aspect].label}, ${length(total)}`} onClick={() => player.toggle()} />
+                  {/* Paused, the words, the logo and the texts on screen can be dragged where they should sit. */}
+                  {!player.playing && (
+                    <DragLayer
+                      hits={hits}
+                      size={previewSize}
+                      labels={grabLabels}
+                      selected={grabbed}
+                      spotOf={(id) => spotIn(edit, id)}
+                      onSelect={setGrabbed}
+                      onMove={(id, spot) => history.preview(placeAt(edit, id, spot))}
+                      onDrop={(id, spot) => history.settle(placeAt(edit, id, spot))}
+                      disabled={busy !== null}
+                    />
+                  )}
+                </div>
               ) : (
                 <p className={styles.stageMessage}>Sample data keeps no uploads, so this clip can’t be edited here.</p>
               )}
@@ -436,6 +468,38 @@ export function VideoEditor({
                 </button>
               </div>
             </div>
+
+            {grabbed && grabLabels[grabbed] && (
+              <div className={styles.grabbed} role="group" aria-label={`Picked: ${grabLabels[grabbed]}`}>
+                <span className="small">
+                  Picked: <strong>{grabLabels[grabbed]}</strong>
+                </span>
+                <label className={styles.grabbedSize}>
+                  <span className="small">Size {Math.round((spotIn(edit, grabbed)?.scale ?? 1) * 100)}%</span>
+                  <input
+                    type="range"
+                    min={SCALE.min}
+                    max={SCALE.max}
+                    step={0.05}
+                    value={spotIn(edit, grabbed)?.scale ?? 1}
+                    onChange={(e) => {
+                      const at = grabbedAt(grabbed);
+                      if (at) history.preview(placeAt(edit, grabbed, { ...at, scale: Number(e.target.value) }));
+                    }}
+                    onPointerUp={() => history.settle(edit)}
+                    onKeyUp={() => history.settle(edit)}
+                    disabled={!grabbedAt(grabbed)}
+                  />
+                </label>
+                <button type="button" className="btn btn-quiet btn-sm" disabled={!spotIn(edit, grabbed)} onClick={() => history.set(placeAt(edit, grabbed, null))}>
+                  <RotateCcw size={14} aria-hidden />
+                  {grabbed === LOGO ? 'Back in its corner' : 'Back in its place'}
+                </button>
+                <button type="button" className="icon-btn icon-btn-plain" aria-label="Done with it" onClick={() => setGrabbed(null)}>
+                  <Close size={16} aria-hidden />
+                </button>
+              </div>
+            )}
 
             <div className={styles.addRow} aria-label="Add to the video">
               <span className={styles.addLabel}>Add:</span>
@@ -551,7 +615,7 @@ export function VideoEditor({
                     ) : (
                       <span className="muted small">The agents write each ad’s words; here you choose where and how long they show. Your own words go under Texts on the video.</span>
                     )}
-                    <Choices label="Where" options={TEXT_PLACES} value={edit.text.place} name={(p) => PLACE_LABEL[p]} disabled={!edit.text.show} onPick={(p) => change({ text: { ...edit.text, place: p } })} />
+                    <Choices label="Where" options={TEXT_PLACES} value={edit.text.place} name={(p) => PLACE_LABEL[p]} disabled={!edit.text.show} onPick={(p) => history.set({ ...placeAt(edit, WORDS, null), text: { ...placeAt(edit, WORDS, null).text, place: p } })} />
                     <div className="field">
                       <span className="label">How long</span>
                       <div className={styles.choices} role="radiogroup" aria-label="How long the words stay up">
@@ -785,7 +849,7 @@ export function VideoEditor({
                         None
                       </button>
                       {CORNERS.map((c) => (
-                        <button key={c} type="button" role="radio" aria-checked={edit.logo === c} className={cx(styles.choice, edit.logo === c && styles.choiceOn)} onClick={() => change({ logo: c })}>
+                        <button key={c} type="button" role="radio" aria-checked={edit.logo === c} className={cx(styles.choice, edit.logo === c && styles.choiceOn)} onClick={() => history.set({ ...placeAt(edit, LOGO, null), logo: c })}>
                           {CORNER_LABEL[c]}
                         </button>
                       ))}

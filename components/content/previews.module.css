@@ -586,3 +586,8 @@
   font-size: 14px;
   font-weight: 600;
 }
+.creativeCanvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}

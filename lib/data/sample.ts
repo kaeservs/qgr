@@ -189,6 +189,7 @@ export const sampleData: DataSource = {
     return { ok: true, value: null, sample: true };
   },
   saveVideoEdit: async () => ({ ok: true, value: null, sample: true }),
+  saveDesign: async () => ({ ok: true, value: null, sample: true }),
   getLongVideos: async () => longVideos().map(({ transcript: _transcript, ...video }) => video),
   getLongVideo: async (id) => longVideos().find((v) => v.id === id) ?? null,
   // No agent runs on the sample data: its moments are picked by their place in the video, and say so.
