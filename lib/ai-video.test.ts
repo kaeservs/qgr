@@ -54,6 +54,10 @@ describe('credits', () => {
     expect(formatCredits(2)).toBe('2 credits');
     expect(formatCredits(1)).toBe('1 credit');
     expect(formatCredits(7.5)).toBe('7.5 credits');
+    // A low-quality picture, and a run's three: never rounded up to a tenth.
+    expect(formatCredits(0.25)).toBe('0.25 credits');
+    expect(formatCredits(0.25 * 3)).toBe('0.75 credits');
+    expect(formatCredits(280)).toBe('280 credits');
   });
 });
 
