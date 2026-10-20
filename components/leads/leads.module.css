@@ -1,0 +1,611 @@
+/* The Leads page: who answered QGR's ads and posts, which ad brought them, and who qualifies. */
+
+.views {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.views a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border-radius: 10px;
+  color: var(--text-2);
+  font-size: 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.views a:hover {
+  color: var(--indigo);
+}
+
+.views a[aria-current='page'] {
+  background: var(--indigo);
+  color: #fff;
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .views {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .views a {
+    flex: none;
+    gap: 6px;
+    padding: 0 12px;
+  }
+
+  .views a svg {
+    display: none;
+  }
+}
+
+.view {
+  display: grid;
+  gap: 16px;
+}
+
+.note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--indigo-50);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.note svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--indigo);
+}
+
+.noteWarn {
+  background: var(--fail-bg);
+}
+
+.noteWarn svg {
+  color: var(--fail);
+}
+
+/* ---------------------------------------------------------------- filters */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.filterGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.filterLabel {
+  margin-right: 2px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.chip:hover {
+  border-color: var(--indigo-200);
+  color: var(--indigo);
+}
+
+.chip[aria-current='true'] {
+  border-color: var(--indigo);
+  background: var(--indigo-50);
+  color: var(--indigo);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- totals */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.kpi {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+}
+
+.kpiLabel {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.kpiValue {
+  color: var(--text);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.kpiNote {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* ---------------------------------------------------------------- the share bar */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.bar {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 10px;
+}
+
+.bar > span {
+  min-width: 2px;
+  height: 100%;
+}
+
+.bar > span:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.bar > span:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+.bar > span:only-child {
+  border-radius: 4px;
+}
+
+.qualified {
+  background: var(--ok);
+}
+
+.notQualified {
+  background: var(--fail);
+}
+
+.unclear {
+  background: var(--gold-strong);
+}
+
+.waiting {
+  background: var(--line-strong);
+}
+
+/* ---------------------------------------------------------------- campaigns */
+
+.campaigns {
+  display: grid;
+  gap: 12px;
+}
+
+.campaign {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.campaignHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.campaignName {
+  margin: 0;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.campaignMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.platforms {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.share {
+  display: grid;
+  gap: 6px;
+}
+
+.shareLine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  justify-content: space-between;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.shareLine strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ads {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.ad {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) 13rem;
+  gap: 8px 16px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.ad:last-child {
+  border-bottom: 0;
+}
+
+.adName {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.adAngle {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.adBar {
+  min-width: 0;
+}
+
+.adCount {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .ad {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .adBar {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+/* ---------------------------------------------------------------- suggestions */
+
+.suggestions {
+  display: grid;
+  gap: 12px;
+}
+
+.suggestion {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.suggestionIcon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--indigo-50);
+  color: var(--indigo);
+}
+
+.suggestionRethink .suggestionIcon {
+  background: var(--gold-100);
+  color: var(--gold-ink);
+}
+
+.suggestionBody {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.suggestionTitle {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.suggestionText {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.suggestionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ---------------------------------------------------------------- one lead */
+
+.list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lead {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+}
+
+.leadHead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.leadName {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.leadMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: center;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.leadFrom {
+  overflow-wrap: anywhere;
+}
+
+.leadSide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.verdictRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.verdictBy {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reasons {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.quote {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.quoteField {
+  color: var(--muted);
+}
+
+.personNote {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--indigo-200);
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.answers {
+  font-size: 13px;
+}
+
+.answers summary {
+  color: var(--indigo);
+  cursor: pointer;
+}
+
+.answerList {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 10px 0 0;
+}
+
+.answerList dt {
+  color: var(--muted);
+}
+
+.answerList dd {
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .answerList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .answerList dd {
+    margin-bottom: 6px;
+  }
+}
+
+.leadActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.verdictForm {
+  display: grid;
+  gap: 8px;
+}
+
+.verdictForm .textarea {
+  min-height: 64px;
+}
+
+/* ---------------------------------------------------------------- setup */
+
+.setup {
+  display: grid;
+  gap: 16px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.criteria {
+  min-height: 220px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.status {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.steps {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+  list-style: decimal;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.example {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.example code {
+  font-size: 12px;
+}

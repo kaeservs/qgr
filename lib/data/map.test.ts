@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toNotices, toPost, toRun, toStrategy, toUser } from './map';
-import type { ActivityRows, AdSetRow, BrandRow, CompetitorRow, PostRow, RunRow, StageRow, StrategyRow } from './map';
+import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
+import type { ActivityRows, AdSetRow, BrandRow, CompetitorRow, LeadRow, PostRow, RunRow, SettingsRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
 const CLIP_PATH_OK = 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.mp4';
@@ -610,5 +610,86 @@ describe('brand memory', () => {
       ['facebook', false],
       ['linkedin', true],
     ]);
+  });
+});
+
+describe('leads', () => {
+  const row = (extra: Partial<LeadRow> = {}): LeadRow => ({
+    id: 'lead-1',
+    zoho_id: '5725767000000412001',
+    name: 'Asha Rao',
+    zoho_status: 'Not Contacted',
+    zoho_source: 'Facebook',
+    platform: 'instagram',
+    campaign: { utm: { source: 'instagram', campaign: 'qgr-1a2b3c4d', content: 'b-instagram', nonsense: 3 }, name: 'EB-5 webinar', ad_name: 'Family' },
+    answers: [{ field: 'Investment budget', value: '$800,000 to $1M' }, { field: '', value: 'dropped' }, 'not an answer'],
+    place: 'instagram',
+    created_in_zoho: '2026-10-19T09:30:00+00:00',
+    verdict: 'qualified',
+    reasons: [{ text: 'Can invest the minimum.', field: 'Investment budget', quote: '$800,000 to $1M' }, { text: '' }],
+    judged_at: '2026-10-19T09:35:00+00:00',
+    judged_criteria_at: '2026-09-20T08:00:00.123456+00:00',
+    judge_status: 'done',
+    judge_error: null,
+    person_verdict: null,
+    person_note: null,
+    person_at: null,
+    runs: { id: 'run-1', title: 'From H-1B to EB-5' },
+    ad_variants: { id: 'v-1', label: 'B', angle: 'The 60-day question', ad_set_id: 'set-1' },
+    ...extra,
+  });
+  const settings = { zoho: { region: 'eu' as const, org: 'org20123456' }, criteriaAt: '2026-09-20T08:00:00.123456+00:00' };
+
+  it('reads a lead as the page shows it, with where it came from and Claude’s quoted reasons', () => {
+    expect(toLead(row(), settings)).toEqual({
+      id: 'lead-1',
+      name: 'Asha Rao',
+      createdAt: '2026-10-19T09:30:00+00:00',
+      platform: 'instagram',
+      zohoStatus: 'Not Contacted',
+      zohoSource: 'Facebook',
+      zohoUrl: 'https://crm.zoho.eu/crm/org20123456/tab/Leads/5725767000000412001',
+      campaign: { name: 'EB-5 webinar', adName: 'Family', utm: { source: 'instagram', campaign: 'qgr-1a2b3c4d', content: 'b-instagram' } },
+      from: { runId: 'run-1', runTitle: 'From H-1B to EB-5', adSetId: 'set-1', variantId: 'v-1', angle: 'The 60-day question', label: 'B', place: 'instagram' },
+      answers: [{ field: 'Investment budget', value: '$800,000 to $1M' }],
+      ai: { verdict: 'qualified', reasons: [{ text: 'Can invest the minimum.', field: 'Investment budget', quote: '$800,000 to $1M' }], at: '2026-10-19T09:35:00+00:00', olderCriteria: false },
+      judging: 'done',
+    });
+  });
+
+  it('marks a verdict on older criteria, keeps a person’s, and says why judging failed', () => {
+    expect(toLead(row({ judged_criteria_at: '2026-09-01T00:00:00+00:00' }), settings).ai?.olderCriteria).toBe(true);
+    const set = toLead(row({ person_verdict: 'not_qualified', person_note: 'A loan.', person_at: '2026-10-20T00:00:00+00:00' }), settings);
+    expect(set.person).toEqual({ verdict: 'not_qualified', note: 'A loan.', at: '2026-10-20T00:00:00+00:00' });
+    const failed = toLead(row({ verdict: null, judged_at: null, judge_status: 'failed', judge_error: 'Claude declined.', runs: null, ad_variants: null }), { zoho: null, criteriaAt: settings.criteriaAt });
+    expect(failed).toMatchObject({ judging: 'failed', judgeError: 'Claude declined.' });
+    expect(failed).not.toHaveProperty('ai');
+    expect(failed).not.toHaveProperty('from');
+    expect(failed).not.toHaveProperty('zohoUrl');
+    expect(toLead(row({ judge_status: 'queued', verdict: null, judged_at: null }), settings).judging).toBe('waiting');
+  });
+
+  it('reads how leads come in and are judged', () => {
+    const settingsRow = {
+      lead_criteria: 'A qualified lead can invest.',
+      lead_criteria_at: '2026-09-20T08:00:00+00:00',
+      leads_source: 'zoho',
+      zoho_region: 'com.au',
+      zoho_org: null,
+      leads_synced_at: '2026-10-19T08:30:00+00:00',
+      leads_checked_at: '2026-10-19T08:45:00+00:00',
+      leads_sync_error: null,
+      post_link: 'https://qgr.example/call',
+    } as unknown as SettingsRow;
+    expect(toLeadSettings(settingsRow)).toEqual({
+      criteria: 'A qualified lead can invest.',
+      criteriaAt: '2026-09-20T08:00:00+00:00',
+      source: 'zoho',
+      zoho: { region: 'com.au', org: null },
+      syncedAt: '2026-10-19T08:30:00+00:00',
+      checkedAt: '2026-10-19T08:45:00+00:00',
+      syncError: null,
+      postLink: 'https://qgr.example/call',
+    });
   });
 });

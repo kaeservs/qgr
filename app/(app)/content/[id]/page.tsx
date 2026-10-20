@@ -64,7 +64,7 @@ export default async function AdSetPage({ params }: Props) {
         brand={{ name: brand.pageName, company: brand.company, domain: brand.website.replace(/^https?:\/\//, '').replace(/\/$/, ''), xHandle: brand.xHandle }}
         {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
         posts={posts.filter((p) => p.adSetId === set.id)}
-        publishing={{ timeZone: settings.timeZone, pages: settings.pages, forReal: settings.postForReal }}
+        publishing={{ timeZone: settings.timeZone, pages: settings.pages, forReal: settings.postForReal, postLink: settings.postLink }}
         pictures={{ style: memory?.memory.pictureStyle ?? '', model: settings.pictureModel, sample: usingSampleData() }}
       />
     </>

@@ -1,6 +1,6 @@
-// Builds the n8n Workflow SDK source for the nine QGR workflows from the
-// Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts and
-// publisher.test.ts). The output in ./workflows is what gets validated and
+// Builds the n8n Workflow SDK source for the ten QGR workflows from the
+// Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts,
+// publisher.test.ts, moments.test.ts and leads.test.ts). The output in ./workflows is what gets validated and
 // saved to n8n through its MCP server. Scripts are embedded with
 // JSON.stringify so their backslashes survive.
 //
@@ -1250,8 +1250,100 @@ export default workflow('qgr-moments', 'QGR · Moments')
   .add(noteClaude);
 `;
 
+// ---------------------------------------------------------------- leads
+
+const leadAsk = `{ lead_id: 'lead-id', answers: [{ field: 'Investment budget', value: '$800,000 to $1M' }], platform: 'instagram', source: 'Facebook', criteria: 'A qualified lead can invest US$800,000 within a year.', examples: [], brand: { company: 'Quantum Global Residency' } }`;
+
+const leads = `${IMPORTS}
+
+const everyFifteenMinutes = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every fifteen minutes',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+  },
+  output: [{}],
+});
+
+const readNow = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Read now',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-leads',
+      authentication: 'headerAuth',
+      responseMode: 'onReceived',
+      options: { responseCode: { values: { responseCode: 'customCode', customCode: 202 } } },
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: {} }],
+});
+${rpcNode('whatToRead', 'What to read', 'leads_sync_plan', '{{ JSON.stringify({}) }}', `{ on: true, api: 'https://www.zohoapis.com', since: '2026-10-19T08:30:00+00:00' }`, "\n    executeOnce: true,")}
+${ifTrue('zohoOn', 'Zoho on?', '{{ $json.on === true }}')}
+
+// The Zoho login is the "Zoho" credential (Zoho OAuth2 API, in the region the
+// team's Zoho is in), attached to both Zoho steps by hand once it exists in
+// n8n: a node naming a credential that does not exist fails every run.
+${callNode('zohoFields', 'Zoho: the lead fields', {
+  method: 'GET',
+  url: "expr('{{ $json.api }}/crm/v8/settings/fields?module=Leads')",
+  auth: 'zohoOAuth2Api',
+  timeout: 30000,
+  output: "{ statusCode: 200, body: { fields: [{ api_name: 'First_Name', field_label: 'First Name', data_type: 'text', custom_field: false }, { api_name: 'Lead_Status', field_label: 'Lead Status', data_type: 'picklist', custom_field: false }] } }",
+})}
+${codeNode('planRead', 'Plan the read', code('leads-plan-read.js'), `{ ok: true, since: '2026-10-19T08:30:00+00:00', url: 'https://www.zohoapis.com/crm/v8/Leads?fields=First_Name%2CLead_Status&per_page=200&sort_by=Modified_Time&sort_order=asc', answers: [], attribution: {} }`)}
+${isOk('fieldsRead', 'Fields read?')}
+${callNode('zohoLeads', 'Zoho: the leads', {
+  method: 'GET',
+  url: "expr('{{ $json.url }}')",
+  auth: 'zohoOAuth2Api',
+  headers: [['If-Modified-Since', "expr('{{ $json.since }}')"]],
+  timeout: 60000,
+  output: "{ statusCode: 200, body: { data: [{ id: '5725767000000412001', First_Name: 'Asha', Last_Name: 'Rao', Lead_Status: 'Not Contacted', Created_Time: '2026-10-19T15:00:00+05:30', Modified_Time: '2026-10-19T15:00:00+05:30' }], info: { more_records: false } } }",
+})}
+${codeNode('readLeads', 'Read the leads', code('leads-read-zoho.js'), `{ ok: true, leads: [{ zoho_id: '5725767000000412001', name: 'Asha Rao', platform: 'other', campaign: {}, answers: [], created: '2026-10-19T15:00:00+05:30', modified: '2026-10-19T15:00:00+05:30' }], newest: '2026-10-19T15:00:00+05:30' }`)}
+${isOk('leadsRead', 'Read?')}
+${rpcNode('recordLeads', 'Record the leads', 'leads_record', '{{ JSON.stringify({ p_leads: $json.leads, p_newest: $json.newest }) }}', `{ data: '1' }`, "\n    onError: 'continueRegularOutput',", true)}
+${rpcNode('syncFail', 'Record why Zoho was not read', 'leads_sync_fail', '{{ JSON.stringify({ p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+${rpcNode('takeDue', 'Take the leads to judge', 'leads_take_due', '{{ JSON.stringify({ p_limit: 10 }) }}', leadAsk, "\n    executeOnce: true,")}
+${codeNode('eachLead', 'One item per lead', code('shared-items.js'), leadAsk)}
+${codeNode('buildRequest', 'Build the Claude request', code('leads-build-request.js'), `{ lead_id: 'lead-id', body: { model: 'claude-haiku-5-5', max_tokens: 4000 } }`)}
+${claudeNode('claude', 'Claude: judge the lead')}
+${codeNode('readAnswer', 'Read the verdict', code('leads-read-answer.js'), `{ ok: true, p_lead_id: 'lead-id', p_verdict: 'qualified', p_reasons: [{ text: 'Can invest the minimum.', field: 'Investment budget', quote: '$800,000 to $1M' }], p_usage: { model: 'claude-haiku-5-5', input_tokens: 900, output_tokens: 140 } }`)}
+${isOk('judged', 'Judged?')}
+${rpcNode('finish', 'Record the verdict', 'lead_judged', '{{ JSON.stringify({ p_lead_id: $json.p_lead_id, p_verdict: $json.p_verdict, p_reasons: $json.p_reasons, p_usage: $json.p_usage }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('fail', 'Record why not', 'lead_judge_fail', '{{ JSON.stringify({ p_lead_id: $json.p_lead_id, p_error: $json.p_error, p_usage: $json.p_usage }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+const noteRead = sticky('## Reading Zoho\\nEvery fifteen minutes, and at once when the Leads page asks, the database says whether to read Zoho, in which region, and from when (**leads_sync_plan**: the newest change already read, or the last 90 days the first time). Off until the team switches it on (Leads, Setup).\\n\\n**Plan the read** asks Zoho for the module\\'s fields and picks 50 at most: the name, status, source and times; whatever says where a lead came from (UTM tags, Meta\\'s campaign and ad, the page it first visited); then what the lead said, the team\\'s own questions first. Email addresses, phone numbers and street addresses are never asked for. **Read the leads** keeps each answer by its label and ties a lead whose link or ad names a QGR run (qgr-<run>, <label>-<place>) to that variant. **leads_record** keeps them; **leads_sync_fail** keeps why not, for the page to show.\\n\\nThe login: create a **Zoho OAuth2 API** credential named **Zoho** for the region your Zoho is in, then attach it to **Zoho: the lead fields** and **Zoho: the leads**. Until then each read says Zoho is not connected.', [everyFifteenMinutes, readNow, whatToRead, zohoOn, zohoFields, planRead, fieldsRead, zohoLeads, readLeads, leadsRead, recordLeads, syncFail], { color: 4 });
+const noteJudge = sticky('## Judging\\nThe database hands over up to ten leads waiting (**leads_take_due**, claimed so two runs never judge the same one; a claim lost for ten minutes is taken again, three times at most), each with what it said (never its name), the team\\'s criteria and up to eight of the team\\'s own verdicts with their reasons. Haiku 5.5 says qualified, not qualified or can\\'t tell. **Read the verdict** keeps only the reasons that quote the lead as written; a verdict left with none becomes can\\'t tell, for a person. **lead_judged** checks the quotes again. The usage is kept on failure too (**lead_judge_fail**).', [takeDue, eachLead, buildRequest, claude, readAnswer, judged, finish, fail], { color: 5 });
+
+export default workflow('qgr-leads', 'QGR · Leads')
+  .add(everyFifteenMinutes)
+  .to(whatToRead)
+  .to(zohoOn.onTrue(zohoFields.to(planRead).to(fieldsRead.onTrue(zohoLeads.to(readLeads).to(leadsRead.onTrue(recordLeads).onFalse(syncFail))).onFalse(syncFail))).onFalse(takeDue))
+  .add(recordLeads)
+  .to(takeDue)
+  .add(syncFail)
+  .to(takeDue)
+  .add(takeDue)
+  .to(eachLead)
+  .to(buildRequest)
+  .to(claude.onError(readAnswer))
+  .to(readAnswer)
+  .to(judged.onTrue(finish).onFalse(fail))
+  .add(readNow)
+  .to(whatToRead)
+  .add(noteRead)
+  .add(noteJudge);
+`;
+
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures, moments })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures, moments, leads })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

@@ -54,6 +54,13 @@ export const createLongVideo: DataSource['createLongVideo'] = (input) => source(
 export const askMomentsAgain: DataSource['askMomentsAgain'] = (id) => source().askMomentsAgain(id);
 export const removeLongVideo: DataSource['removeLongVideo'] = (id) => source().removeLongVideo(id);
 export const recordMomentRun: DataSource['recordMomentRun'] = (id, first, last, title, runId) => source().recordMomentRun(id, first, last, title, runId);
+export const getLeads: DataSource['getLeads'] = () => source().getLeads();
+export const saveLeadCriteria: DataSource['saveLeadCriteria'] = (criteria) => source().saveLeadCriteria(criteria);
+export const setLeadsSource: DataSource['setLeadsSource'] = (from, zoho) => source().setLeadsSource(from, zoho);
+export const setLeadVerdict: DataSource['setLeadVerdict'] = (id, verdict, note) => source().setLeadVerdict(id, verdict, note);
+export const judgeLeadsAgain: DataSource['judgeLeadsAgain'] = (id) => source().judgeLeadsAgain(id);
+export const readLeadsNow: DataSource['readLeadsNow'] = () => source().readLeadsNow();
+export const savePostLink: DataSource['savePostLink'] = (link) => source().savePostLink(link);
 export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);

@@ -135,8 +135,8 @@ export function AdStudio({
   clip?: { clip: Clip; url: string | null };
   /** The posts made from this set's variants. */
   posts: Post[];
-  /** The team's zone, for posting times, and the Pages posts go to. */
-  publishing: { timeZone: string; pages: PostPages; forReal: Record<Place, boolean> };
+  /** The team's zone, for posting times, the Pages posts go to, and the link posts can end with. */
+  publishing: { timeZone: string; pages: PostPages; forReal: Record<Place, boolean>; postLink: string | null };
   /** What every picture keeps to (the brand's picture style), what makes them, and whether this is the sample data. */
   pictures: { style: string; model: PictureModel; sample: boolean };
 }) {
@@ -595,6 +595,7 @@ export function AdStudio({
           timeZone={publishing.timeZone}
           pages={publishing.pages}
           forReal={publishing.forReal}
+          link={publishing.postLink ? { url: publishing.postLink, runId: adSet.runId } : null}
           onClose={() => setPostOf(null)}
           onPosted={() => {
             setPostOf(null);

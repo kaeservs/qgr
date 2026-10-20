@@ -465,6 +465,152 @@ export type Database = {
           },
         ]
       }
+      lead_usage: {
+        Row: {
+          cache_creation_input_tokens: number
+          cache_read_input_tokens: number
+          created_at: string
+          id: number
+          input_tokens: number
+          lead_id: string
+          model: string
+          output_tokens: number
+        }
+        Insert: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          lead_id: string
+          model: string
+          output_tokens?: number
+        }
+        Update: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          lead_id?: string
+          model?: string
+          output_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_usage_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          answers: Json
+          campaign: Json
+          created_in_zoho: string
+          first_seen_at: string
+          id: string
+          judge_attempts: number
+          judge_claimed_at: string | null
+          judge_error: string | null
+          judge_status: string
+          judged_at: string | null
+          judged_criteria_at: string | null
+          modified_in_zoho: string
+          name: string
+          person_at: string | null
+          person_by: string | null
+          person_note: string | null
+          person_verdict: string | null
+          place: string | null
+          platform: string
+          reasons: Json
+          run_id: string | null
+          updated_at: string
+          variant_id: string | null
+          verdict: string | null
+          zoho_id: string
+          zoho_source: string | null
+          zoho_status: string | null
+        }
+        Insert: {
+          answers?: Json
+          campaign?: Json
+          created_in_zoho: string
+          first_seen_at?: string
+          id?: string
+          judge_attempts?: number
+          judge_claimed_at?: string | null
+          judge_error?: string | null
+          judge_status?: string
+          judged_at?: string | null
+          judged_criteria_at?: string | null
+          modified_in_zoho: string
+          name: string
+          person_at?: string | null
+          person_by?: string | null
+          person_note?: string | null
+          person_verdict?: string | null
+          place?: string | null
+          platform?: string
+          reasons?: Json
+          run_id?: string | null
+          updated_at?: string
+          variant_id?: string | null
+          verdict?: string | null
+          zoho_id: string
+          zoho_source?: string | null
+          zoho_status?: string | null
+        }
+        Update: {
+          answers?: Json
+          campaign?: Json
+          created_in_zoho?: string
+          first_seen_at?: string
+          id?: string
+          judge_attempts?: number
+          judge_claimed_at?: string | null
+          judge_error?: string | null
+          judge_status?: string
+          judged_at?: string | null
+          judged_criteria_at?: string | null
+          modified_in_zoho?: string
+          name?: string
+          person_at?: string | null
+          person_by?: string | null
+          person_note?: string | null
+          person_verdict?: string | null
+          place?: string | null
+          platform?: string
+          reasons?: Json
+          run_id?: string | null
+          updated_at?: string
+          variant_id?: string | null
+          verdict?: string | null
+          zoho_id?: string
+          zoho_source?: string | null
+          zoho_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "ad_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       long_video_usage: {
         Row: {
           cache_creation_input_tokens: number
@@ -961,11 +1107,18 @@ export type Database = {
           instagram_live: boolean
           instagram_username: string | null
           last_scan_at: string | null
+          lead_criteria: string
+          lead_criteria_at: string
+          leads_checked_at: string | null
+          leads_source: string
+          leads_sync_error: string | null
+          leads_synced_at: string | null
           linkedin_live: boolean
           linkedin_org_id: string | null
           linkedin_page_name: string | null
           pictures_auto: boolean
           pictures_model: string
+          post_link: string | null
           scan_changed_at: string
           scan_day: number
           scan_every: string
@@ -974,6 +1127,8 @@ export type Database = {
           time_zone: string
           updated_at: string
           updated_by: string | null
+          zoho_org: string | null
+          zoho_region: string | null
         }
         Insert: {
           ads_source?: string
@@ -987,11 +1142,18 @@ export type Database = {
           instagram_live?: boolean
           instagram_username?: string | null
           last_scan_at?: string | null
+          lead_criteria?: string
+          lead_criteria_at?: string
+          leads_checked_at?: string | null
+          leads_source?: string
+          leads_sync_error?: string | null
+          leads_synced_at?: string | null
           linkedin_live?: boolean
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
           pictures_model?: string
+          post_link?: string | null
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -1000,6 +1162,8 @@ export type Database = {
           time_zone?: string
           updated_at?: string
           updated_by?: string | null
+          zoho_org?: string | null
+          zoho_region?: string | null
         }
         Update: {
           ads_source?: string
@@ -1013,11 +1177,18 @@ export type Database = {
           instagram_live?: boolean
           instagram_username?: string | null
           last_scan_at?: string | null
+          lead_criteria?: string
+          lead_criteria_at?: string
+          leads_checked_at?: string | null
+          leads_source?: string
+          leads_sync_error?: string | null
+          leads_synced_at?: string | null
           linkedin_live?: boolean
           linkedin_org_id?: string | null
           linkedin_page_name?: string | null
           pictures_auto?: boolean
           pictures_model?: string
+          post_link?: string | null
           scan_changed_at?: string
           scan_day?: number
           scan_every?: string
@@ -1026,6 +1197,8 @@ export type Database = {
           time_zone?: string
           updated_at?: string
           updated_by?: string | null
+          zoho_org?: string | null
+          zoho_region?: string | null
         }
         Relationships: []
       }
@@ -1104,11 +1277,11 @@ export type Database = {
         Args: { p_prompt: string; p_variant_id: string }
         Returns: undefined
       }
+      ask_moments_again: { Args: { p_id: string }; Returns: undefined }
       assert_stage_running: {
         Args: { p_run_id: string; p_stage: string }
         Returns: undefined
       }
-      ask_moments_again: { Args: { p_id: string }; Returns: undefined }
       cancel_post: { Args: { p_post_id: string }; Returns: string[] }
       continue_run: { Args: { p_run_id: string }; Returns: string }
       create_long_video: {
@@ -1141,6 +1314,27 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string; p_summary: string }
         Returns: undefined
       }
+      judge_leads_again: { Args: { p_lead_id?: string }; Returns: number }
+      lead_judge_fail: {
+        Args: { p_error: string; p_lead_id: string; p_usage?: Json }
+        Returns: undefined
+      }
+      lead_judged: {
+        Args: {
+          p_lead_id: string
+          p_reasons: Json
+          p_usage?: Json
+          p_verdict: string
+        }
+        Returns: undefined
+      }
+      leads_record: {
+        Args: { p_leads: Json; p_newest?: string }
+        Returns: number
+      }
+      leads_sync_fail: { Args: { p_error: string }; Returns: undefined }
+      leads_sync_plan: { Args: never; Returns: Json }
+      leads_take_due: { Args: { p_limit?: number }; Returns: Json }
       moments_fail: {
         Args: { p_error: string; p_id: string; p_usage?: Json }
         Returns: undefined
@@ -1200,6 +1394,13 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string; p_usage: Json }
         Returns: undefined
       }
+      remember_post: {
+        Args: { p_note?: string; p_place: string; p_post_id: string }
+        Returns: string
+      }
+      remove_brand_example: { Args: { p_id: string }; Returns: undefined }
+      remove_long_video: { Args: { p_id: string }; Returns: undefined }
+      remove_picture: { Args: { p_variant_id: string }; Returns: string }
       report_continue_failure: {
         Args: { p_error: string; p_run_id: string; p_stage: string }
         Returns: undefined
@@ -1208,13 +1409,6 @@ export type Database = {
         Args: { p_error: string; p_run_id: string }
         Returns: undefined
       }
-      remember_post: {
-        Args: { p_note?: string; p_place: string; p_post_id: string }
-        Returns: string
-      }
-      remove_brand_example: { Args: { p_id: string }; Returns: undefined }
-      remove_long_video: { Args: { p_id: string }; Returns: undefined }
-      remove_picture: { Args: { p_variant_id: string }; Returns: string }
       request_picture: { Args: { p_variant_id: string }; Returns: undefined }
       reschedule_post: {
         Args: { p_local_time?: string; p_post_id: string }
@@ -1285,6 +1479,14 @@ export type Database = {
         Args: { p_competitor_id: string; p_tracked: boolean }
         Returns: undefined
       }
+      set_lead_verdict: {
+        Args: { p_lead_id: string; p_note?: string; p_verdict: string }
+        Returns: undefined
+      }
+      set_leads_source: {
+        Args: { p_org?: string; p_region?: string; p_source: string }
+        Returns: undefined
+      }
       set_pictures_auto: { Args: { p_on: boolean }; Returns: undefined }
       set_pictures_model: {
         Args: { p_account?: string; p_model: string }
@@ -1294,6 +1496,7 @@ export type Database = {
         Args: { p_on: boolean; p_place: string }
         Returns: undefined
       }
+      set_post_link: { Args: { p_link: string }; Returns: undefined }
       set_run_guidance: {
         Args: { p_guidance: string; p_run_id: string }
         Returns: undefined
@@ -1367,6 +1570,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      update_lead_criteria: { Args: { p_criteria: string }; Returns: undefined }
       update_publishing_settings: {
         Args: {
           p_facebook_page_id: string
