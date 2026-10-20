@@ -7,7 +7,7 @@ import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
 import { mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
-import { leadsConfig, momentsConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
+import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
 import { askPrice } from '../video-price';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
@@ -590,6 +590,13 @@ export const liveData: DataSource = {
     return price.ok ? { ok: true, value: { credits: price.credits, balance: price.balance }, sample: false } : { ok: false, status: 502, error: price.error };
   },
 
+  pricePicture: async (quality) => {
+    const config = picturePriceConfig();
+    if (!config) return { ok: false, status: 503, error: 'Prices come from n8n: its webhook is not set on this server.' };
+    const price = await askPrice(config, { quality });
+    return price.ok ? { ok: true, value: { credits: price.credits, balance: price.balance }, sample: false } : { ok: false, status: 502, error: price.error };
+  },
+
   askForVideo: async (request, credits) => {
     const { data, error } = await (await db()).rpc('ask_for_video', {
       p_prompt: request.prompt,
@@ -697,6 +704,8 @@ export const liveData: DataSource = {
       ...(settings.cloudflareAccount ? { p_account: settings.cloudflareAccount } : {}),
     });
     if (modelError) return refused(modelError, 'The image model could not be saved. The rest was.');
+    const { error: qualityError } = await supabase.rpc('set_pictures_quality', { p_quality: settings.picturesQuality });
+    if (qualityError) return refused(qualityError, 'Higgsfield’s picture quality could not be saved. The rest was.');
     return { ok: true, value: null, sample: false };
   },
 

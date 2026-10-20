@@ -6,14 +6,11 @@ import { STAGE_INFO } from '../pipeline';
 import type { NewLongVideo } from '../long-video';
 import type { NewAdsRun, NewRunInput } from '../run-input';
 import type {
-  AiVideo,
-  VideoBudget,
-  LongVideo,
-  LongVideoWithTranscript,
   ActivityItem,
   AdSet,
   Agent,
   AgentSettings,
+  AiVideo,
   BrandExample,
   BrandMemory,
   BrandProfile,
@@ -21,9 +18,12 @@ import type {
   ExamplePlace,
   Lead,
   LeadSettings,
+  LongVideo,
+  LongVideoWithTranscript,
   Notice,
   PageRead,
   PageSummary,
+  PictureQuality,
   Place,
   Platform,
   PlatformCopy,
@@ -36,6 +36,7 @@ import type {
   Strategy,
   TeamSettings,
   User,
+  VideoBudget,
   ZohoRegion,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
@@ -174,6 +175,8 @@ export interface DataSource {
   getVideoBudget(): Promise<VideoBudget>;
   /** Higgsfield's price for a request (nothing is made), and the credits left on the team's plan. */
   priceVideo(request: VideoPriceRequest): Promise<Saved<{ credits: number; balance: number | null }>>;
+  /** What one Higgsfield picture costs at a quality, and the credits left on the plan: nothing is made. */
+  pricePicture(quality: PictureQuality): Promise<Saved<{ credits: number; balance: number | null }>>;
   /** Asks for a video, at Higgsfield's price: n8n sends it once. While AI video is off, the stand-in makes nothing. */
   askForVideo(request: VideoRequest, credits: number | null): Promise<Saved<{ id: string }>>;
   /** Takes a video out of the library; one not yet sent is stopped. */

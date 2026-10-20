@@ -490,6 +490,51 @@ export type Database = {
         }
         Relationships: []
       }
+      higgsfield_pictures: {
+        Row: {
+          asked_at: string
+          checked_at: string | null
+          credits: number
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_id: string | null
+          model: string
+          path: string
+          quality: string
+          status: string
+          variant_id: string | null
+        }
+        Insert: {
+          asked_at?: string
+          checked_at?: string | null
+          credits: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          model?: string
+          path: string
+          quality: string
+          status?: string
+          variant_id?: string | null
+        }
+        Update: {
+          asked_at?: string
+          checked_at?: string | null
+          credits?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          model?: string
+          path?: string
+          quality?: string
+          status?: string
+          variant_id?: string | null
+        }
+        Relationships: []
+      }
       hooks: {
         Row: {
           days_known: boolean
@@ -1187,6 +1232,7 @@ export type Database = {
           linkedin_page_name: string | null
           pictures_auto: boolean
           pictures_model: string
+          pictures_quality: string
           post_link: string | null
           scan_changed_at: string
           scan_day: number
@@ -1224,6 +1270,7 @@ export type Database = {
           linkedin_page_name?: string | null
           pictures_auto?: boolean
           pictures_model?: string
+          pictures_quality?: string
           post_link?: string | null
           scan_changed_at?: string
           scan_day?: number
@@ -1261,6 +1308,7 @@ export type Database = {
           linkedin_page_name?: string | null
           pictures_auto?: boolean
           pictures_model?: string
+          pictures_quality?: string
           post_link?: string | null
           scan_changed_at?: string
           scan_day?: number
@@ -1441,7 +1489,46 @@ export type Database = {
         Args: { p_path?: string; p_stand_in?: boolean; p_variant_id: string }
         Returns: Json
       }
+      picture_higgsfield_begin: {
+        Args: {
+          p_credits: number
+          p_path: string
+          p_quality: string
+          p_variant_id: string
+        }
+        Returns: Json
+      }
+      picture_higgsfield_fail: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      picture_higgsfield_finish: {
+        Args: { p_id: string; p_path: string }
+        Returns: Json
+      }
+      picture_higgsfield_release: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      picture_higgsfield_started: {
+        Args: { p_credits?: number; p_id: string; p_job_id: string }
+        Returns: undefined
+      }
+      picture_higgsfield_unknown: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      picture_in_flight: { Args: { p_variant_id: string }; Returns: boolean }
+      picture_not_made: {
+        Args: { p_message: string; p_variant_id: string }
+        Returns: undefined
+      }
+      picture_release: {
+        Args: { p_error: string; p_variant_id: string }
+        Returns: undefined
+      }
       picture_take_due: { Args: { p_limit?: number }; Returns: Json }
+      picture_take_making: { Args: { p_limit?: number }; Returns: Json }
       pipeline_next: {
         Args: { p_run_id: string; p_stage: string }
         Returns: boolean
@@ -1581,6 +1668,7 @@ export type Database = {
         Args: { p_account?: string; p_model: string }
         Returns: undefined
       }
+      set_pictures_quality: { Args: { p_quality: string }; Returns: undefined }
       set_post_for_real: {
         Args: { p_on: boolean; p_place: string }
         Returns: undefined

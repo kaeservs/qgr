@@ -7,8 +7,8 @@ import type { NewPost, NewPostTarget } from './data/source';
 import { isRecordId } from './edit-input';
 import type { ParseResult } from './run-input';
 import { isTimeZone, localTime } from './schedule';
-import { PLACES } from './types';
-import type { AgentSettings, Place, PostPages, ScanEvery } from './types';
+import { PICTURE_MODELS, PICTURE_QUALITIES, PLACES } from './types';
+import type { AgentSettings, PictureModel, PictureQuality, Place, PostPages, ScanEvery } from './types';
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -70,7 +70,9 @@ export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
   if (typeof raw.strategistAuto !== 'boolean' || typeof raw.contentAuto !== 'boolean') return { ok: false, error: 'Say which agents start by themselves.' };
   if (typeof raw.picturesAuto !== 'boolean') return { ok: false, error: 'Say whether new ads get pictures.' };
   if (raw.adsSource !== 'sample' && raw.adsSource !== 'apify') return { ok: false, error: 'Say where the tracker reads competitors’ ads.' };
-  if (raw.pictureModel !== 'stand-in' && raw.pictureModel !== 'cloudflare') return { ok: false, error: 'Say what makes the pictures.' };
+  if (!(PICTURE_MODELS as readonly unknown[]).includes(raw.pictureModel)) return { ok: false, error: 'Say what makes the pictures.' };
+  const picturesQuality = raw.picturesQuality === undefined ? 'low' : raw.picturesQuality;
+  if (!(PICTURE_QUALITIES as readonly unknown[]).includes(picturesQuality)) return { ok: false, error: 'Higgsfield draws pictures at low, medium or high quality.' };
   const cloudflareAccount = text(raw.cloudflareAccount).toLowerCase();
   if (cloudflareAccount && !CLOUDFLARE_ACCOUNT.test(cloudflareAccount)) return { ok: false, error: 'A Cloudflare account ID is 32 characters, 0-9 and a-f. Copy it from the Cloudflare dashboard.' };
   if (raw.pictureModel === 'cloudflare' && !cloudflareAccount) return { ok: false, error: 'Cloudflare Workers AI needs your Cloudflare account ID.' };
@@ -85,8 +87,9 @@ export function parseAgentSettings(raw: unknown): ParseResult<AgentSettings> {
       contentAuto: raw.contentAuto,
       picturesAuto: raw.picturesAuto,
       adsSource: raw.adsSource,
-      pictureModel: raw.pictureModel,
+      pictureModel: raw.pictureModel as PictureModel,
       cloudflareAccount,
+      picturesQuality: picturesQuality as PictureQuality,
       scanEvery: raw.scanEvery as ScanEvery,
       scanDay: raw.scanDay,
       scanHour: raw.scanHour,

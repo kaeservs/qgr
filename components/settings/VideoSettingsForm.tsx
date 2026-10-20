@@ -12,8 +12,9 @@ import { useToast } from '../ui/Toast';
 import styles from './settings.module.css';
 
 /**
- * Whether AI video spends the team's Higgsfield credits, and how many it may
- * spend a month. Off, Generate goes through the stand-in: nothing is made and
+ * The team's Higgsfield spending: whether AI video makes real videos, and the
+ * one monthly limit that videos and pictures (when Higgsfield makes them) keep
+ * to together. Off, Generate goes through the stand-in: nothing is made and
  * nothing is spent. Turning it on says first what it costs and asks once more.
  * The limit counts only what the dashboard asks for; whatever the team makes
  * on Higgsfield's own site spends the same plan without counting here.
@@ -59,9 +60,9 @@ export function VideoSettingsForm({ budget }: { budget: VideoBudget }) {
     >
       <div>
         <h2 id="ai-video-title" className="card-title">
-          AI video
+          Higgsfield
         </h2>
-        <p className="muted small">Videos made by Higgsfield from a prompt, on the team’s own Higgsfield plan.</p>
+        <p className="muted small">AI video, and pictures when Higgsfield makes them (Agents, above), on the team’s own Higgsfield plan.</p>
       </div>
 
       <div className={styles.forReal}>
@@ -103,11 +104,11 @@ export function VideoSettingsForm({ budget }: { budget: VideoBudget }) {
       </div>
 
       <label className="field">
-        <span className="label">This month’s limit, in credits</span>
+        <span className="label">This month’s limit, in credits, for videos and pictures</span>
         <input className="input" type="number" inputMode="numeric" min={0} max={100_000} step={1} value={cap} onChange={(e) => setCap(e.target.value)} />
         <span className="muted small">
-          {formatCredits(budget.spent)} used this month in the team’s time zone, {formatCredits(creditsLeft(budget))} left. A video that would go past the limit is not asked for; one that fails gives its credits back
-          here. The month starts again on the 1st.
+          {formatCredits(budget.spent)} used this month in the team’s time zone{budget.pictures > 0 ? `, ${formatCredits(budget.pictures)} of it on pictures` : ''}, {formatCredits(creditsLeft(budget))} left. A video or picture that would go
+          past the limit is not made; one that fails gives its credits back here. The month starts again on the 1st.
         </span>
       </label>
 

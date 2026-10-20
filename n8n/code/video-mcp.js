@@ -1,6 +1,7 @@
-// Shared by the AI video scripts that read Higgsfield's answers (joined in
-// front of each). Higgsfield is asked through its MCP, signed in with the
-// team's own account, so every video spends the plan's credits.
+// Shared by the scripts that read Higgsfield's answers, for AI video and for
+// pictures (joined in front of each). Higgsfield is asked through its MCP,
+// signed in with the team's own account, so every video and every picture
+// spends the plan's credits.
 //
 // An MCP step answers in one of three ways, and each script must tell them
 // apart:
@@ -54,6 +55,33 @@ function notReached(json, own) {
   return Object.prototype.hasOwnProperty.call(json, own);
 }
 
+/**
+ * Higgsfield's offer of one of its presets in place of the prompt ("This
+ * prompt looks like the Higgsfield preset … generate literally"), which comes
+ * instead of a price or a job: nothing was priced or made. Its id and name,
+ * or null. Seen on every video prompt tried on 2026-10-20, never on a picture.
+ */
+function presetNotice(json) {
+  const answer = answerOf(json);
+  const notice = answer && answer.notice;
+  if (notice && typeof notice === 'object' && notice.type === 'preset_recommendation') {
+    const data = notice.data && typeof notice.data === 'object' ? notice.data : {};
+    const preset = data.preset && typeof data.preset === 'object' ? data.preset : {};
+    const id = (data.retry_literal_with && data.retry_literal_with.declined_preset_id) || preset.id || '';
+    return { id: String(id), name: typeof preset.name === 'string' ? preset.name : '' };
+  }
+  const words = wordsOf(json);
+  const said = words.match(/declined_preset_id:?\s*"?([A-Za-z0-9-]{8,})/);
+  if (!said) return null;
+  const name = words.match(/preset "([^"]+)"/);
+  return { id: said[1], name: name ? name[1] : '' };
+}
+
+/** What the team is told when Higgsfield offered a preset again after it was declined. */
+function presetSaid(preset) {
+  return 'Higgsfield offered its preset' + (preset.name ? ' "' + preset.name + '"' : '') + ' in place of the prompt as written';
+}
+
 /** A refusal that means nothing was made (the request, the model, the credits, the content). */
 function isRefusal(message) {
   return /input validation error|invalid request|invalid arguments|unknown model|not enough credits|insufficient|top up|balance is|out of credits|nsfw|moderation|content policy|not allowed|prohibited|rejected/i.test(message);
@@ -82,10 +110,53 @@ function findString(value, keys, depth) {
   return '';
 }
 
-/** Credits in an answer: { cost: { credits } }, { credits } or { cost }. */
+/**
+ * Credits in an answer: { cost: { credits, credits_exact } }, { credits } or
+ * { cost }. Higgsfield can quote two figures that differ (a picture at
+ * "1 credit (0.5 exact)"), and which one the plan is charged is not said, so
+ * the higher counts: the month's limit is never under-counted.
+ */
 function creditsOf(answer) {
   const cost = answer && answer.cost;
-  const n = cost && typeof cost === 'object' ? cost.credits_exact != null ? cost.credits_exact : cost.credits : cost != null ? cost : answer && answer.credits;
-  const value = typeof n === 'string' ? parseFloat(n) : n;
-  return typeof value === 'number' && isFinite(value) && value >= 0 ? value : null;
+  const read = function (n) {
+    const value = typeof n === 'string' ? parseFloat(n) : n;
+    return typeof value === 'number' && isFinite(value) && value >= 0 ? value : null;
+  };
+  const figures = (cost && typeof cost === 'object' ? [cost.credits, cost.credits_exact] : [cost != null ? cost : answer && answer.credits]).map(read).filter(function (n) {
+    return n !== null;
+  });
+  return figures.length ? Math.max.apply(null, figures) : null;
+}
+
+/** How a job stands, by Higgsfield's own words for it. */
+const JOB_DONE = /^(completed|complete|succeeded|success|done|finished|ready)$/;
+const JOB_FAILED = /^(failed|failure|error|errored|canceled|cancelled|nsfw|rejected|expired|ip_detected|blocked|moderated|submission_failed)$/;
+
+/** A job's status, lower case, or ''. */
+function jobStatus(answer) {
+  return (findString(answer, ['status', 'state'], 0) || '').toLowerCase();
+}
+
+/** Every https link in an answer, at any depth. */
+function allLinks(value, out, depth) {
+  out = out || [];
+  depth = depth || 0;
+  if (depth > 6 || value === null || value === undefined) return out;
+  if (typeof value === 'string') {
+    if (/^https:\/\/\S+$/.test(value)) out.push(value);
+    return out;
+  }
+  if (typeof value === 'object') {
+    const inner = Array.isArray(value) ? value : Object.keys(value).map(function (k) { return value[k]; });
+    inner.forEach(function (v) { allLinks(v, out, depth + 1); });
+  }
+  return out;
+}
+
+/** Why a job failed, as plainly as Higgsfield says it. */
+function jobReason(status, answer, json) {
+  if (status === 'ip_detected') return 'Higgsfield held it back: it may show protected material. If the team has the rights, reveal it on Higgsfield.';
+  if (status === 'nsfw' || status === 'moderated' || status === 'blocked') return 'Higgsfield\'s safety check stopped it: change the prompt and ask again.';
+  const said = findString(answer, ['error', 'message', 'reason', 'detail'], 0) || wordsOf(json);
+  return 'Higgsfield could not make it (' + status + ')' + (said ? ': ' + said.slice(0, 200) : '.');
 }

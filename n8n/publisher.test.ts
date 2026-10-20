@@ -39,6 +39,8 @@ function step(file: string | string[], items: unknown[], swap: Record<string, st
 }
 
 const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' } as const;
+/** The Cloudflare prompt starts with the words every image model is asked to draw, as the build joins them. */
+const WRITE_PROMPT = ['pictures-prompt.js', 'pictures-write-prompt.js'];
 /** The LinkedIn steps' scripts each start with the shared reasons, as the build joins them. */
 const LINKEDIN = ['shared-linkedin-refusal.js'];
 
@@ -663,7 +665,7 @@ describe('a picture, from the studio to the image model and back', () => {
   const real = (ask: Json) => ask.model === 'cloudflare' && /^[0-9a-f]{32}$/.test(String(ask.account ?? ''));
   /** Cloudflare's answer to each written prompt, read as "Read the picture" reads it. */
   const readPictures = (asks: Json[], answer: (ask: Json) => Json) => {
-    const written = step('pictures-write-prompt.js', asks);
+    const written = step(WRITE_PROMPT, asks);
     return step('pictures-read-image.js', written.map(answer), {}, { 'Write the prompt': written });
   };
 
@@ -678,7 +680,7 @@ describe('a picture, from the studio to the image model and back', () => {
     const due = await t.asService(() => t.value<unknown[]>(`select public.picture_take_due(p_limit => 5)`));
     const asks = step('shared-items.js', [{ data: due }]).filter((a) => a.variant_id === variantId);
     expect(asks.every(real)).toBe(true);
-    const [written] = step('pictures-write-prompt.js', asks);
+    const [written] = step(WRITE_PROMPT, asks);
     expect(written).toMatchObject({ variant_id: variantId, url: `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell` });
     expect((written!.body as { prompt: string }).prompt).toBe(
       'A quiet harbour at dawn, boats at rest. Picture style: Warm evening light, deep indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.',
@@ -707,14 +709,14 @@ describe('a picture, from the studio to the image model and back', () => {
 
   it('keeps every prompt to what FLUX takes, never shortening the style or the rules', () => {
     const style = 'Soft daylight. '.repeat(40).trim();
-    const [long] = step('pictures-write-prompt.js', [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A wide harbour scene with boats and gulls '.repeat(80), look: style }]);
+    const [long] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A wide harbour scene with boats and gulls '.repeat(80), look: style }]);
     const prompt = (long!.body as { prompt: string }).prompt;
     expect(prompt.length).toBeLessThanOrEqual(2048);
     expect(prompt).toContain(`Picture style: ${style}`);
     expect(prompt.endsWith('No real or identifiable people. No flags.')).toBe(true);
     expect(prompt.startsWith('A wide harbour scene')).toBe(true);
     // Without a picture style, the scene and the rules.
-    const [plain] = step('pictures-write-prompt.js', [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: '  A desk   lamp at night ', look: null }]);
+    const [plain] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: '  A desk   lamp at night ', look: null }]);
     expect((plain!.body as { prompt: string }).prompt).toBe('A desk lamp at night. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.');
   });
 

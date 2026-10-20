@@ -165,9 +165,16 @@ export type AdSource = 'apify' | 'placeholder' | 'upload';
 /** Where the Competitor Tracker reads a competitor's ads: sample ads, or their real ones in Meta's Ad Library through Apify. */
 export type AdsSetting = 'sample' | 'apify';
 
-/** What makes the ads' pictures: the stand-in, which makes none, or Cloudflare Workers AI's FLUX.1 schnell. */
-export const PICTURE_MODELS = ['stand-in', 'cloudflare'] as const;
+/**
+ * What makes the ads' pictures: the stand-in, which makes none, Cloudflare
+ * Workers AI's FLUX.1 schnell (free each day), or Higgsfield's GPT Image 2.5
+ * on the team's plan (credits, against the monthly Higgsfield limit).
+ */
+export const PICTURE_MODELS = ['stand-in', 'cloudflare', 'higgsfield'] as const;
 export type PictureModel = (typeof PICTURE_MODELS)[number];
+/** How carefully Higgsfield draws a picture: low is the cheapest. */
+export const PICTURE_QUALITIES = ['low', 'medium', 'high'] as const;
+export type PictureQuality = (typeof PICTURE_QUALITIES)[number];
 
 export interface Competitor {
   id: string;
@@ -458,6 +465,8 @@ export interface AgentSettings {
   pictureModel: PictureModel;
   /** The Cloudflare account Workers AI runs on: 32 characters, or empty. Its token is in n8n. */
   cloudflareAccount: string;
+  /** How carefully Higgsfield draws, when it makes the pictures. */
+  picturesQuality: PictureQuality;
   scanEvery: ScanEvery;
   /** ISO weekday, Monday = 1. */
   scanDay: number;
@@ -511,11 +520,15 @@ export interface AiVideo {
   sample?: boolean;
 }
 
-/** AI video's switch and this month's credits, against the team's limit. */
+/**
+ * AI video's switch and this month's Higgsfield credits, against the team's
+ * one limit: spent is videos and pictures together, pictures their share.
+ */
 export interface VideoBudget {
   live: boolean;
   cap: number;
   spent: number;
+  pictures: number;
 }
 
 /**

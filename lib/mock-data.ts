@@ -965,6 +965,7 @@ export const settings: TeamSettings = {
   picturesAuto: false,
   adsSource: 'sample',
   pictureModel: 'stand-in',
+  picturesQuality: 'low',
   cloudflareAccount: '',
   scanEvery: 'week',
   scanDay: 1,

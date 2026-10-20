@@ -91,10 +91,16 @@ export function SettingsForm({
               <ImagePlus size={18} aria-hidden />
             </span>
             <span className={styles.serviceText}>
-              <strong>{connections.pictures === 'cloudflare' ? 'Cloudflare Workers AI' : 'Image model'}</strong>
+              <strong>{connections.pictures === 'cloudflare' ? 'Cloudflare Workers AI' : connections.pictures === 'higgsfield' ? 'Higgsfield pictures' : 'Image model'}</strong>
               <span className="muted small">Pictures for ads, through n8n: chosen under Agents</span>
             </span>
-            {connections.pictures === 'cloudflare' ? <Connection on onLabel="FLUX.1 schnell, free" offLabel="" /> : <span className="pill pill-quiet pill-sm">Stand-in</span>}
+            {connections.pictures === 'cloudflare' ? (
+              <Connection on onLabel="FLUX.1 schnell, free" offLabel="" />
+            ) : connections.pictures === 'higgsfield' ? (
+              <Connection on onLabel="GPT Image 2.5, credits" offLabel="" />
+            ) : (
+              <span className="pill pill-quiet pill-sm">Stand-in</span>
+            )}
           </li>
           <li>
             <span className={styles.serviceIcon}>
@@ -102,7 +108,7 @@ export function SettingsForm({
             </span>
             <span className={styles.serviceText}>
               <strong>Higgsfield</strong>
-              <span className="muted small">AI video on the team’s plan, through n8n: switched under AI video</span>
+              <span className="muted small">AI video on the team’s plan, through n8n: switched under Higgsfield</span>
             </span>
             {connections.videos ? <Connection on onLabel="Real videos" offLabel="" /> : <span className="pill pill-quiet pill-sm">Stand-in</span>}
           </li>

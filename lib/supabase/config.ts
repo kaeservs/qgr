@@ -56,6 +56,9 @@ export const videoConfig = (): PipelineConfig | null => siblingWebhook('N8N_VIDE
 /** The same workflow's price webhook: Higgsfield's price for a request, answered at once (nothing is made). */
 export const videoPriceConfig = (): PipelineConfig | null => siblingWebhook('N8N_VIDEO_PRICE_WEBHOOK_URL', 'qgr-video-price');
 
+/** "QGR · Pictures"' price webhook: what one Higgsfield picture costs at a quality, answered at once (nothing is made). */
+export const picturePriceConfig = (): PipelineConfig | null => siblingWebhook('N8N_PICTURE_PRICE_WEBHOOK_URL', 'qgr-picture-price');
+
 /** A webhook beside the run pipeline's: its own setting, or the run webhook's address with its path in place of qgr-run. */
 function siblingWebhook(setting: string, path: string): PipelineConfig | null {
   const pipeline = pipelineConfig();

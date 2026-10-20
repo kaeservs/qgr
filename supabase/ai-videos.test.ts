@@ -34,7 +34,7 @@ const takeMaking = () => t.asService(() => t.value<{ id: string; job_id: string;
 const service = (sql: string, params: unknown[]) => t.asService(() => t.db.query(sql, params));
 const video = (id: string) =>
   t.value<Video>(`select to_jsonb(x) from (select status, credits::text, job_id, path, error, removed_at is not null as removed from public.ai_videos where id = $1) x`, [id]);
-const budget = () => t.asUser(member, () => t.value<{ live: boolean; cap: number; spent: number }>(`select public.video_budget()`));
+const budget = () => t.asUser(member, () => t.value<{ live: boolean; cap: number; spent: number; pictures: number }>(`select public.video_budget()`));
 const settings = (live: boolean, cap: number) => t.asUser(member, () => t.db.query(`select public.set_video_settings($1, $2)`, [live, cap]));
 /** Everything asked so far, settled, so one test's asks never reach another's. */
 const settle = async () => {
@@ -50,7 +50,7 @@ beforeAll(async () => {
 
 describe('while AI video is not switched on', () => {
   it('the stand-in makes nothing and costs nothing', async () => {
-    expect(await budget()).toEqual({ live: false, cap: 100, spent: 0 });
+    expect(await budget()).toEqual({ live: false, cap: 100, spent: 0, pictures: 0 });
     // No price is needed: nothing will be spent.
     const id = await ask({ credits: null });
     expect(await video(id)).toMatchObject({ status: 'asked', credits: '0.00' });
@@ -72,7 +72,7 @@ describe('switched on', () => {
     await expect(ask({ credits: null })).rejects.toThrow(/price for this video is needed first/);
     await expect(ask({ credits: 0 })).rejects.toThrow(/price for this video is needed first/);
     const first = await ask({ credits: 10 });
-    expect(await budget()).toEqual({ live: true, cap: 20, spent: 10 });
+    expect(await budget()).toEqual({ live: true, cap: 20, spent: 10, pictures: 0 });
     await expect(ask({ credits: 10.5 })).rejects.toThrow(/past its limit of 20 credits \(10 used\)/);
     const second = await ask({ credits: 10 });
     expect(await budget()).toMatchObject({ spent: 20 });

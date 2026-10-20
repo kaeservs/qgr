@@ -10,7 +10,7 @@ import type { NewLongVideo } from '../long-video';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
-import { EXAMPLE_PLACES, GOALS, PICTURE_MODELS, PLACES, PLATFORMS } from '../types';
+import { EXAMPLE_PLACES, GOALS, PICTURE_MODELS, PICTURE_QUALITIES, PLACES, PLATFORMS } from '../types';
 import { PLACE_LABEL } from '../post-input';
 import type {
   ActivityItem,
@@ -667,6 +667,7 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
     adsSource: isOneOf(ADS_SETTINGS, row.ads_source) ? row.ads_source : 'sample',
     pictureModel: isOneOf(PICTURE_MODELS, row.pictures_model) ? row.pictures_model : 'stand-in',
     cloudflareAccount: row.cloudflare_account ?? '',
+    picturesQuality: isOneOf(PICTURE_QUALITIES, row.pictures_quality) ? row.pictures_quality : 'low',
     scanEvery: isOneOf(SCAN_EVERY, row.scan_every) ? row.scan_every : 'off',
     scanDay: row.scan_day,
     scanHour: row.scan_hour,
@@ -1065,5 +1066,5 @@ export function toAiVideo(row: AiVideoRow, links: { video?: string | null; pictu
 export function toVideoBudget(json: Json): VideoBudget {
   const r = isRecord(json) ? json : {};
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && Number.isFinite(Number.parseFloat(v)) ? Number.parseFloat(v) : 0);
-  return { live: r.live === true, cap: num(r.cap), spent: num(r.spent) };
+  return { live: r.live === true, cap: num(r.cap), spent: num(r.spent), pictures: num(r.pictures) };
 }
