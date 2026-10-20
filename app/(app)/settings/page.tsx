@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import { AgentSettingsForm } from '@/components/settings/AgentSettingsForm';
 import { PagesForm } from '@/components/settings/PagesForm';
 import { SettingsForm } from '@/components/settings/SettingsForm';
+import { VideoSettingsForm } from '@/components/settings/VideoSettingsForm';
 import type { PostingState } from '@/components/settings/SettingsForm';
-import { getPosts, getTeamSettings, usingSampleData } from '@/lib/data';
+import { getPosts, getTeamSettings, getVideoBudget, usingSampleData } from '@/lib/data';
 import { pipelineConfig } from '@/lib/supabase/config';
 import { PLACES } from '@/lib/types';
 import type { Place, Post } from '@/lib/types';
@@ -24,7 +25,7 @@ function postingStates(posts: Post[], forReal: Record<Place, boolean>): Record<P
 }
 
 export default async function SettingsPage() {
-  const [settings, posts] = await Promise.all([getTeamSettings(), getPosts()]);
+  const [settings, posts, videos] = await Promise.all([getTeamSettings(), getPosts(), getVideoBudget()]);
   const { pages, postForReal, ...agents } = settings;
   return (
     <div className="page">
@@ -35,9 +36,10 @@ export default async function SettingsPage() {
         </div>
       </header>
       <SettingsForm
-        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, pictures: settings.pictureModel, posting: postingStates(posts, settings.postForReal) }}
+        connections={{ supabase: !usingSampleData(), agents: pipelineConfig() !== null, pictures: settings.pictureModel, videos: videos.live, posting: postingStates(posts, settings.postForReal) }}
       >
         <AgentSettingsForm settings={agents} />
+        <VideoSettingsForm budget={videos} />
         <PagesForm pages={pages} postForReal={postForReal} />
       </SettingsForm>
     </div>

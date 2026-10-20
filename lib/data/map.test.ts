@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
-import type { ActivityRows, AdSetRow, BrandRow, CompetitorRow, LeadRow, PostRow, RunRow, SettingsRow, StageRow, StrategyRow } from './map';
+import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toAiVideo, toVideoBudget, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
+import type { ActivityRows, AdSetRow, AiVideoRow, BrandRow, CompetitorRow, LeadRow, PostRow, RunRow, SettingsRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
 const CLIP_PATH_OK = 'uploads/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.mp4';
@@ -543,6 +543,19 @@ describe('toActivity', () => {
     expect(items).toEqual([{ id: 'picture-v1', kind: 'picture', label: 'Making a picture', subject: 'Q4 push, variant B', href: '/content/s1', since: ago(3) }]);
   });
 
+  it('shows a video being made for half an hour at most', () => {
+    const items = toActivity(
+      rows({
+        videos: [
+          { id: 'a1', prompt: 'A slow aerial over a sunlit American suburb at golden hour, calm and warm', asked_at: ago(4) },
+          { id: 'a2', prompt: 'A family on a porch, evening light', asked_at: ago(31) },
+        ],
+      }),
+      now,
+    );
+    expect(items).toEqual([{ id: 'video-a1', kind: 'video', label: 'Making a video', subject: 'A slow aerial over a sunlit American suburb…', href: '/videos?view=ai', since: ago(4) }]);
+  });
+
   it('says nothing when nothing is at work', () => {
     expect(toActivity(rows({}), now)).toEqual([]);
   });
@@ -691,5 +704,47 @@ describe('leads', () => {
       syncError: null,
       postLink: 'https://qgr.example/call',
     });
+  });
+});
+
+describe('AI video', () => {
+  const row = (extra: Partial<AiVideoRow> = {}): AiVideoRow => ({
+    id: 'a1',
+    prompt: 'A slow aerial over a sunlit American suburb at golden hour, calm and warm',
+    model: 'seedance_2_0_mini',
+    seconds: 4,
+    aspect: '9:16',
+    quality: '480p',
+    sound: false,
+    picture_path: null,
+    credits: '2.00',
+    status: 'ready',
+    error: null,
+    asked_at: '2026-10-20T15:00:00Z',
+    ...extra,
+  });
+
+  it('reads credits sent as text and shows the file only once it is ready', () => {
+    expect(toAiVideo(row(), { video: 'https://signed.example/v.mp4' })).toMatchObject({ credits: 2, status: 'ready', url: 'https://signed.example/v.mp4', picture: null });
+    expect(toAiVideo(row({ status: 'making' }), { video: 'https://signed.example/v.mp4' })).not.toHaveProperty('url');
+  });
+
+  it('keeps the first picture, its link when signed, and why a video failed', () => {
+    const picture = 'refs/b263a35f-fb56-49bf-a032-59be7540d321/0d3b9e6a-1c2f-4b8e-9a7d-5e4f3c2b1a09.png';
+    expect(toAiVideo(row({ status: 'failed', picture_path: picture, error: 'Higgsfield refused the prompt.' }), { picture: 'https://signed.example/p.png' })).toMatchObject({
+      status: 'failed',
+      picture: { path: picture, url: 'https://signed.example/p.png' },
+      error: 'Higgsfield refused the prompt.',
+    });
+  });
+
+  it('drops a row it has no shape for', () => {
+    expect(toAiVideo(row({ model: 'veo_9' }))).toBeNull();
+    expect(toAiVideo(row({ status: 'lost' }))).toBeNull();
+  });
+
+  it('reads the budget, with nothing spent and off when the answer is odd', () => {
+    expect(toVideoBudget({ live: true, cap: 100, spent: '7.50' })).toEqual({ live: true, cap: 100, spent: 7.5 });
+    expect(toVideoBudget(null)).toEqual({ live: false, cap: 0, spent: 0 });
   });
 });

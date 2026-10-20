@@ -7,7 +7,8 @@ import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
 import { mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
-import { leadsConfig, momentsConfig, picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
+import { leadsConfig, momentsConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
+import { askPrice } from '../video-price';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
@@ -29,10 +30,12 @@ import {
   toRun,
   toStrategy,
   toTeamSettings,
+  toAiVideo,
   toUser,
+  toVideoBudget,
   WORKING_MINUTES,
 } from './map';
-import type { BrandExampleRow, PostRow, RunRow } from './map';
+import type { AiVideoRow, BrandExampleRow, PostRow, RunRow } from './map';
 import { searchIndex } from './source';
 import type { DataSource, Saved } from './source';
 
@@ -67,6 +70,12 @@ const EDIT_MEDIA_BUCKET = 'edit-media';
 const SHOTS_BUCKET = 'competitor-shots';
 /** The pictures an image model made for ads, uploaded by n8n. */
 const PICTURE_BUCKET = 'ad-pictures';
+/** Made AI videos, uploaded by n8n, and the first pictures they were asked from. */
+const AI_VIDEO_BUCKET = 'ai-videos';
+const VIDEO_REFS_BUCKET = 'video-refs';
+const AI_VIDEO = 'id, prompt, model, seconds, aspect, quality, sound, picture_path, credits, status, path, error, asked_at';
+/** The library shows the newest; older ones stay in the table, and in the month's credits. */
+const AI_VIDEOS = 60;
 /** Long enough to read a page and post from it. */
 const PICTURE_SECONDS = 60 * 60;
 /** A page re-signs it, so an hour covers any page left open. */
@@ -100,6 +109,32 @@ function refused(error: PostgrestError, fallback: string): Saved<never> {
   if (error.code === 'P0001') return { ok: false, status: 400, error: error.message };
   console.error(fallback, error);
   return { ok: false, status: 500, error: fallback };
+}
+
+/**
+ * AI videos as the library shows them: the ready ones' files and the first
+ * pictures signed as the teammate, in one call per bucket, for as long as a
+ * clip is (a page left open in the studio plays on).
+ */
+async function aiVideos(rows: AiVideoRow[]) {
+  const supabase = await db();
+  const sign = async (bucket: string, paths: string[]) => {
+    if (paths.length === 0) return new Map<string, string>();
+    const { data, error } = await supabase.storage.from(bucket).createSignedUrls(paths, PLAY_SECONDS);
+    if (error) console.error(`Signing ${bucket} links failed`, error);
+    return new Map((data ?? []).flatMap((d) => (d.path && d.signedUrl ? [[d.path, d.signedUrl] as const] : [])));
+  };
+  const videoPath = (r: AiVideoRow) => (r.status === 'ready' ? `videos/${r.id}.mp4` : null);
+  const [videos, pictures] = await Promise.all([
+    sign(AI_VIDEO_BUCKET, rows.map(videoPath).filter((p) => p !== null)),
+    sign(VIDEO_REFS_BUCKET, rows.map((r) => r.picture_path).filter((p) => p !== null)),
+  ]);
+  return rows
+    .map((r) => {
+      const video = videoPath(r);
+      return toAiVideo(r, { video: video ? (videos.get(video) ?? null) : null, picture: r.picture_path ? (pictures.get(r.picture_path) ?? null) : null });
+    })
+    .filter((v) => v !== null);
 }
 
 // One query per list per request (React's cache): the layout and the page share them.
@@ -177,7 +212,7 @@ const activity = cache(async () => {
   const supabase = await db();
   const now = new Date().toISOString();
   const since = (minutes: number) => new Date(Date.parse(now) - minutes * 60_000).toISOString();
-  const [stages, places, pictures] = await Promise.all([
+  const [stages, places, pictures, videos] = await Promise.all([
     supabase.from('run_stages').select('run_id, stage, started_at, runs!run_stages_run_id_fkey(title)').eq('status', 'running').gt('started_at', since(WORKING_MINUTES.agent)),
     supabase
       .from('post_targets')
@@ -188,11 +223,12 @@ const activity = cache(async () => {
       .select('id, label, ad_set_id, picture_requested_at, ad_sets!ad_variants_ad_set_id_fkey(title)')
       .eq('picture_status', 'making')
       .gt('picture_requested_at', since(WORKING_MINUTES.picture)),
+    supabase.from('ai_videos').select('id, prompt, asked_at').in('status', ['asked', 'making']).gt('asked_at', since(WORKING_MINUTES.video)),
   ]);
-  for (const [what, error] of [['agents at work', stages.error], ['posts going out', places.error], ['pictures being made', pictures.error]] as const) {
+  for (const [what, error] of [['agents at work', stages.error], ['posts going out', places.error], ['pictures being made', pictures.error], ['AI videos being made', videos.error]] as const) {
     if (error) console.error(`Reading ${what} failed`, error);
   }
-  return toActivity({ stages: stages.data ?? [], places: places.data ?? [], pictures: pictures.data ?? [] }, now);
+  return toActivity({ stages: stages.data ?? [], places: places.data ?? [], pictures: pictures.data ?? [], videos: videos.data ?? [] }, now);
 });
 
 const teamSettings = cache(async () => {
@@ -528,9 +564,83 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
-  // Nothing makes AI videos until Higgsfield is connected, so there are none to read yet.
-  getAiVideos: async () => [],
-  getAiVideo: async () => null,
+  getAiVideos: async () => {
+    const { data, error } = await (await db()).from('ai_videos').select(AI_VIDEO).is('removed_at', null).order('asked_at', { ascending: false }).limit(AI_VIDEOS);
+    if (error) readFailed('AI videos', error);
+    return aiVideos(data);
+  },
+
+  getAiVideo: async (id) => {
+    if (!UUID.test(id)) return null;
+    const { data, error } = await (await db()).from('ai_videos').select(AI_VIDEO).eq('id', id).is('removed_at', null).maybeSingle();
+    if (error) readFailed('the AI video', error);
+    return data ? ((await aiVideos([data]))[0] ?? null) : null;
+  },
+
+  getVideoBudget: async () => {
+    const { data, error } = await (await db()).rpc('video_budget');
+    if (error) readFailed('AI video\u2019s credits', error);
+    return toVideoBudget(data);
+  },
+
+  priceVideo: async (request) => {
+    const config = videoPriceConfig();
+    if (!config) return { ok: false, status: 503, error: 'Prices come from n8n: its webhook is not set on this server.' };
+    const price = await askPrice(config, request);
+    return price.ok ? { ok: true, value: { credits: price.credits, balance: price.balance }, sample: false } : { ok: false, status: 502, error: price.error };
+  },
+
+  askForVideo: async (request, credits) => {
+    const { data, error } = await (await db()).rpc('ask_for_video', {
+      p_prompt: request.prompt,
+      p_model: request.model,
+      p_seconds: request.seconds,
+      p_aspect: request.aspect,
+      p_quality: request.quality,
+      p_sound: request.sound,
+      // Null while AI video is off: the stand-in makes nothing and needs no price.
+      p_credits: credits as number,
+      ...(request.picture ? { p_picture_path: request.picture } : {}),
+    });
+    if (error) return refused(error, 'The video could not be asked for.');
+    const video = videoConfig();
+    if (video) await pingQueue(video);
+    return { ok: true, value: { id: data }, sample: false };
+  },
+
+  removeAiVideo: async (id) => {
+    const { error } = await (await db()).rpc('remove_ai_video', { p_id: id });
+    if (error) return refused(error, 'The video could not be taken away.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  createVideoPictureUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to upload.' };
+    const path = `refs/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    const { data, error } = await (await db()).storage.from(VIDEO_REFS_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing a first picture\u2019s upload link failed', error);
+      return { ok: false, status: 500, error: 'The picture could not be uploaded.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deleteVideoPicture: async (path) => {
+    // Storage refuses (by its policy) a picture that is not the caller's or that a video was asked from.
+    const { data, error } = await (await db()).storage.from(VIDEO_REFS_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing a first picture failed', error);
+      return { ok: false, status: 500, error: 'The picture could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That picture is in use or already gone.' };
+  },
+
+  setVideoSettings: async (live, cap) => {
+    const { error } = await (await db()).rpc('set_video_settings', { p_live: live, p_cap: cap });
+    if (error) return refused(error, 'AI video\u2019s settings could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
 
   getClipUrl: async (path) => {
     const { data, error } = await (await db()).storage.from(MEDIA_BUCKET).createSignedUrl(path, PLAY_SECONDS);

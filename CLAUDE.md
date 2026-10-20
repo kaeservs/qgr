@@ -17,7 +17,8 @@ sign in and shows what is in Supabase; without them it runs on the sample data
 (`lib/mock-data.ts`) and says so ("Sample data" in the top bar). Runs start
 only once the n8n webhook settings are set too.
 
-Placeholders until their keys are in: Apify, image generation and posting.
+Placeholders until their keys are in: Apify, image generation, posting and AI
+video.
 The tracker reads sample ads until the team switches it to Apify in Settings,
 once Apify's token is in n8n; then it reads each competitor's real ads in
 Meta's Ad Library (Competitor ads below). An approved variant is posted now or at a time to the Facebook Page,
@@ -32,7 +33,11 @@ through n8n's "QGR · Pictures" to the image model chosen in Settings: the
 stand-in, which makes none and says so, or Cloudflare Workers AI's FLUX.1
 schnell, free each day, once its token is in n8n (Pictures below). A clip's
 transcript is heard in the browser, on the team's own computer (Whisper, free;
-Video below). Not built: paid
+Video below). A video is made from a prompt by Higgsfield, through n8n's "QGR ·
+AI video" and Higgsfield's MCP signed in to the team's own plan: Generate goes
+through a stand-in that makes nothing and says so until the team switches AI
+video on in Settings, and a monthly limit in credits holds what it spends (AI
+video below). Not built: paid
 ads (Meta Ads Manager, LinkedIn Campaign Manager) and posting to X, whose API
 is paid; X copy is for pasting.
 
@@ -82,6 +87,9 @@ X's ads APIs, which each need their own access.
                judge_leads_again(), set_post_link(), a suggestion approved → create_run()
             ── POST /api/edit-media → a signed upload link for a file added to a video edit;
                POST /api/edit-media/links → links to read them
+            ── POST /api/video-refs → a signed upload link for an AI video's first picture
+            ── AI video → server actions → Higgsfield's price from n8n's Price webhook,
+               ask_for_video() then the Make now webhook, remove_ai_video(), set_video_settings()
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant_words(), approve_variant(), save_video_edit(), save_variant_design(),
@@ -108,6 +116,11 @@ X's ads APIs, which each need their own access.
     n8n "QGR · Leads", every fifteen minutes and on POST /webhook/qgr-leads →
         leads_sync_plan() → Zoho's lead fields, then its leads changed since → leads_record()
         or leads_sync_fail(); leads_take_due() → each lead → Claude → lead_judged() or lead_judge_fail()
+    n8n "QGR · AI video", every minute and on POST /webhook/qgr-video →
+        video_take_due() → each ask, through its stand-in or Higgsfield's MCP → video_started(),
+        video_release(), video_unknown() or video_fail(); video_take_making() → each job →
+        its file into ai-videos → video_finish() or video_fail();
+        and POST /webhook/qgr-video-price → Higgsfield's price (get_cost: nothing is made)
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -115,7 +128,8 @@ X's ads APIs, which each need their own access.
   from the browser straight to Storage, through a link the server signs as the
   teammate for one path in their own folder (a clip through `/api/uploads`,
   the file a post goes out with through `/api/post-media`, a video, picture or
-  music added to an edit through `/api/edit-media`), because a 50 MB
+  music added to an edit through `/api/edit-media`, an AI video's first
+  picture through `/api/video-refs`), because a 50 MB
   file cannot pass through a Vercel function (4.5 MB a request). Clips play
   and export from links the server signs too (`getClipUrl`). Every other
   Supabase call is made by the server with the person's own session and the
@@ -179,13 +193,16 @@ X's ads APIs, which each need their own access.
   `set_competitor_tracked`, `create_long_video`, `ask_moments_again`,
   `remove_long_video`, `record_moment_run`, `start_run_from_ads`,
   `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
-  `judge_leads_again`, `set_post_link`.
+  `judge_leads_again`, `set_post_link`, `video_budget`, `set_video_settings`,
+  `ask_for_video`, `remove_ai_video`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
-  `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`) is granted to
-  the service role alone.
+  `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`,
+  `video_take_due`, `video_started`, `video_release`, `video_unknown`,
+  `video_fail`, `video_take_making`, `video_finish`) is granted to the service
+  role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
   any clip, uploads only into their own folder, and removes only their own
@@ -213,15 +230,23 @@ X's ads APIs, which each need their own access.
   or WebP) at `pictures/{variant}/{uuid}.{ext}`, uploaded by n8n alone. A
   member reads any, and removes only one no variant shows and no variant keeps
   to choose again (`variant_pictures`); n8n removes those past the eight kept.
+- An AI video lives in the private bucket `ai-videos` (200 MB, MP4) at
+  `videos/{id}.mp4`, uploaded by n8n alone; a member reads any. Its first
+  picture lives in `video-refs` (10 MB; PNG, JPEG or WebP) at
+  `refs/{uploader}/{uuid}.{ext}`: a member reads any, uploads only into their
+  own folder, and removes their own only while no video was asked from it.
+  `ask_for_video` checks the picture is there.
 - The tests run every migration in PGlite, with stand-ins for Supabase's
   roles, `auth.uid()` and storage (`test/supabase.ts`):
   `supabase/access.test.ts` checks who can read and change what,
   `supabase/posts.test.ts`, `supabase/agents.test.ts` and
   `supabase/pictures.test.ts` the posts, the switches, the scan schedule and
-  the pictures, `n8n/pipeline.test.ts` takes each kind of run through all
-  three agents' scripts against them, with Claude's answers as fixtures, and
+  the pictures, `supabase/ai-videos.test.ts` AI video's asks, limit and
+  retries, `n8n/pipeline.test.ts` takes each kind of run through all three
+  agents' scripts against them, with Claude's answers as fixtures,
   `n8n/publisher.test.ts` a post, its results and a picture through their
-  workflows.
+  workflows, and `n8n/ai-video.test.ts` AI video's scripts against
+  Higgsfield's answers.
 - `team_members` decides who sees anything. Policies let a member read every
   dashboard table; anyone else, signed in or not, reads nothing, and nobody but
   the service role writes a table. Add a person: create the account
@@ -255,7 +280,9 @@ X's ads APIs, which each need their own access.
   Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
   (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`),
   Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`),
-  Leads (`bE0n6UONyx22rYxs`, every fifteen minutes and webhook `POST /webhook/qgr-leads`).
+  Leads (`bE0n6UONyx22rYxs`, every fifteen minutes and webhook `POST /webhook/qgr-leads`),
+  AI video (`tsZjQUQ0TEajMs3h`, every minute and webhooks `POST /webhook/qgr-video`
+  and `POST /webhook/qgr-video-price`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -308,12 +335,14 @@ X's ads APIs, which each need their own access.
   API, connected by an admin of the Page; on every LinkedIn step and
   "LinkedIn: its numbers") and `Zoho` (Zoho OAuth2 API, for the region the
   team's Zoho is in, connected by a Zoho admin; on "Zoho: the lead fields" and
-  "Zoho: the leads" in Leads). Until a platform's credential is attached, its
+  "Zoho: the leads" in Leads) and `Higgsfield` (MCP OAuth2 API, signed in to
+  the team's Higgsfield account; on every "Higgsfield:" step in AI video).
+  Until a platform's credential is attached, its
   steps do not run and each post or read says so. Nothing that posts or draws
   is kept in Supabase or the app (the Cloudflare account ID is: it is an ID,
   not a secret).
   A node holds its credential by id, so renaming one in n8n changes nothing
-  (the webhook secret is "Header Auth account 2", on all three webhooks).
+  (the webhook secret is "Header Auth account 2", on every webhook).
 - A node names its credential only once that credential exists in n8n: a
   reference to a missing one fails every run before it starts, even a test
   with pinned data ("uses invalid credential").
@@ -326,8 +355,9 @@ X's ads APIs, which each need their own access.
   "Instagram (stand-in)" and "LinkedIn (stand-in)" are the way taken while a
   place is not switched to post for real: they post nothing and answer
   `stand_in: true`, so the dashboard says nothing went out, and nothing is read
-  for their results. The node's comment and the note beside it say what they
-  are.
+  for their results. "Higgsfield (stand-in)" in AI video is the way taken
+  while AI video is off: nothing is sent or spent, and the ask is recorded as
+  nothing made. The node's comment and the note beside it say what they are.
 
 ### Brand memory (`brand_profile`, `brand_examples`, `/brand`)
 
@@ -782,28 +812,75 @@ X's ads APIs, which each need their own access.
 - The sample data has one long video (a 40-minute webinar transcript) and
   picks moments by their place in the video (`sampleMoments`), saying so.
 
-### AI video (`/videos?view=ai`, `lib/ai-video.ts`), a preview
+### AI video (`/videos?view=ai`, `ai_videos`, "QGR · AI video")
 
-- A video is made by Higgsfield from a prompt, a model (Seedance 2.0, Hailuo
-  2.3, Kling 3.0: what each takes is in `VIDEO_MODELS`, from Higgsfield's model
-  pages, to check again when the key goes in), a length, a shape and
-  references (pictures, and for Seedance one clip of 15 s at most; Kling
-  needs one picture, its first frame). `parseVideoRequest` is the rule,
-  tested. No price is shown until Higgsfield says one.
-- Not connected yet: nothing in Supabase or n8n. Generate checks the request
-  and adds a card saying nothing was made, kept on the page only; the live
-  library is empty (`getAiVideos`), and the sample data has one video, the
-  sample clip, marked "Sample video".
+- A video is made by Higgsfield from a prompt, a model, a length, a shape, a
+  quality, sound or not, and for two models a first picture (its first frame).
+  The models, and what each takes, are Higgsfield's own as its MCP gave them
+  (`models_explore`, 2026-10-20), in `VIDEO_MODELS`: Seedance 2.0 Mini (4 to
+  15 s, 480p or 720p, a picture: the cheap one, for tries), Kling 3.0 (3 to
+  15 s, Standard or Pro, a picture) and Seedance 2.5 (5 to 15 s, up to 1080p,
+  the prompt alone). `parseVideoRequest` is the app's rule, tested;
+  `ask_for_video` and the table's check hold it again. The page starts on the
+  cheapest: Seedance 2.0 Mini, 4 s, 480p, no sound.
+- n8n asks Higgsfield through its MCP (`mcp.higgsfield.ai`), signed in with
+  the team's own Higgsfield account: not the API, which bills separately. The
+  MCP always spends the plan's credits, Unlimited or not (Higgsfield's
+  Unlimited applies on its own site only), so every video costs. Only a
+  person's Generate makes one, never a run.
+- Higgsfield's price shows before Generate. The page asks for it a moment
+  after each change (`priceVideoAction` → "Price", `generate_video` with
+  `get_cost`, which makes nothing and spends nothing, measured: 280 credits
+  before and after), with the credits left on the plan (`balance`). A price
+  is shown only for the settings it was asked for. The words of the prompt do
+  not change it, so they do not ask again.
+- AI video is off until the team switches it on (Settings, AI video:
+  `team_settings.videos_live`, through `set_video_settings`, which asks once
+  more first). Off, Generate goes through "Higgsfield (stand-in)": nothing is sent
+  to Higgsfield or spent, and the library says nothing was made. On, the
+  server asks Higgsfield's price again rather than take the page's, and
+  `ask_for_video` refuses an ask that would take the month past the team's
+  limit (`videos_cap`, 100 credits to start). The month counts in the team's
+  time zone (`private.videos_spent`): every ask waiting, being made, made or
+  unknown counts; one that failed or was stopped does not. Four wait at once
+  at most.
+- "QGR · AI video" sends each ask once (`video_take_due`, `skip locked`).
+  - A first picture is signed for 15 minutes and imported first
+    (`media_import_url`).
+  - Answered with a job: `video_started`.
+  - Refused: `video_fail`, nothing was made.
+  - Not reached at all (the MCP step handed its input on): `video_release`,
+    and it waits for the next minute, three tries at most.
+  - Any other trouble after sending: `video_unknown`, never sent again by
+    itself, because Higgsfield says a submission whose answer was lost may have
+    gone through. A person checks Higgsfield's history. An ask claimed and
+    never answered in ten minutes becomes unknown too.
+  - Jobs being made are checked every 45 s (`video_take_making`,
+    `job_status`). A finished one's file is fetched, stored in `ai-videos` and
+    recorded (`video_finish`); a failed one says why (Higgsfield's refusals of
+    a prompt or a picture in plain words). Still making after two hours, it is
+    unknown.
+  - Every Higgsfield step reads its answer in code
+    (`n8n/code/video-*.js`), tested in `n8n/ai-video.test.ts`. The workflow
+    keeps no execution data for runs that succeed.
+  - The answers to `generate_video` and `job_status` follow what Higgsfield's
+    MCP documents, not a real video: check the first real one against
+    `video-read-start.js` and `video-read-job.js`.
+- The library (`AiVideoStudio`) shows each video as waiting, being made,
+  ready (it plays, from a link signed for an hour), not made (and why), check
+  Higgsfield, or nothing made (the stand-in), and re-reads while one is under
+  way. "Use the prompt again" fills the composer with a video's prompt and
+  settings. An ask not yet sent can be stopped; one being made cannot.
+  Taking a made video out of the library marks it (`removed_at`) and keeps
+  its file in `ai-videos`.
 - The sidebar's Video page holds both: Long videos (the default view) and AI
   video (`?view=ai`).
 - A finished video starts a run as if it were uploaded (`/runs/new?video=…`):
   the start card fetches it into the clip field, which cuts and uploads it as
   any clip, and the notes start with what it shows (`notesFor`), since it has
   no speech. A run never waits on a generation.
-- Every video costs money: only a person's Generate will make one, and a
-  monthly limit comes with the connection. Then: a table of videos, an n8n
-  workflow calling Higgsfield with its key as an n8n credential, polling its
-  `status_url`, and the file copied into Storage.
+- The sample data has one video, the sample clip, marked "Sample video";
+  there Generate stays off and nothing is priced.
 
 ### Leads (`/leads`, `leads`, "QGR · Leads")
 
@@ -900,6 +977,10 @@ X's ads APIs, which each need their own access.
 11. **Never post twice by accident.** A place that may have gone out
     (`unknown`) is never sent again by itself: a person checks the Page, then
     sends it again or dismisses it.
+12. **A paid video is a person's, priced first and sent once.** Only Generate
+    makes one, never a run; Higgsfield's price shows before it and the
+    month's limit holds it; an ask whose answer was lost (`unknown`) is never
+    sent again by itself.
 
 ## Design
 
@@ -925,13 +1006,14 @@ X's ads APIs, which each need their own access.
   - A button sending something: set `aria-busy` on it. `globals.css` turns a
     ring in place of its icon and keeps its colour, since a button at work is
     not unavailable. A `Toggle` takes `busy` and turns a ring in its knob.
-  - Work going on: an agent on a run, a post going out or a picture being made
-    is in the top bar's Working list on every page, and on Home the agent's
+  - Work going on: an agent on a run, a post going out, a picture or a video
+    being made is in the top bar's Working list on every page, and on Home the agent's
     card says what it is working on. Both read `getActivity`, which the
     layout reads with the page and `/api/activity` serves to the list: every
     5 s while something works, every 30 s while all is quiet, only in a tab in
     view. When something finishes, the page re-reads. Past `WORKING_MINUTES`
-    (`lib/data/map.ts`: 30 for an agent, 15 for a post, 10 for a picture) the
+    (`lib/data/map.ts`: 30 for an agent, 15 for a post, 10 for a picture, 30
+    for a video) the
     work is stuck rather than working, and is left to the page it belongs to.
   The rings keep still for anyone who asks for less motion (the rule at the
   top of `globals.css`).

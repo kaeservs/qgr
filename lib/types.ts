@@ -358,8 +358,8 @@ export interface BrandExample {
 /** Something the agents or n8n are doing right now, for the Working list in the top bar. */
 export interface ActivityItem {
   id: string;
-  kind: 'run' | 'post' | 'picture';
-  /** What is happening: "Ad Strategist", "Sending to Facebook, Instagram", "Making a picture". */
+  kind: 'run' | 'post' | 'picture' | 'video';
+  /** What is happening: "Ad Strategist", "Sending to Facebook, Instagram", "Making a picture", "Making a video". */
   label: string;
   /** What it is happening to: a run's title, or an ad set and its variant. */
   subject: string;
@@ -480,25 +480,42 @@ export interface TeamSettings extends AgentSettings {
 }
 
 /**
- * A video Higgsfield made from a prompt, kept to start a run from (lib/ai-video.ts).
- * Until Higgsfield is connected only the sample data has one.
+ * A video asked of Higgsfield from a prompt, kept to start a run from
+ * (lib/ai-video.ts). n8n sends it once and checks its job until it is made.
  */
 export interface AiVideo {
   id: string;
   title: string;
   prompt: string;
-  model: 'seedance' | 'hailuo' | 'kling';
+  model: 'seedance_2_0_mini' | 'kling3_0' | 'seedance_2_5';
   seconds: number;
   aspect: '9:16' | '1:1' | '16:9';
-  /** The names of the pictures and clips it was asked to follow. */
-  references: { kind: 'image' | 'clip'; name: string }[];
-  status: 'ready' | 'making' | 'failed';
+  /** The model's own quality setting (480p, 720p, std, pro…). */
+  quality: string;
+  sound: boolean;
+  /** Its first frame, when it was asked from a picture. */
+  picture: { path: string; url?: string } | null;
+  /** Higgsfield's price, in credits; 0 for the stand-in. */
+  credits: number;
+  /**
+   * asked: waiting to be sent; making: Higgsfield is on it; ready: kept here;
+   * failed: not made; unknown: it may have been made, so a person checks
+   * Higgsfield before asking again; stand_in: AI video was off, nothing made.
+   */
+  status: 'asked' | 'making' | 'ready' | 'failed' | 'unknown' | 'stand_in';
   /** A link the browser can play it from; set once it is ready. */
   url?: string;
   error?: string;
   createdAt: string;
   /** The sample data's stand-in, which no model made. */
   sample?: boolean;
+}
+
+/** AI video's switch and this month's credits, against the team's limit. */
+export interface VideoBudget {
+  live: boolean;
+  cap: number;
+  spent: number;
 }
 
 /**

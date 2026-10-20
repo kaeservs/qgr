@@ -1,106 +1,153 @@
 'use client';
 
-import { ArrowRight, Clapperboard, Film, ImageIcon, RotateCcw, Sparkles, Trash2, X as Close } from 'lucide-react';
+import { ArrowRight, CircleAlert, Clapperboard, ImageIcon, LoaderCircle, RotateCcw, Settings, Sparkles, Trash2, X as Close } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
-import { fitToModel, MAX_VIDEO_PROMPT, modelOf, parseVideoRequest, VIDEO_MODELS } from '@/lib/ai-video';
-import type { VideoAspect, VideoModelKey, VideoReference } from '@/lib/ai-video';
+import { askForVideoAction, priceVideoAction, removeAiVideoAction } from '@/app/(app)/videos/actions';
+import { cheapest, creditsLeft, fitToModel, formatCredits, MAX_VIDEO_PROMPT, MIN_VIDEO_PROMPT, modelOf, parseVideoRequest, PICTURE_TYPES, qualityLabel, VIDEO_MODELS } from '@/lib/ai-video';
+import type { VideoRequest } from '@/lib/ai-video';
 import { cx } from '@/lib/cx';
 import { dayLabel } from '@/lib/schedule';
-import type { AiVideo } from '@/lib/types';
+import type { AiVideo, VideoBudget } from '@/lib/types';
+import { removeVideoPicture, uploadVideoPicture, UploadError } from '@/lib/video/upload';
+import { LiveRefresh } from '../ui/LiveRefresh';
+import { useToast } from '../ui/Toast';
 import styles from './videos.module.css';
 
-/** A reference picked from this computer: shown here, sent nowhere while Higgsfield is not connected. */
-interface Picked extends VideoReference {
-  id: string;
-  url: string;
-}
+type Shape = Omit<VideoRequest, 'prompt'>;
+type Picture = { name: string; preview: string; state: 'uploading' } | { name: string; preview: string; state: 'ready'; path: string };
+type Price = { state: 'idle' } | { state: 'asking' } | { state: 'ready'; credits: number; balance: number | null } | { state: 'failed'; error: string };
 
-/** A video asked for on this page while Higgsfield is not connected: nothing made it. */
-interface Asked {
-  id: string;
-  prompt: string;
-  model: VideoModelKey;
-  seconds: number;
-  aspect: VideoAspect;
-  references: { kind: 'image' | 'clip'; name: string }[];
-}
-
-const ASPECT_LABEL: Record<VideoAspect, string> = { '9:16': '9:16 Reels, Stories', '1:1': '1:1 Feed', '16:9': '16:9 Wide' };
-
-/** A clip's length, read from the file in the browser. */
-function clipSeconds(url: string): Promise<number> {
-  return new Promise((resolve) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    video.onloadedmetadata = () => resolve(Number.isFinite(video.duration) ? video.duration : 0);
-    video.onerror = () => resolve(0);
-    video.src = url;
-  });
-}
+const ASPECT_LABEL: Record<Shape['aspect'], string> = { '9:16': '9:16 Reels, Stories', '1:1': '1:1 Feed', '16:9': '16:9 Wide' };
+const STATUS: Record<AiVideo['status'], string> = {
+  asked: 'Waiting to be sent…',
+  making: 'Higgsfield is making it…',
+  ready: 'Ready',
+  failed: 'Not made',
+  unknown: 'Check Higgsfield',
+  stand_in: 'Nothing made',
+};
 
 const shortDay = (iso: string) => dayLabel(iso.slice(0, 10));
+/** What a price depends on: everything but the prompt's words and which picture. */
+const priceKey = (shape: Shape) => JSON.stringify({ ...shape, picture: shape.picture !== null });
 
 /**
- * AI video: a prompt, a model, a length, a shape and references make a
- * video, kept here to start a run from. A preview until Higgsfield is
- * connected: Generate checks the request as the server will, then says that
- * nothing was made, as the picture stand-in does.
+ * AI video: a prompt, one of three Higgsfield models, a length, a shape, a
+ * quality, sound or not, and for two models a first picture. Higgsfield's
+ * price shows before Generate (asked through n8n with get_cost, which makes
+ * nothing), with the credits left on the plan and this month's limit. n8n
+ * sends each ask once; the library keeps what Higgsfield made, to start a run
+ * from. While AI video is off in Settings, Generate goes to the stand-in,
+ * which makes nothing and costs nothing.
  */
-export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
+export function AiVideoStudio({ videos, budget, sample }: { videos: AiVideo[]; budget: VideoBudget; sample: boolean }) {
+  const toast = useToast();
+  const router = useRouter();
   const [prompt, setPrompt] = useState('');
-  const [shape, setShape] = useState<{ model: VideoModelKey; seconds: number; aspect: VideoAspect }>({ model: 'seedance', seconds: 10, aspect: '9:16' });
-  const [refs, setRefs] = useState<Picked[]>([]);
-  const [asked, setAsked] = useState<Asked[]>([]);
+  const [shape, setShape] = useState<Shape>(cheapest('seedance_2_0_mini'));
+  const [picture, setPicture] = useState<Picture | null>(null);
+  const [quote, setQuote] = useState<{ key: string; price: Price }>({ key: '', price: { state: 'idle' } });
+  const [retry, setRetry] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
   const promptBox = useRef<HTMLTextAreaElement>(null);
   const model = modelOf(shape.model);
+  const left = creditsLeft(budget);
+  const working = videos.some((v) => v.status === 'asked' || v.status === 'making');
 
-  // The pictures and clips shown here are this page's alone: let them go with it.
-  const live = useRef(refs);
-  live.current = refs;
-  useEffect(() => () => live.current.forEach((r) => URL.revokeObjectURL(r.url)), []);
+  // Higgsfield's price for what is chosen now: asked a moment after the last
+  // change, never for the sample data. A price is only ever shown for the
+  // settings it was asked for, so a change never leaves the last one standing.
+  const key = priceKey(shape);
+  const price: Price = quote.key === key ? quote.price : { state: 'idle' };
+  useEffect(() => {
+    if (sample) return;
+    const timer = setTimeout(() => {
+      setQuote({ key, price: { state: 'asking' } });
+      void priceVideoAction({ ...shape, prompt, picture: shape.picture }).then((answer) =>
+        setQuote((q) =>
+          q.key !== key ? q : { key, price: answer.ok ? { state: 'ready', credits: answer.value.credits, balance: answer.value.balance } : { state: 'failed', error: answer.error } },
+        ),
+      );
+    }, 600);
+    return () => clearTimeout(timer);
+    // The prompt does not change the price: it is sent, but does not ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, sample, retry]);
 
-  async function addReferences(list: FileList | null) {
-    if (!list) return;
+  // The picture's preview lives in this tab only.
+  const preview = useRef<string | null>(null);
+  useEffect(() => () => void (preview.current && URL.revokeObjectURL(preview.current)), []);
+
+  async function addPicture(file: File | undefined) {
+    if (!file) return;
     setError(null);
-    const added: Picked[] = [];
-    for (const file of [...list]) {
-      const kind = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'clip' : null;
-      if (!kind) {
-        setError(`${file.name} isn’t a picture or a video.`);
-        continue;
-      }
-      const url = URL.createObjectURL(file);
-      const seconds = kind === 'clip' ? await clipSeconds(url) : undefined;
-      added.push({ id: crypto.randomUUID(), kind, name: file.name, size: file.size, url, ...(seconds !== undefined ? { seconds } : {}) });
+    if (!(PICTURE_TYPES as readonly string[]).includes(file.type)) return setError(`${file.name} isn’t a PNG, JPEG or WebP picture.`);
+    const old = picture;
+    if (preview.current) URL.revokeObjectURL(preview.current);
+    preview.current = URL.createObjectURL(file);
+    setPicture({ name: file.name, preview: preview.current, state: 'uploading' });
+    try {
+      const up = await uploadVideoPicture(file, () => undefined);
+      setPicture({ name: file.name, preview: preview.current, state: 'ready', path: up.path });
+      setShape((s) => ({ ...s, picture: up.path }));
+      if (old?.state === 'ready') void removeVideoPicture(old.path);
+    } catch (err) {
+      setPicture(null);
+      setShape((s) => ({ ...s, picture: null }));
+      setError(err instanceof UploadError ? err.message : 'The picture could not be uploaded.');
     }
-    setRefs((r) => [...r, ...added]);
   }
 
-  function removeReference(id: string) {
-    setRefs((list) => {
-      const gone = list.find((r) => r.id === id);
-      if (gone) URL.revokeObjectURL(gone.url);
-      return list.filter((r) => r.id !== id);
-    });
+  function dropPicture() {
+    if (picture?.state === 'ready') void removeVideoPicture(picture.path);
+    setPicture(null);
+    setShape((s) => ({ ...s, picture: null }));
   }
 
-  function generate() {
-    setNotice(null);
-    const parsed = parseVideoRequest({ prompt, ...shape, references: refs.map(({ kind, name, size, seconds }) => ({ kind, name, size, seconds })) });
+  function pickModel(next: Shape['model']) {
+    const fitted = fitToModel(shape, next);
+    // A model that starts from the prompt alone lets the picture go.
+    if (!modelOf(next).picture && picture) dropPicture();
+    setShape({ ...fitted, picture: modelOf(next).picture ? shape.picture : null });
+  }
+
+  const priced = price.state === 'ready' ? price.credits : null;
+  const overLimit = budget.live && priced !== null && priced > left;
+  const canGenerate = !sample && picture?.state !== 'uploading' && (!budget.live || (priced !== null && !overLimit));
+
+  async function generate() {
+    const parsed = parseVideoRequest({ prompt, ...shape });
     if (!parsed.ok) return setError(parsed.error);
     setError(null);
-    const { prompt: text, model: key, seconds, aspect, references } = parsed.value;
-    setAsked((list) => [{ id: crypto.randomUUID(), prompt: text, model: key, seconds, aspect, references: references.map(({ kind, name }) => ({ kind, name })) }, ...list]);
-    setNotice('Nothing was made: Higgsfield isn’t connected yet. Once it is, the video appears in the library below in a few minutes, and nothing is spent until someone presses Generate.');
+    setBusy('generate');
+    const answer = await askForVideoAction(parsed.value);
+    setBusy(null);
+    if (!answer.ok) return setError(answer.error);
+    toast(budget.live ? 'Asked for: Higgsfield makes it in a few minutes, and it shows below.' : 'Sent to the stand-in: nothing was made. Switch AI video on in Settings to make it for real.');
+    // A picture a video was asked from stays with it; the field starts afresh.
+    setPicture(null);
+    preview.current = null;
+    setShape((s) => ({ ...s, picture: null }));
+    router.refresh();
   }
 
-  function reuse(item: { prompt: string; model: VideoModelKey; seconds: number; aspect: VideoAspect }) {
-    setPrompt(item.prompt);
-    setShape(fitToModel(item, item.model));
+  async function remove(video: AiVideo) {
+    setBusy(video.id);
+    const answer = await removeAiVideoAction(video.id);
+    setBusy(null);
+    if (!answer.ok) return toast(answer.error, 'info');
+    toast(video.status === 'asked' ? 'Stopped: nothing was sent to Higgsfield' : answer.sample ? 'Taken away, for this session' : 'Taken out of the library');
+    router.refresh();
+  }
+
+  function reuse(video: AiVideo) {
+    setPrompt(video.prompt);
+    pickModel(video.model);
+    setShape((s) => ({ ...fitToModel({ ...s, seconds: video.seconds, aspect: video.aspect, quality: video.quality, sound: video.sound }, video.model), picture: s.picture }));
     setError(null);
     promptBox.current?.focus();
     promptBox.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -108,12 +155,13 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
 
   return (
     <div className={styles.studio}>
+      <LiveRefresh active={working} />
       <section className={cx('card card-pad', styles.composer)} aria-labelledby="make-title">
         <div>
           <h2 id="make-title" className="card-title">
             Make a video
           </h2>
-          <p className="muted small">Say what is seen and how it moves. No identifiable people, no flags, no words in the picture: the ad’s words go over it later.</p>
+          <p className="muted small">Say what is seen and how it moves. No identifiable people, no flags, no words in the picture: the ad’s words go over it later, and Higgsfield is told so.</p>
         </div>
 
         <label className="field">
@@ -136,14 +184,7 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
           <legend className="label">Model</legend>
           <div className={styles.models} role="radiogroup" aria-label="Model">
             {VIDEO_MODELS.map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                role="radio"
-                aria-checked={shape.model === m.key}
-                className={cx(styles.model, shape.model === m.key && styles.modelOn)}
-                onClick={() => setShape((s) => fitToModel(s, m.key))}
-              >
+              <button key={m.key} type="button" role="radio" aria-checked={shape.model === m.key} className={cx(styles.model, shape.model === m.key && styles.modelOn)} onClick={() => pickModel(m.key)}>
                 <strong>{m.name}</strong>
                 <span className="muted small">{m.job}</span>
               </button>
@@ -174,60 +215,89 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
           </fieldset>
         </div>
 
-        <fieldset className={styles.fieldset}>
-          <legend className="label">References</legend>
-          <p className="muted small">
-            {model.images.min > 0
-              ? `${model.name} starts from one picture: it becomes the first frame.`
-              : `${model.name} can follow ${model.images.max === 1 ? 'a picture' : `up to ${model.images.max} pictures`}${model.clips ? ` and one short clip (15 seconds at most) for the movement` : ''}. Optional.`}
-          </p>
-          <input
-            ref={picker}
-            type="file"
-            accept={model.clips ? 'image/*,video/*' : 'image/*'}
-            multiple
-            hidden
-            onChange={(e) => {
-              void addReferences(e.target.files);
-              e.target.value = '';
-            }}
-          />
-          <div className={styles.refs}>
-            {refs.map((r) => (
-              <figure key={r.id} className={styles.ref}>
-                {r.kind === 'image' ? <img src={r.url} alt="" /> : <video src={r.url} muted playsInline preload="metadata" />}
-                <figcaption>
-                  {r.kind === 'image' ? <ImageIcon size={13} aria-hidden /> : <Film size={13} aria-hidden />}
-                  <span>{r.name}</span>
-                </figcaption>
-                <button type="button" className={styles.refRemove} aria-label={`Remove ${r.name}`} onClick={() => removeReference(r.id)}>
-                  <Close size={14} aria-hidden />
+        <div className={styles.twoUp}>
+          <fieldset className={styles.fieldset}>
+            <legend className="label">Quality</legend>
+            <div className={styles.segmented} role="radiogroup" aria-label="Quality">
+              {model.qualities.map((q) => (
+                <button key={q.key} type="button" role="radio" aria-checked={shape.quality === q.key} className={cx(styles.segment, shape.quality === q.key && styles.segmentOn)} onClick={() => setShape((x) => ({ ...x, quality: q.key }))}>
+                  {q.label}
                 </button>
-              </figure>
-            ))}
-            <button type="button" className={styles.refAdd} onClick={() => picker.current?.click()}>
-              <ImageIcon size={18} aria-hidden />
-              <span>{model.clips ? 'Add a picture or clip' : 'Add a picture'}</span>
-            </button>
-          </div>
-        </fieldset>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className={styles.fieldset}>
+            <legend className="label">Sound</legend>
+            <label className={styles.check}>
+              <input type="checkbox" checked={shape.sound} onChange={(e) => setShape((x) => ({ ...x, sound: e.target.checked }))} />
+              <span>Make sound with it</span>
+            </label>
+            <span className="muted small">Off costs fewer credits: an ad gets its music in the editor.</span>
+          </fieldset>
+        </div>
+
+        {model.picture && (
+          <fieldset className={styles.fieldset}>
+            <legend className="label">First picture (optional)</legend>
+            <p className="muted small">{model.name} can start from a picture of yours: it becomes the first frame. PNG, JPEG or WebP, 10 MB at most.</p>
+            <input
+              ref={picker}
+              type="file"
+              accept={PICTURE_TYPES.join(',')}
+              hidden
+              onChange={(e) => {
+                void addPicture(e.target.files?.[0]);
+                e.target.value = '';
+              }}
+            />
+            <div className={styles.refs}>
+              {picture ? (
+                <figure className={styles.ref}>
+                  <img src={picture.preview} alt="" />
+                  <figcaption>
+                    {picture.state === 'uploading' ? <LoaderCircle size={13} className="spin" aria-hidden /> : <ImageIcon size={13} aria-hidden />}
+                    <span>{picture.state === 'uploading' ? 'Uploading…' : picture.name}</span>
+                  </figcaption>
+                  <button type="button" className={styles.refRemove} aria-label={`Remove ${picture.name}`} onClick={dropPicture} disabled={picture.state === 'uploading'}>
+                    <Close size={14} aria-hidden />
+                  </button>
+                </figure>
+              ) : (
+                <button type="button" className={styles.refAdd} onClick={() => picker.current?.click()}>
+                  <ImageIcon size={18} aria-hidden />
+                  <span>Add a picture</span>
+                </button>
+              )}
+            </div>
+          </fieldset>
+        )}
 
         <div className={styles.go}>
-          <p className="muted small">Higgsfield’s price for this request shows here once it is connected.</p>
+          <PriceLine
+            price={price}
+            budget={budget}
+            left={left}
+            sample={sample}
+            onRetry={() => {
+              setQuote({ key, price: { state: 'asking' } });
+              setRetry((n) => n + 1);
+            }}
+          />
+          {overLimit && (
+            <p className="error-text" role="alert">
+              This takes more than the {formatCredits(left)} left of this month’s limit. Pick a cheaper setting, or raise the limit in Settings.
+            </p>
+          )}
           {error && (
             <p className="error-text" role="alert">
               {error}
             </p>
           )}
-          {notice && (
-            <p className={styles.notice} role="status">
-              {notice}
-            </p>
-          )}
-          <button type="button" className="btn btn-primary" onClick={generate}>
+          <button type="button" className="btn btn-primary" onClick={() => void generate()} disabled={!canGenerate || busy !== null || prompt.trim().length < MIN_VIDEO_PROMPT} aria-busy={busy === 'generate'}>
             <Sparkles size={17} aria-hidden />
-            Generate
+            {sample ? 'Generate' : budget.live ? (priced !== null ? `Generate · ${formatCredits(priced)}` : 'Generate') : 'Generate (stand-in)'}
           </button>
+          {prompt.trim().length < MIN_VIDEO_PROMPT && <p className="muted small">Write the prompt first: {MIN_VIDEO_PROMPT} characters at least.</p>}
         </div>
       </section>
 
@@ -236,83 +306,82 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
           <h2 id="higgsfield-title" className="card-title">
             Higgsfield
           </h2>
-          <span className="pill pill-quiet pill-sm">Not connected</span>
+          <span className={cx('pill pill-sm', budget.live ? 'pill-gold' : 'pill-quiet')}>{sample ? 'Sample data' : budget.live ? 'On' : 'Stand-in'}</span>
         </div>
-        <p className="muted small">Videos are made by Higgsfield, from n8n, with its key kept there. Until then Generate makes nothing and says so.</p>
+        <p className="muted small">
+          {sample
+            ? 'The sample data has no Higgsfield: nothing is priced or made here.'
+            : budget.live
+              ? 'Videos are made by Higgsfield on the team’s own plan, through n8n: each one spends the credits its price says.'
+              : 'AI video is off: Generate goes to the stand-in, which makes nothing and costs nothing. Prices still show, so the team can see what each would cost.'}
+        </p>
         <dl className={styles.facts}>
           <div>
-            <dt>Models</dt>
-            <dd>{VIDEO_MODELS.map((m) => m.name).join(', ')}</dd>
+            <dt>This month</dt>
+            <dd>
+              {formatCredits(budget.spent)} of {formatCredits(budget.cap)} used
+            </dd>
           </div>
           <div>
-            <dt>Monthly limit</dt>
-            <dd>Set once connected, so nobody runs up a bill</dd>
-          </div>
-          <div>
-            <dt>Costs money</dt>
-            <dd>Every video, unlike pictures: only a person’s Generate makes one, never a run</dd>
+            <dt>Costs credits</dt>
+            <dd>Every video: only a person’s Generate makes one, never a run, and each is sent once</dd>
           </div>
         </dl>
-        <p className="muted small">Then: a finished video starts a run as if it were uploaded. The agents write the strategy and three ads over it, and the studio cuts, captions and exports it.</p>
+        <Link href="/settings#ai-video" className="btn btn-quiet btn-sm">
+          <Settings size={15} aria-hidden />
+          {budget.live ? 'The monthly limit' : 'Switch it on in Settings'}
+        </Link>
       </aside>
 
       <section className={styles.library} aria-labelledby="library-title">
         <h2 id="library-title" className="card-title">
           Library
         </h2>
-        {videos.length === 0 && asked.length === 0 ? (
+        {videos.length === 0 ? (
           <p className={cx('card card-pad muted', styles.empty)}>
             <Clapperboard size={20} aria-hidden />
             No videos yet. What Higgsfield makes is kept here, to start a run from.
           </p>
         ) : (
           <div className={styles.grid}>
-            {asked.map((a) => (
-              <article key={a.id} className={cx('card', styles.item)}>
-                <div className={cx(styles.frame, styles.frameEmpty)} data-aspect={a.aspect}>
-                  <Clapperboard size={26} aria-hidden />
-                  <span>Not made: Higgsfield isn’t connected yet</span>
-                </div>
-                <div className={styles.itemBody}>
-                  <p className={styles.itemPrompt}>{a.prompt}</p>
-                  <p className="muted small">
-                    {modelOf(a.model).name} · {a.seconds} s · {a.aspect}
-                    {a.references.length > 0 ? ` · follows ${a.references.map((r) => r.name).join(', ')}` : ''}
-                  </p>
-                  <div className={styles.itemActions}>
-                    <button type="button" className="btn btn-quiet btn-sm" onClick={() => reuse(a)}>
-                      <RotateCcw size={15} aria-hidden />
-                      Use the prompt again
-                    </button>
-                    <button type="button" className="btn btn-quiet btn-sm" onClick={() => setAsked((list) => list.filter((x) => x.id !== a.id))}>
-                      <Trash2 size={15} aria-hidden />
-                      Remove
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))}
             {videos.map((v) => (
-              <article key={v.id} className={cx('card', styles.item)}>
-                <div className={styles.frame} data-aspect={v.aspect}>
+              <article key={v.id} className={cx('card', styles.item)} aria-labelledby={`video-${v.id}`}>
+                <div className={cx(styles.frame, v.status !== 'ready' && styles.frameEmpty)} data-aspect={v.aspect}>
                   {v.status === 'ready' && v.url ? (
-                    // The sample stands in for a Higgsfield video; it says so below.
                     <video src={v.url} controls muted playsInline preload="metadata" aria-label={v.title} />
+                  ) : v.status === 'asked' || v.status === 'making' ? (
+                    <>
+                      <LoaderCircle size={24} className="spin" aria-hidden />
+                      <span>{STATUS[v.status]}</span>
+                    </>
                   ) : (
-                    <span>{v.status === 'making' ? 'Being made…' : (v.error ?? 'Not made')}</span>
+                    <>
+                      {v.status === 'unknown' ? <CircleAlert size={24} aria-hidden /> : <Clapperboard size={24} aria-hidden />}
+                      <span>{STATUS[v.status]}</span>
+                    </>
                   )}
                 </div>
                 <div className={styles.itemBody}>
                   <div className={styles.itemHead}>
-                    <h3 className={styles.itemTitle}>{v.title}</h3>
+                    <h3 id={`video-${v.id}`} className={styles.itemTitle}>
+                      {v.title}
+                    </h3>
                     {v.sample && <span className="pill pill-quiet pill-sm">Sample video</span>}
                   </div>
                   <p className={styles.itemPrompt}>{v.prompt}</p>
                   <p className="muted small">
-                    {modelOf(v.model).name} · {v.seconds} s · {v.aspect} · {shortDay(v.createdAt)}
-                    {v.references.length > 0 ? ` · follows ${v.references.map((r) => r.name).join(', ')}` : ''}
+                    {modelOf(v.model).name} · {v.seconds} s · {v.aspect} · {qualityLabel(v.model, v.quality)}
+                    {v.sound ? ' · sound' : ''}
+                    {v.picture ? ' · from a picture' : ''}
+                    {v.credits > 0 ? ` · ${formatCredits(v.credits)}` : ''} · {shortDay(v.createdAt)}
                   </p>
                   {v.sample && <p className="muted small">The sample clip, standing in for a video Higgsfield made: no model made it.</p>}
+                  {v.error && (
+                    <p className={cx('small', v.status === 'unknown' ? 'error-text' : 'muted')} role={v.status === 'unknown' ? 'note' : undefined}>
+                      {v.error}
+                    </p>
+                  )}
+                  {v.status === 'making' && <p className="muted small">Usually one to three minutes. The page shows it as soon as it is stored.</p>}
                   <div className={styles.itemActions}>
                     {v.status === 'ready' && (
                       <Link href={`/runs/new?type=custom&video=${encodeURIComponent(v.id)}`} className="btn btn-primary btn-sm">
@@ -324,6 +393,12 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
                       <RotateCcw size={15} aria-hidden />
                       Use the prompt again
                     </button>
+                    {!v.sample && v.status !== 'making' && (
+                      <button type="button" className="btn btn-quiet btn-sm" onClick={() => void remove(v)} disabled={busy !== null} aria-busy={busy === v.id}>
+                        <Trash2 size={15} aria-hidden />
+                        {v.status === 'asked' ? 'Stop' : 'Remove'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>
@@ -332,5 +407,37 @@ export function AiVideoStudio({ videos }: { videos: AiVideo[] }) {
         )}
       </section>
     </div>
+  );
+}
+
+/** Higgsfield's price, the plan's credits left and this month's limit, said in one place. */
+function PriceLine({ price, budget, left, sample, onRetry }: { price: Price; budget: VideoBudget; left: number; sample: boolean; onRetry: () => void }) {
+  if (sample) return <p className="muted small">Higgsfield’s price shows here once the dashboard is connected: the sample data asks nothing.</p>;
+  if (price.state === 'idle' || price.state === 'asking') {
+    return (
+      <p className={cx('muted small', styles.priceLine)} role="status">
+        <LoaderCircle size={14} className="spin" aria-hidden />
+        Asking Higgsfield’s price…
+      </p>
+    );
+  }
+  if (price.state === 'failed') {
+    return (
+      <p className={cx('small', styles.priceLine)} role="status">
+        <span className="muted">No price yet: {price.error}</span>{' '}
+        <button type="button" className="link small" onClick={onRetry}>
+          Ask again
+        </button>
+      </p>
+    );
+  }
+  return (
+    <p className={cx('small', styles.priceLine)} role="status">
+      <strong>{formatCredits(price.credits)}</strong>
+      <span className="muted">
+        {price.balance !== null ? ` · ${formatCredits(price.balance)} left on the Higgsfield plan` : ''}
+        {budget.live ? ` · ${formatCredits(left)} left of this month’s ${formatCredits(budget.cap)}` : ' · nothing is spent while AI video is off'}
+      </span>
+    </p>
   );
 }

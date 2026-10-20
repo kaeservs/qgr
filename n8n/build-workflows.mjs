@@ -1,6 +1,6 @@
-// Builds the n8n Workflow SDK source for the ten QGR workflows from the
+// Builds the n8n Workflow SDK source for the eleven QGR workflows from the
 // Code-node scripts in ./code (tested by code.test.ts, pipeline.test.ts,
-// publisher.test.ts, moments.test.ts and leads.test.ts). The output in ./workflows is what gets validated and
+// publisher.test.ts, moments.test.ts, leads.test.ts and ai-video.test.ts). The output in ./workflows is what gets validated and
 // saved to n8n through its MCP server. Scripts are embedded with
 // JSON.stringify so their backslashes survive.
 //
@@ -1342,8 +1342,204 @@ export default workflow('qgr-leads', 'QGR · Leads')
   .add(noteJudge);
 `;
 
+// ---------------------------------------------------------------- AI video
+
+const videoAsk = `{ id: 'video-id', prompt: 'A slow drone shot over a quiet suburb at golden hour.', model: 'seedance_2_0_mini', seconds: 4, aspect: '9:16', quality: '480p', sound: false, picture_path: null, look: null, live: false, path: 'videos/video-id.mp4' }`;
+const videoJob = `{ id: 'video-id', job_id: 'job-id', path: 'videos/video-id.mp4' }`;
+/** Higgsfield's own MCP, signed in with the team's Higgsfield account (the "Higgsfield" credential). */
+const HIGGSFIELD_MCP = 'https://mcp.higgsfield.ai/mcp';
+/** A script with the helpers it uses in front: reading Higgsfield's answers, writing its params, or both. */
+const videoCode = (file, helpers = ['video-mcp.js']) => code([...helpers, file]);
+
+/**
+ * One call to a Higgsfield tool. It never stops the run: Higgsfield's refusal
+ * comes on as { error }, and when n8n cannot reach Higgsfield at all the step
+ * hands on the item it was given, which the next script reads as "not reached".
+ */
+const higgsfieldNode = (varName, name, tool, input, output, extra = '') => `
+const ${varName} = node({
+  type: '@n8n/n8n-nodes-langchain.mcpClient',
+  version: 1.1,
+  config: {
+    name: ${JSON.stringify(name)},
+    onError: 'continueRegularOutput',${extra}
+    parameters: {
+      serverTransport: 'httpStreamable',
+      endpointUrl: '${HIGGSFIELD_MCP}',
+      authentication: 'mcpOAuth2Api',
+      tool: { __rl: true, mode: 'id', value: '${tool}' },
+      inputMode: 'json',
+      jsonInput: expr(${JSON.stringify(input)}),
+      options: { convertToBinary: false, timeout: 120000 },
+    },
+    credentials: { mcpOAuth2Api: newCredential('Higgsfield') },
+  },
+  output: [${output}],
+});`;
+
+const video = `${IMPORTS}
+
+const everyMinute = trigger({
+  type: 'n8n-nodes-base.scheduleTrigger',
+  version: 1.4,
+  config: {
+    name: 'Every minute',
+    parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 1 }] } },
+  },
+  output: [{}],
+});
+
+const makeNow = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Make now',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-video',
+      authentication: 'headerAuth',
+      responseMode: 'onReceived',
+      options: { responseCode: { values: { responseCode: 'customCode', customCode: 202 } } },
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: {} }],
+});
+
+const priceIt = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Price',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-video-price',
+      authentication: 'headerAuth',
+      responseMode: 'responseNode',
+      options: {},
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: { model: 'seedance_2_0_mini', seconds: 4, aspect: '9:16', quality: '480p', sound: false } }],
+});
+
+// ---- the price, asked before anyone presses Generate
+${codeNode('priceRequest', 'Price request', videoCode('video-quote-request.js', ['video-params.js']), `{ quote_input: '{"params":{"model":"seedance_2_0_mini","get_cost":true},"get_cost":true}' }`)}
+${higgsfieldNode('higgsPrice', 'Higgsfield: price', 'generate_video', '{{ $json.quote_input }}', `{ structuredContent: { cost: { credits: 2, credits_exact: 2 } }, content: [{ type: 'text', text: 'Cost preflight for seedance_2_0_mini: 2 credits (2 exact). No job submitted.' }] }`)}
+${codeNode('readPrice', 'Read the price', videoCode('video-read-quote.js'), `{ ok: true, credits: 2 }`)}
+${higgsfieldNode('higgsBalance', 'Higgsfield: credits left', 'balance', '{}', `{ structuredContent: { credits: 280, subscription_plan_type: 'starter' }, content: [{ type: 'text', text: 'Credits: 280 | Plan: starter' }] }`, "\n    executeOnce: true,")}
+${codeNode('answer', 'The answer', videoCode('video-answer.js'), `{ ok: true, credits: 2, balance: 280 }`)}
+
+const respond = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Answer the page',
+    parameters: { respondWith: 'json', responseBody: expr('{{ JSON.stringify($json) }}'), options: {} },
+  },
+  output: [{}],
+});
+
+// ---- the asks: sent once
+${rpcNode('takeDue', 'Take the videos asked for', 'video_take_due', '{{ JSON.stringify({ p_limit: 3 }) }}', videoAsk, "\n    executeOnce: true,")}
+${codeNode('eachAsk', 'One item per video', code('shared-items.js'), videoAsk)}
+${ifTrue('forReal', 'Make it for real?', '{{ $json.live === true }}')}
+${codeNode('standIn', 'Higgsfield (stand-in)', code('video-stand-in.js'), `{ kind: 'stand_in', id: 'video-id' }`)}
+${rpcNode('recordStandIn', 'Record: nothing made', 'video_finish', '{{ JSON.stringify({ p_id: $json.id, p_path: null, p_stand_in: true }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${ifTrue('firstPicture', 'A first picture?', '{{ typeof $json.picture_path === "string" && $json.picture_path.length > 0 }}')}
+${callNode('signPicture', 'Sign the first picture', {
+  method: 'POST',
+  url: `expr('${SUPABASE_STORAGE}/object/sign/video-refs/{{ $json.picture_path }}')`,
+  auth: 'supabaseApi',
+  json: '{{ JSON.stringify({ expiresIn: 900 }) }}',
+  timeout: 30000,
+  credentials: "{ supabaseApi: newCredential('Supabase QGR') }",
+  output: `{ statusCode: 200, body: { signedURL: '/object/sign/video-refs/refs/user-id/picture-id.jpg?token=t' } }`,
+})}
+${codeNode('pictureLink', 'Picture link', code('video-picture-link.js'), `{ id: 'video-id', url: '${SUPABASE_STORAGE}/object/sign/video-refs/refs/user-id/picture-id.jpg?token=t' }`)}
+${ifTrue('linkMade', 'Link made?', '{{ typeof $json.url === "string" && $json.url.length > 0 }}')}
+${higgsfieldNode('importPicture', 'Higgsfield: take the picture', 'media_import_url', '{{ JSON.stringify({ url: $json.url }) }}', `{ structuredContent: { media_id: 'media-id' } }`)}
+${codeNode('readMedia', 'Read the picture\'s id', videoCode('video-read-media.js'), `{ kind: 'go', id: 'video-id', media_id: 'media-id' }`)}
+${ifTrue('pictureTaken', 'Picture taken?', '{{ $json.kind === "go" }}')}
+${codeNode('writeRequest', 'Write the request', videoCode('video-build-request.js', ['video-params.js']), `{ id: 'video-id', generate_input: '{"params":{"model":"seedance_2_0_mini"}}' }`)}
+${higgsfieldNode('makeIt', 'Higgsfield: make it', 'generate_video', '{{ $json.generate_input }}', `{ structuredContent: { job_id: 'job-id' } }`)}
+${codeNode('readStart', 'Read the answer', videoCode('video-read-start.js'), `{ kind: 'started', id: 'video-id', job_id: 'job-id', credits: null }`)}
+${codeNode('writeRequestPicture', 'Write the request (picture)', videoCode('video-build-request.js', ['video-params.js']), `{ id: 'video-id', generate_input: '{"params":{"model":"kling3_0"}}' }`)}
+${higgsfieldNode('makeItPicture', 'Higgsfield: make it (picture)', 'generate_video', '{{ $json.generate_input }}', `{ structuredContent: { job_id: 'job-id' } }`)}
+${codeNode('readStartPicture', 'Read the answer (picture)', code(['video-mcp.js', 'video-read-start.js'], { "$('Write the request')": "$('Write the request (picture)')" }), `{ kind: 'started', id: 'video-id', job_id: 'job-id', credits: null }`)}
+${routeNode('whatHappened', 'What happened?', [
+  ['started', '{{ $json.kind === "started" }}'],
+  ['refused', '{{ $json.kind === "refused" }}'],
+  ['retry', '{{ $json.kind === "retry" }}'],
+  ['unknown', '{{ $json.kind === "unknown" }}'],
+])}
+${rpcNode('recordStarted', 'Record: started', 'video_started', '{{ JSON.stringify(Object.assign({ p_id: $json.id, p_job_id: $json.job_id }, typeof $json.credits === "number" ? { p_credits: $json.credits } : {})) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('recordFailed', 'Record: not made', 'video_fail', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('recordRetry', 'Record: try again', 'video_release', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('recordUnknown', 'Record: may have been made', 'video_unknown', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+// ---- the jobs: checked until their video is stored
+${rpcNode('takeMaking', 'Take the videos being made', 'video_take_making', '{{ JSON.stringify({ p_limit: 10 }) }}', videoJob, "\n    executeOnce: true,")}
+${codeNode('eachJob', 'One item per job', code('shared-items.js'), videoJob)}
+${higgsfieldNode('jobStatus', 'Higgsfield: how is it going?', 'job_status', '{{ JSON.stringify({ jobId: $json.job_id }) }}', `{ structuredContent: { status: 'completed', results: [{ url: 'https://cdn.higgsfield.ai/job-id/video.mp4' }] } }`)}
+${codeNode('readJob', 'Read the job', videoCode('video-read-job.js'), `{ kind: 'done', id: 'video-id', path: 'videos/video-id.mp4', url: 'https://cdn.higgsfield.ai/job-id/video.mp4' }`)}
+${routeNode('howIsItGoing', 'How is it going?', [
+  ['done', '{{ $json.kind === "done" }}'],
+  ['failed', '{{ $json.kind === "failed" }}'],
+  ['unknown', '{{ $json.kind === "unknown" }}'],
+])}
+${callNode('download', 'Fetch the video', { method: 'GET', url: "expr('{{ $json.url }}')", timeout: 180000, file: true, output: '{}' })}
+${callNode('upload', 'Upload to Storage', {
+  method: 'POST',
+  url: `expr('${SUPABASE_STORAGE}/object/ai-videos/{{ $("Read the job").item.json.path }}')`,
+  auth: 'supabaseApi',
+  headers: [['Content-Type', "'video/mp4'"], ['x-upsert', "'true'"]],
+  binary: true,
+  timeout: 180000,
+  credentials: "{ supabaseApi: newCredential('Supabase QGR') }",
+  output: `{ statusCode: 200, body: { Key: 'ai-videos/videos/video-id.mp4' } }`,
+})}
+${codeNode('uploaded', 'Stored?', code('video-uploaded.js'), `{ kind: 'stored', id: 'video-id', path: 'videos/video-id.mp4' }`)}
+${ifTrue('stored', 'In Storage?', '{{ $json.kind === "stored" }}')}
+${rpcNode('recordReady', 'Record: ready', 'video_finish', '{{ JSON.stringify({ p_id: $json.id, p_path: $json.path }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+const noteFlow = sticky('## AI video\\nThe team asks on the AI video page. **Price** answers the page with Higgsfield\\'s price for the request (generate_video with **get_cost**, which makes nothing) and the credits left on the plan. Every minute, and at once when someone asks, the asks waiting (**video_take_due**, each sent once) go to Higgsfield, and the jobs being made (**video_take_making**) are checked until their video can be fetched, stored in ai-videos and recorded.', [everyMinute, makeNow, priceIt, takeDue, eachAsk, takeMaking, eachJob], { color: 4 });
+const noteHiggsfield = sticky('## Higgsfield\\nCalled through its MCP (**mcp.higgsfield.ai**) with the **Higgsfield** credential (MCP OAuth2 API), signed in with the team\\'s own Higgsfield account: every video spends the plan\\'s credits, even on an Unlimited plan, and the team\\'s monthly limit in Settings holds them. A first picture is signed for 15 minutes and imported first (**media_import_url**).\\n\\nAn ask is sent once. Not reached at all, it waits for the next minute (three tries). Refused, nothing was made. Any other trouble after sending is **unknown**: never sent again by itself (Higgsfield: do not automatically resubmit), a person checks Higgsfield\\'s history.', [forReal, firstPicture, signPicture, pictureLink, linkMade, importPicture, readMedia, pictureTaken, writeRequest, makeIt, readStart, writeRequestPicture, makeItPicture, readStartPicture, whatHappened], { color: 5 });
+const noteStandIn = sticky('## Stand-in\\nThe way taken while AI video is not switched on (Settings, AI video). Nothing is sent and nothing is spent: the page says no video was made and where to switch it on.', [standIn, recordStandIn], { color: 3 });
+
+export default workflow('qgr-ai-video', 'QGR · AI video')
+  .add(priceIt)
+  .to(priceRequest)
+  .to(higgsPrice)
+  .to(readPrice)
+  .to(higgsBalance)
+  .to(answer)
+  .to(respond)
+  .add(everyMinute)
+  .to(takeDue)
+  .add(makeNow)
+  .to(takeDue)
+  .add(takeDue)
+  .to(eachAsk)
+  .to(forReal.onTrue(firstPicture.onTrue(signPicture.to(pictureLink).to(linkMade.onTrue(importPicture.to(readMedia).to(pictureTaken.onTrue(writeRequestPicture.to(makeItPicture).to(readStartPicture).to(whatHappened)).onFalse(whatHappened))).onFalse(whatHappened))).onFalse(writeRequest.to(makeIt).to(readStart))).onFalse(standIn.to(recordStandIn)))
+  .add(readStart)
+  .to(whatHappened.onCase(0, recordStarted).onCase(1, recordFailed).onCase(2, recordRetry).onCase(3, recordUnknown))
+  .add(everyMinute)
+  .to(takeMaking)
+  .add(makeNow)
+  .to(takeMaking)
+  .add(takeMaking)
+  .to(eachJob)
+  .to(jobStatus)
+  .to(readJob)
+  .to(howIsItGoing.onCase(0, download.to(upload).to(uploaded).to(stored.onTrue(recordReady))).onCase(1, recordFailed).onCase(2, recordUnknown))
+  .add(noteFlow)
+  .add(noteHiggsfield)
+  .add(noteStandIn);
+`;
+
 mkdirSync(join(here, 'workflows'), { recursive: true });
-for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures, moments, leads })) {
+for (const [name, src] of Object.entries({ tracker, strategist, content, pipeline, publisher, scans, results, pictures, moments, leads, video })) {
   writeFileSync(join(here, 'workflows', `${name}.sdk.js`), src);
   console.log(name, src.length);
 }

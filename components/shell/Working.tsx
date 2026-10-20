@@ -1,6 +1,6 @@
 'use client';
 
-import { Compass, ImagePlus, LoaderCircle, Radar, Send, Sparkles } from 'lucide-react';
+import { Clapperboard, Compass, ImagePlus, LoaderCircle, Radar, Send, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -13,7 +13,7 @@ const BUSY_MS = 5_000;
 const QUIET_MS = 30_000;
 
 const ICON = { tracker: Radar, strategist: Compass, content: Sparkles } as const;
-const iconOf = (item: ActivityItem) => (item.kind === 'post' ? Send : item.kind === 'picture' ? ImagePlus : ICON[item.stage ?? 'tracker']);
+const iconOf = (item: ActivityItem) => (item.kind === 'post' ? Send : item.kind === 'picture' ? ImagePlus : item.kind === 'video' ? Clapperboard : ICON[item.stage ?? 'tracker']);
 
 /** "for 3 min", from when it started to the server's now: the same text on the server and in the browser. */
 function lasted(since: string, now: string): string {

@@ -3,6 +3,7 @@
 // the database could hold that the dashboard has no shape for (an unknown
 // platform, a malformed JSON column) is dropped here rather than crashing a page.
 
+import { videoTitle } from '../ai-video';
 import { runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
 import { CLIP_PATH, runTitle } from '../run-input';
 import type { NewLongVideo } from '../long-video';
@@ -16,6 +17,7 @@ import type {
   AdExample,
   AdFormat,
   AdSet,
+  AiVideo,
   AdSource,
   AdsSetting,
   Agent,
@@ -58,6 +60,7 @@ import type {
   User,
   Variant,
   VariantPicture,
+  VideoBudget,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
 import { parseDesign } from '../creative/design';
@@ -759,6 +762,8 @@ export interface ActivityRows {
   }[];
   /** Ads waiting for a picture. */
   pictures: { id: string; label: string; ad_set_id: string; picture_requested_at: string | null; ad_sets: One<{ title: string }> }[];
+  /** AI videos waiting to be sent, or being made by Higgsfield. */
+  videos?: { id: string; prompt: string; asked_at: string }[];
 }
 
 /**
@@ -773,9 +778,11 @@ export const WORKING_MINUTES = {
   sending: 15,
   /** A picture: the studio offers to ask again after 10 minutes. */
   picture: 10,
+  /** An AI video: Higgsfield takes a few minutes; past half an hour the page says what became of it. */
+  video: 30,
 } as const;
 
-/** What is at work now, newest first: one line for each run an agent is on, each post going out and each picture being made. */
+/** What is at work now, newest first: one line for each run an agent is on, each post going out, each picture and each AI video being made. */
 export function toActivity(rows: ActivityRows, now: string): ActivityItem[] {
   const at = Date.parse(now);
   const recent = (iso: string | null | undefined, minutes: number): iso is string => !!iso && at - Date.parse(iso) <= minutes * 60_000;
@@ -808,6 +815,11 @@ export function toActivity(rows: ActivityRows, now: string): ActivityItem[] {
   for (const v of rows.pictures) {
     if (!recent(v.picture_requested_at, WORKING_MINUTES.picture)) continue;
     items.push({ id: `picture-${v.id}`, kind: 'picture', label: 'Making a picture', subject: `${one(v.ad_sets)?.title ?? 'An ad'}, variant ${v.label}`, href: `/content/${v.ad_set_id}`, since: v.picture_requested_at });
+  }
+
+  for (const v of rows.videos ?? []) {
+    if (!recent(v.asked_at, WORKING_MINUTES.video)) continue;
+    items.push({ id: `video-${v.id}`, kind: 'video', label: 'Making a video', subject: videoTitle(v.prompt), href: '/videos?view=ai', since: v.asked_at });
   }
 
   return items.sort((a, b) => b.since.localeCompare(a.since));
@@ -1000,4 +1012,58 @@ export function toLeadSettings(row: SettingsRow): LeadSettings {
     syncError: row.leads_sync_error,
     postLink: row.post_link,
   };
+}
+
+// ---------------------------------------------------------------- AI video
+
+export interface AiVideoRow {
+  id: string;
+  prompt: string;
+  model: string;
+  seconds: number;
+  aspect: string;
+  quality: string;
+  sound: boolean;
+  picture_path: string | null;
+  credits: number | string;
+  status: string;
+  error: string | null;
+  asked_at: string;
+}
+
+const VIDEO_MODEL_KEYS = ['seedance_2_0_mini', 'kling3_0', 'seedance_2_5'] as const;
+const VIDEO_STATUSES = ['asked', 'making', 'ready', 'failed', 'unknown', 'stand_in'] as const;
+const VIDEO_ASPECT_KEYS = ['9:16', '1:1', '16:9'] as const;
+
+/**
+ * A video as the library shows it, with the links the server signed for its
+ * file and its first picture. A row the dashboard has no shape for (a model
+ * no longer offered) is dropped.
+ */
+export function toAiVideo(row: AiVideoRow, links: { video?: string | null; picture?: string | null } = {}): AiVideo | null {
+  if (!isOneOf(VIDEO_MODEL_KEYS, row.model) || !isOneOf(VIDEO_STATUSES, row.status) || !isOneOf(VIDEO_ASPECT_KEYS, row.aspect)) return null;
+  const credits = typeof row.credits === 'number' ? row.credits : Number.parseFloat(row.credits);
+  return {
+    id: row.id,
+    title: videoTitle(row.prompt),
+    prompt: row.prompt,
+    model: row.model,
+    seconds: row.seconds,
+    aspect: row.aspect,
+    quality: row.quality,
+    sound: row.sound,
+    picture: row.picture_path ? { path: row.picture_path, ...(links.picture ? { url: links.picture } : {}) } : null,
+    credits: Number.isFinite(credits) ? credits : 0,
+    status: row.status,
+    ...(row.status === 'ready' && links.video ? { url: links.video } : {}),
+    ...(row.error ? { error: row.error } : {}),
+    createdAt: row.asked_at,
+  };
+}
+
+/** AI video's switch and this month's credits, as video_budget() answers. */
+export function toVideoBudget(json: Json): VideoBudget {
+  const r = isRecord(json) ? json : {};
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && Number.isFinite(Number.parseFloat(v)) ? Number.parseFloat(v) : 0);
+  return { live: r.live === true, cap: num(r.cap), spent: num(r.spent) };
 }

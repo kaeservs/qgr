@@ -18,14 +18,14 @@ export interface Uploaded {
 
 export const extensionFor = (type: string): ClipExtension | null => (Object.keys(CLIP_TYPES) as ClipExtension[]).find((ext) => CLIP_TYPES[ext] === type) ?? null;
 
-function refusal(xhr: XMLHttpRequest, what: 'clip' | 'file' | 'screenshot'): string {
-  if (xhr.status === 413) return what === 'clip' ? 'The clip is over 50 MB. Cut it shorter.' : what === 'screenshot' ? 'That screenshot is over 10 MB.' : 'The file is over 50 MB.';
+function refusal(xhr: XMLHttpRequest, what: 'clip' | 'file' | 'screenshot' | 'picture'): string {
+  if (xhr.status === 413) return what === 'clip' ? 'The clip is over 50 MB. Cut it shorter.' : what === 'screenshot' || what === 'picture' ? `That ${what} is over 10 MB.` : 'The file is over 50 MB.';
   if (/mime|type/i.test(xhr.responseText)) return what === 'clip' ? 'Storage takes MP4, MOV or WebM videos only.' : 'Storage doesn’t take this kind of file.';
   if (xhr.status === 400 && /expired|signature|token/i.test(xhr.responseText)) return 'The upload link expired. Try again.';
   return `Storage refused the ${what} (${xhr.status}). Try again.`;
 }
 
-function put(url: string, file: Blob, name: string, what: 'clip' | 'file' | 'screenshot', onProgress: (share: number) => void, signal?: AbortSignal): Promise<void> {
+function put(url: string, file: Blob, name: string, what: 'clip' | 'file' | 'screenshot' | 'picture', onProgress: (share: number) => void, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
@@ -150,4 +150,30 @@ export async function uploadShot(file: Blob, onProgress: (share: number) => void
 /** Removes a screenshot taken away before its run started. Best effort. */
 export async function removeShot(path: string): Promise<void> {
   await fetch('/api/competitor-shots', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
+}
+
+/**
+ * Uploads an AI video's first picture straight to Storage (video-refs, the
+ * teammate's own folder), through a link the server signs as them.
+ */
+export async function uploadVideoPicture(file: Blob, onProgress: (share: number) => void, signal?: AbortSignal): Promise<Uploaded> {
+  const extension = (Object.keys(SHOT_TYPES) as ShotExtension[]).find((ext) => SHOT_TYPES[ext] === file.type);
+  if (!extension) throw new UploadError('Add a PNG, JPEG or WebP picture.');
+  const init: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: file.type, size: file.size }) };
+  if (signal) init.signal = signal;
+  const res = await fetch('/api/video-refs', init);
+  const body = (await res.json().catch(() => null)) as { path?: string; url?: string | null; sample?: boolean; error?: string } | null;
+  if (!res.ok || !body?.path) throw new UploadError(body?.error ?? 'The picture could not be uploaded.');
+  if (body.sample || !body.url) {
+    onProgress(1);
+    return { path: body.path, sample: true };
+  }
+  await put(body.url, file, `picture.${extension}`, 'picture', onProgress, signal);
+  onProgress(1);
+  return { path: body.path, sample: false };
+}
+
+/** Removes a first picture taken away before its video was asked for. Best effort. */
+export async function removeVideoPicture(path: string): Promise<void> {
+  await fetch('/api/video-refs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
 }

@@ -7,6 +7,7 @@ import type { NewLongVideo } from '../long-video';
 import type { NewAdsRun, NewRunInput } from '../run-input';
 import type {
   AiVideo,
+  VideoBudget,
   LongVideo,
   LongVideoWithTranscript,
   ActivityItem,
@@ -38,6 +39,7 @@ import type {
   ZohoRegion,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
+import type { VideoRequest } from '../ai-video';
 import type { CreativeDesign } from '../creative/design';
 
 export type RunWithStatus = Run & { status: RunStatus };
@@ -101,6 +103,9 @@ export type EditMediaExtension = keyof typeof EDIT_MEDIA_TYPES;
 export const SHOT_TYPES = { jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' } as const;
 export type ShotExtension = keyof typeof SHOT_TYPES;
 
+/** What Higgsfield prices a video by: everything asked but the prompt's words and which picture. */
+export type VideoPriceRequest = Omit<VideoRequest, 'picture'> & { picture: boolean };
+
 /** The kinds of file Storage keeps clips as (bucket run-media). */
 export const CLIP_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' } as const;
 export type ClipExtension = keyof typeof CLIP_TYPES;
@@ -162,9 +167,23 @@ export interface DataSource {
   removeLongVideo(id: string): Promise<Saved>;
   /** A run started from a clip cut from these lines: kept on its moment, or on a moment of the team's own. */
   recordMomentRun(id: string, first: number, last: number, title: string, runId: string): Promise<Saved>;
-  /** Videos made by the AI video model, newest first. Empty until Higgsfield is connected. */
+  /** AI videos, newest first, with links to play the ready ones; those taken out of the library are left out. */
   getAiVideos(): Promise<AiVideo[]>;
   getAiVideo(id: string): Promise<AiVideo | null>;
+  /** AI video's switch and this month's credits against the team's limit. */
+  getVideoBudget(): Promise<VideoBudget>;
+  /** Higgsfield's price for a request (nothing is made), and the credits left on the team's plan. */
+  priceVideo(request: VideoPriceRequest): Promise<Saved<{ credits: number; balance: number | null }>>;
+  /** Asks for a video, at Higgsfield's price: n8n sends it once. While AI video is off, the stand-in makes nothing. */
+  askForVideo(request: VideoRequest, credits: number | null): Promise<Saved<{ id: string }>>;
+  /** Takes a video out of the library; one not yet sent is stopped. */
+  removeAiVideo(id: string): Promise<Saved>;
+  /** Where the browser uploads a video's first picture: the teammate's own folder of video-refs. */
+  createVideoPictureUpload(extension: ShotExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a first picture taken away before its video was asked for. */
+  deleteVideoPicture(path: string): Promise<Saved>;
+  /** Making AI videos for real, and the month's limit in credits. */
+  setVideoSettings(live: boolean, cap: number): Promise<Saved>;
   /** A link the browser can play a clip from, for a while. Null when there is none to give. */
   getClipUrl(path: string): Promise<string | null>;
   /**

@@ -186,6 +186,75 @@ export type Database = {
           },
         ]
       }
+      ai_videos: {
+        Row: {
+          asked_at: string
+          asked_by: string | null
+          aspect: string
+          checked_at: string | null
+          claimed_at: string | null
+          credits: number
+          error: string | null
+          finished_at: string | null
+          id: string
+          job_id: string | null
+          model: string
+          path: string | null
+          picture_path: string | null
+          prompt: string
+          quality: string
+          removed_at: string | null
+          seconds: number
+          sound: boolean
+          status: string
+          tries: number
+        }
+        Insert: {
+          asked_at?: string
+          asked_by?: string | null
+          aspect: string
+          checked_at?: string | null
+          claimed_at?: string | null
+          credits?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          model: string
+          path?: string | null
+          picture_path?: string | null
+          prompt: string
+          quality: string
+          removed_at?: string | null
+          seconds: number
+          sound?: boolean
+          status?: string
+          tries?: number
+        }
+        Update: {
+          asked_at?: string
+          asked_by?: string | null
+          aspect?: string
+          checked_at?: string | null
+          claimed_at?: string | null
+          credits?: number
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string | null
+          model?: string
+          path?: string | null
+          picture_path?: string | null
+          prompt?: string
+          quality?: string
+          removed_at?: string | null
+          seconds?: number
+          sound?: boolean
+          status?: string
+          tries?: number
+        }
+        Relationships: []
+      }
       brand_examples: {
         Row: {
           created_at: string
@@ -1127,6 +1196,8 @@ export type Database = {
           time_zone: string
           updated_at: string
           updated_by: string | null
+          videos_cap: number
+          videos_live: boolean
           zoho_org: string | null
           zoho_region: string | null
         }
@@ -1162,6 +1233,8 @@ export type Database = {
           time_zone?: string
           updated_at?: string
           updated_by?: string | null
+          videos_cap?: number
+          videos_live?: boolean
           zoho_org?: string | null
           zoho_region?: string | null
         }
@@ -1197,6 +1270,8 @@ export type Database = {
           time_zone?: string
           updated_at?: string
           updated_by?: string | null
+          videos_cap?: number
+          videos_live?: boolean
           zoho_org?: string | null
           zoho_region?: string | null
         }
@@ -1276,6 +1351,19 @@ export type Database = {
       ask_for_picture: {
         Args: { p_prompt: string; p_variant_id: string }
         Returns: undefined
+      }
+      ask_for_video: {
+        Args: {
+          p_aspect: string
+          p_credits: number
+          p_model: string
+          p_picture_path?: string
+          p_prompt: string
+          p_quality: string
+          p_seconds: number
+          p_sound: boolean
+        }
+        Returns: string
       }
       ask_moments_again: { Args: { p_id: string }; Returns: undefined }
       assert_stage_running: {
@@ -1398,6 +1486,7 @@ export type Database = {
         Args: { p_note?: string; p_place: string; p_post_id: string }
         Returns: string
       }
+      remove_ai_video: { Args: { p_id: string }; Returns: undefined }
       remove_brand_example: { Args: { p_id: string }; Returns: undefined }
       remove_long_video: { Args: { p_id: string }; Returns: undefined }
       remove_picture: { Args: { p_variant_id: string }; Returns: string }
@@ -1501,6 +1590,10 @@ export type Database = {
         Args: { p_guidance: string; p_run_id: string }
         Returns: undefined
       }
+      set_video_settings: {
+        Args: { p_cap: number; p_live: boolean }
+        Returns: undefined
+      }
       start_due_scans: { Args: { p_max?: number }; Returns: Json }
       start_run: {
         Args: {
@@ -1584,6 +1677,29 @@ export type Database = {
       }
       use_picture: {
         Args: { p_picture_id: string; p_variant_id: string }
+        Returns: undefined
+      }
+      video_budget: { Args: never; Returns: Json }
+      video_fail: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      video_finish: {
+        Args: { p_id: string; p_path?: string; p_stand_in?: boolean }
+        Returns: undefined
+      }
+      video_release: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      video_started: {
+        Args: { p_credits?: number; p_id: string; p_job_id: string }
+        Returns: undefined
+      }
+      video_take_due: { Args: { p_limit?: number }; Returns: Json }
+      video_take_making: { Args: { p_limit?: number }; Returns: Json }
+      video_unknown: {
+        Args: { p_error: string; p_id: string }
         Returns: undefined
       }
     }
