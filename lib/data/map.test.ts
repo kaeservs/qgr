@@ -442,6 +442,27 @@ describe('what a run’s ads are made of', () => {
     expect(set.variants[1]?.aiVideo).toEqual({ id: 'b', status: 'making', seconds: 4, aspect: '9:16', quality: '480p' });
     expect(set.variants[2]).not.toHaveProperty('aiVideo');
   });
+
+  it('keeps the edit made to an ad’s own video once it is made, held to its length', () => {
+    const made = { id: 'm', status: 'ready', seconds: 4, aspect: '9:16', quality: '480p', path: 'videos/m.mp4', error: null, asked_at: '2026-10-20T11:00:00Z' };
+    // As the database returns it: plain JSON.
+    const edit = (end: number) => JSON.parse(JSON.stringify({ ...defaultEdit(4), keep: [{ start: 0, end }] })) as { [key: string]: Json };
+    const variant = (label: string, video_edit: Json, ai_videos: NonNullable<AdSetRow['ad_variants'][number]['ai_videos']>): AdSetRow['ad_variants'][number] => ({
+      id: `v-${label}`, label, angle: 'a', creative_text: 't', creative_style: 'arcs', image_prompt: null, picture_path: null, picture_status: 'none', picture_error: null,
+      picture_requested_at: null, copy: { meta: { text: 't', headline: 'h' } }, posts: {}, warnings: [], approved_at: null, video_edit, ai_videos,
+    });
+    const set = toAdSet({
+      id: 's', run_id: 'r', strategy_id: 't', title: 'T', created_at: '2026-10-20T10:00:00Z', runs: null,
+      ad_variants: [
+        variant('A', edit(3.5), [made]),
+        variant('B', edit(9), [made]),
+        variant('C', edit(3), [{ ...made, status: 'making', path: null }]),
+      ],
+    });
+    expect(set.variants[0]?.videoEdit?.keep).toEqual([{ start: 0, end: 3.5 }]);
+    expect(set.variants[1]).not.toHaveProperty('videoEdit');
+    expect(set.variants[2]).not.toHaveProperty('videoEdit');
+  });
 });
 
 describe('clips', () => {

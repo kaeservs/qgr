@@ -609,14 +609,16 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
     .sort((a, b) => a.label.localeCompare(b.label))
     .flatMap((v): Variant[] => {
       if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
-      // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
-      const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      const aiVideo = variantVideoOf(v, videoUrl);
+      // The variant's clip is its run's, or its own AI video once made. An edit that no longer
+      // fits the clip is dropped: the variant shows the whole clip again.
+      const length = clip ? clip.duration : aiVideo?.status === 'ready' ? aiVideo.seconds : null;
+      const edit = length !== null && v.video_edit !== null ? parseVideoEdit(v.video_edit, length) : null;
       // A layout that no longer reads is dropped: the picture goes back to the style's.
       const design = !clip && v.design ? parseDesign(v.design) : null;
       const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
       const picture = pictureOf(v);
       const pictures = picturesOf(v, pictureUrl);
-      const aiVideo = variantVideoOf(v, videoUrl);
       return [
         {
           id: v.id,
