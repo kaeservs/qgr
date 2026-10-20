@@ -694,9 +694,12 @@ X's ads APIs, which each need their own access.
   - A preset Higgsfield offers in place of the prompt (as it does for videos,
     AI video below) is read as nothing made, with the reason; pictures have
     never been offered one, so they are not asked again as written.
-  - The answers to `generate_image` and `job_status` follow what Higgsfield's
-    MCP documents, not a real picture: check the first real one against
-    `pictures-higgsfield-job.js` and `pictures-higgsfield-file.js`.
+  - Checked with the first real picture (2026-10-20, 0.25 credits, the plan
+    charged exactly that): the send answers `results[0].id` as the job;
+    `job_status` answers `generation.status` (queued for about six minutes,
+    then completed) with `results.rawUrl`, the full PNG (1.1 MB), and
+    `minUrl`, a small WebP preview, which is never taken. These answers are the
+    fixtures in `n8n/pictures-higgsfield.test.ts`.
 - The studio shows pictures through links the server signs as the teammate
   for an hour (one `createSignedUrls` call for the ad set, the kept pictures
   with it; only the studio reads them). A picture asked for and not made in

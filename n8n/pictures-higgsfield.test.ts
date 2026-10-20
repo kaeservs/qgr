@@ -2,8 +2,8 @@
 // priced without making anything, recorded against the month's limit, sent
 // once, its job read until done, the file it made fetched, typed by what it is
 // and stored, and recorded as any picture is. Higgsfield's answers are
-// fixtures in the shapes its MCP gave on 2026-10-20 (prices) and the shapes
-// its tool descriptions promise (jobs), against every migration.
+// fixtures in the shapes its MCP gave on 2026-10-20: prices, and the first real
+// picture's send, job and file, against every migration.
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -179,6 +179,44 @@ describe('sent once, and its job read', () => {
     ]);
     // The file goes on with it, to be uploaded.
     expect(out[0]!.binary).toEqual({ data: { mimeType: 'image/jpeg' } });
+  });
+});
+
+describe('Higgsfield’s real answers, from the first picture made (2026-10-20)', () => {
+  // Trimmed only of the prompt Higgsfield echoes back; every key and its place as it came.
+  const JOB = 'b2b3238f-e60a-4ead-931a-8e591062ea81';
+  const CDN = 'https://d8j0ntlcm91z4.cloudfront.net/user_3KvMOcHKA9JTv89W2IDT4vG0Bc5';
+  const params = { prompt: 'Abstract scene: a gentle gold arc of light.', aspect_ratio: '1:1', resolution: '1k', quality: 'low' };
+  const submitted = {
+    structuredContent: { results: [{ id: JOB, type: 'image', status: 'pending', model: 'gpt_image_2_5', params }] },
+    content: [
+      { type: 'text', text: `Submitted 1 job. If a widget is visible, it polls automatically — do not call job_status or show_generations as a follow-up poll. In text-only clients, use job_status with sync:true to poll for completion.\n- ${JOB}  "Abstract scene: a gentle gold arc of light."` },
+      { type: 'text', text: 'If the user requests a combined display of multiple generations, … then call show_generation_by_ids with jobs: [{"index":0,"job_id":"<first actual job ID>"},{"index":1,"job_id":"<second actual job ID>"}, ...].' },
+    ],
+  };
+  const generation = (status: string, results?: Json) => ({
+    structuredContent: { generation: { id: JOB, type: 'image', status, model: 'gpt_image_2_5', params: { ...params, width: 1024, height: 1024, model: 'flare' }, ...(results ? { results } : {}), createdAt: 1792519972.160914, liked: false }, ...(results ? {} : { poll_after_seconds: 2 }) },
+    content: [{ type: 'text', text: `Job ${JOB} — ${status}` }],
+  });
+  const raw = `${CDN}/hf_20261020_181252_${JOB}.png`;
+
+  it('reads the job from what Higgsfield answered to the send, not the ids in its advice', () => {
+    const sent = [{ id: 'sent-1', generate_input: '{}' }];
+    const [read] = runJson('video-read-start.js', [submitted], { 'Write the picture request': sent }, { "$('Write the request')": "$('Write the picture request')" });
+    expect(read).toEqual({ kind: 'started', id: 'sent-1', job_id: JOB, credits: null });
+  });
+
+  it('waits while queued, then takes the full picture, not its small preview', () => {
+    const jobs = [{ id: 'sent-1', job_id: JOB, path: `pictures/${VARIANT}/c5049290-2ed7-49b9-9e4c-9e47f8210b57.png` }];
+    const read = (out: Json) => runJson('pictures-higgsfield-job.js', [out], { 'One item per job': jobs })[0];
+    expect(read(generation('queued'))).toEqual({ kind: 'waiting', id: 'sent-1' });
+    expect(read(generation('completed', { rawUrl: raw, minUrl: `${CDN}/hf_20261020_181252_${JOB}_min.webp` }))).toEqual({ kind: 'done', id: 'sent-1', path: jobs[0]!.path, url: raw });
+  });
+
+  it('stores the PNG it fetched as a PNG', () => {
+    const done = [{ id: 'sent-1', path: `pictures/${VARIANT}/c5049290-2ed7-49b9-9e4c-9e47f8210b57.png`, url: raw }];
+    const [file] = run('pictures-higgsfield-file.js', [{ json: {}, binary: { data: { mimeType: 'image/png' } } }], { "Read the picture's job": done });
+    expect(file!.json).toEqual({ kind: 'picture', id: 'sent-1', path: done[0]!.path, mime: 'image/png' });
   });
 });
 
