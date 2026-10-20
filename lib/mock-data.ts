@@ -4,7 +4,7 @@
 // timeline or return, because EB-5 is an investment with risk.
 
 import { sampleMoments } from './long-video';
-import type { AdSet, AiVideo, LongVideoWithTranscript, TranscriptLine, BrandExample, BrandMemory, Clip, Competitor, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
+import type { AdSet, AiVideo, LongVideoWithTranscript, TranscriptLine, BrandExample, BrandMemory, Clip, Competitor, Lead, LeadReason, LeadSettings, LeadVerdict, Notice, Post, Run, Strategy, TeamSettings, User } from './types';
 import type { VideoEdit } from './video/edit';
 
 /** The moment the mock world is set at. */
@@ -973,6 +973,7 @@ export const settings: TeamSettings = {
   },
   // The sample data never posts anywhere.
   postForReal: { facebook: false, instagram: false, linkedin: false },
+  postLink: null,
 };
 
 const NS_A_META = 'Join our free live session on EB-5 for Indian families: how it works, what it costs, and the questions to ask.';
@@ -1216,4 +1217,171 @@ export const sampleLongVideo = (): LongVideoWithTranscript => {
     example: true,
     transcript,
   };
+};
+
+// ---------------------------------------------------------------- leads
+
+/** How the sample's leads came in: none from Zoho, since the sample data is not connected to anything. */
+export const leadSettings: LeadSettings = {
+  criteria:
+    'A qualified lead:\n- is looking at U.S. residency through investment (EB-5), for themselves or their family;\n- says they can invest at least US$800,000, the EB-5 minimum in a targeted employment area, from funds they can show the source of;\n- wants to start within the next 12 months.\n\nNot qualified: looking only for work, study or a visit; says they cannot invest that much; a vendor, a test or spam.\n\nCan\'t tell: the lead does not say enough about their budget or their plans.',
+  criteriaAt: '2026-09-20T08:00:00Z',
+  source: 'off',
+  zoho: null,
+  syncedAt: null,
+  checkedAt: null,
+  syncError: null,
+  postLink: 'https://quantumglobalresidency.com/consultation',
+};
+
+const BUDGET = { high: 'Over $1M', fit: '$800,000 to $1M', low: '$500,000 to $800,000', none: 'Under $500,000' } as const;
+const WHEN = { soon: 'Within 6 months', year: '6 to 12 months', later: 'Just researching' } as const;
+
+type LeadSpec = {
+  name: string;
+  /** Hours before NOW. */
+  ago: number;
+  budget?: keyof typeof BUDGET;
+  when?: keyof typeof WHEN;
+  visa?: string;
+  message?: string;
+  verdict: LeadVerdict | null;
+};
+
+/** Claude's reasons, quoting the lead's own answers: only the ones that bear out its verdict. */
+function reasonsFor(spec: LeadSpec, verdict: LeadVerdict): LeadReason[] {
+  const budget = spec.budget ? BUDGET[spec.budget] : null;
+  const when = spec.when ? WHEN[spec.when] : null;
+  const low = spec.budget === 'low' || spec.budget === 'none';
+  if (verdict === 'unclear') return [{ text: budget ? 'Says nothing of when they want to start.' : 'Says nothing of how much they could invest.', field: null, quote: null }];
+  const out: LeadReason[] = [];
+  if (verdict === 'qualified') {
+    if (budget) out.push({ text: 'Can invest at least the EB-5 minimum.', field: 'Investment budget', quote: budget });
+    if (when) out.push({ text: 'Wants to start within a year.', field: 'When do you want to start?', quote: when });
+    return out;
+  }
+  if (budget && low) out.push({ text: 'Cannot invest the EB-5 minimum.', field: 'Investment budget', quote: budget });
+  if (when && spec.when === 'later') out.push({ text: 'Is not planning to start within a year.', field: 'When do you want to start?', quote: when });
+  if (out.length === 0 && spec.message) out.push({ text: 'Is not asking about investing.', field: 'Message', quote: spec.message.split(/[.?,]/)[0]! });
+  return out;
+}
+
+function sampleLead(id: number, spec: LeadSpec, where: Pick<Lead, 'platform' | 'campaign'> & Partial<Pick<Lead, 'from' | 'zohoSource'>>): Lead {
+  const createdAt = new Date(Date.parse(NOW) - spec.ago * 3_600_000).toISOString();
+  const answers = [
+    ...(spec.budget ? [{ field: 'Investment budget', value: BUDGET[spec.budget] }] : []),
+    ...(spec.when ? [{ field: 'When do you want to start?', value: WHEN[spec.when] }] : []),
+    ...(spec.visa ? [{ field: 'Current visa', value: spec.visa }] : []),
+    ...(spec.message ? [{ field: 'Message', value: spec.message }] : []),
+  ];
+  return {
+    id: `lead-${id}`,
+    name: spec.name,
+    createdAt,
+    zohoStatus: spec.ago > 72 ? 'Contacted' : 'Not Contacted',
+    ...(where.zohoSource ? { zohoSource: where.zohoSource } : {}),
+    platform: where.platform,
+    campaign: where.campaign,
+    ...(where.from ? { from: where.from } : {}),
+    answers,
+    judging: spec.verdict ? 'done' : 'waiting',
+    ...(spec.verdict ? { ai: { verdict: spec.verdict, reasons: reasonsFor(spec, spec.verdict), at: new Date(Date.parse(createdAt) + 4 * 60_000).toISOString(), olderCriteria: false } } : {}),
+  };
+}
+
+const podcast = (label: 'A' | 'B' | 'C', place: 'facebook' | 'linkedin') => ({
+  platform: place,
+  zohoSource: place === 'facebook' ? 'Facebook' : 'LinkedIn',
+  campaign: { utm: { source: place, medium: 'social', campaign: 'qgr-r1041000', content: `${label.toLowerCase()}-${place}` } },
+  from: {
+    runId: 'r-1041',
+    runTitle: 'Podcast ep. 12: From H-1B to EB-5',
+    adSetId: 'a-podcast',
+    variantId: `v-pod-${label.toLowerCase()}`,
+    label,
+    angle: { A: 'Off the treadmill', B: 'The 60-day question', C: 'Straight answers' }[label],
+    place,
+  },
+});
+const webinarForm = (ad: 'family' | 'diligence', platform: 'meta' | 'instagram' | 'facebook') => ({
+  platform,
+  zohoSource: 'Facebook Lead Ads',
+  campaign: {
+    id: '120210000000001',
+    name: 'EB-5 webinar · lead form',
+    adId: ad === 'family' ? '120210000000101' : '120210000000102',
+    adName: ad === 'family' ? 'Family planning, golden hour' : 'Due diligence, explained',
+    form: 'Webinar sign-up',
+  },
+});
+const website = { platform: 'website' as const, zohoSource: 'Web Download', campaign: {} };
+
+/**
+ * Sample leads, with fictional names: a QGR run's posts tied by their tagged
+ * links (one variant clearly ahead of another), a Meta lead form, the website,
+ * and a few that show what can go wrong.
+ */
+export const leads = (): Lead[] => {
+  let id = 0;
+  const list: Lead[] = [];
+  const add = (spec: LeadSpec, where: Parameters<typeof sampleLead>[2]) => list.push(sampleLead(++id, spec, where));
+  // Variant B on Facebook: most of its leads qualify.
+  const b: [string, keyof typeof BUDGET, keyof typeof WHEN, string][] = [
+    ['Ananya Iyer', 'fit', 'soon', 'H-1B'],
+    ['Rohan Mehta', 'high', 'year', 'H-1B'],
+    ['Kavya Nair', 'fit', 'soon', 'H-1B'],
+    ['Arjun Rao', 'high', 'soon', 'L-1'],
+    ['Meera Pillai', 'fit', 'year', 'H-1B'],
+    ['Vikram Shah', 'fit', 'soon', 'H-1B'],
+    ['Priya Menon', 'high', 'year', 'H-1B'],
+    ['Siddharth Jain', 'fit', 'year', 'O-1'],
+    ['Neha Kulkarni', 'high', 'soon', 'H-1B'],
+    ['Aisha Khan', 'fit', 'year', 'H-1B'],
+    ['Sanjay Kumar', 'high', 'soon', 'L-1'],
+  ];
+  b.forEach(([name, budget, when, visa], i) => add({ name, ago: 20 + i * 13, budget, when, visa, verdict: 'qualified' }, podcast('B', 'facebook')));
+  add({ name: 'Aditya Bose', ago: 70, budget: 'low', when: 'soon', visa: 'H-1B', verdict: 'not_qualified' }, podcast('B', 'facebook'));
+  add({ name: 'Ishaan Gupta', ago: 95, budget: 'none', when: 'later', verdict: 'not_qualified' }, podcast('B', 'facebook'));
+  add({ name: 'Diya Reddy', ago: 130, budget: 'fit', when: 'later', verdict: 'not_qualified' }, podcast('B', 'facebook'));
+  // Variant A on Facebook: most of its leads do not.
+  const a: [string, keyof typeof BUDGET, keyof typeof WHEN][] = [
+    ['Karan Malhotra', 'low', 'later'],
+    ['Sneha Joshi', 'none', 'later'],
+    ['Rahul Verma', 'low', 'soon'],
+    ['Pooja Desai', 'none', 'year'],
+    ['Nikhil Saxena', 'low', 'later'],
+    ['Tanvi Kapoor', 'none', 'soon'],
+    ['Manish Agarwal', 'low', 'year'],
+    ['Riya Banerjee', 'none', 'later'],
+    ['Sameer Khanna', 'low', 'later'],
+  ];
+  a.forEach(([name, budget, when], i) => add({ name, ago: 26 + i * 17, budget, when, visa: 'F-1 student', verdict: 'not_qualified' }, podcast('A', 'facebook')));
+  add({ name: 'Varun Chopra', ago: 50, budget: 'fit', when: 'soon', visa: 'H-1B', verdict: 'qualified' }, podcast('A', 'facebook'));
+  add({ name: 'Anjali Sinha', ago: 110, budget: 'high', when: 'year', verdict: 'qualified' }, podcast('A', 'facebook'));
+  add({ name: 'Harsh Patel', ago: 140, budget: 'fit', when: 'soon', verdict: 'qualified' }, podcast('B', 'facebook'));
+  add({ name: 'Lakshmi Krishnan', ago: 34, budget: 'fit', visa: 'H-1B', verdict: 'unclear' }, podcast('A', 'facebook'));
+  // Variant C on LinkedIn: too few to tell anything yet.
+  add({ name: 'Gaurav Bhatt', ago: 44, budget: 'high', when: 'soon', visa: 'H-1B', verdict: 'qualified' }, podcast('C', 'linkedin'));
+  add({ name: 'Shreya Ghosh', ago: 88, budget: 'fit', when: 'year', verdict: 'qualified' }, podcast('C', 'linkedin'));
+  add({ name: 'Amit Tiwari', ago: 3, message: 'Is EB-5 still open for Indian investors this year?', verdict: 'unclear' }, podcast('C', 'linkedin'));
+  // The webinar's Meta lead form.
+  add({ name: 'Farah Siddiqui', ago: 12, budget: 'high', when: 'soon', verdict: 'qualified' }, webinarForm('family', 'instagram'));
+  add({ name: 'Deepak Murthy', ago: 30, budget: 'fit', when: 'year', verdict: 'qualified' }, webinarForm('family', 'meta'));
+  add({ name: 'Swati Rao', ago: 60, budget: 'low', when: 'soon', verdict: 'not_qualified' }, webinarForm('diligence', 'facebook'));
+  add({ name: 'Imran Qureshi', ago: 2, budget: 'fit', when: 'soon', verdict: null }, webinarForm('diligence', 'instagram'));
+  // The website, and a lead tied to nothing.
+  add({ name: 'Nandini Pillai', ago: 18, budget: 'fit', when: 'year', message: 'We run a business in Pune and want to plan for our children’s education.', verdict: 'qualified' }, website);
+  add({ name: 'Test Lead', ago: 5, message: 'testing the form, please ignore', verdict: 'not_qualified' }, { platform: 'other', campaign: {} });
+
+  // A person set this one: Claude read the budget, the team knew more.
+  const corrected = list.find((l) => l.name === 'Meera Pillai')!;
+  corrected.person = { verdict: 'not_qualified', note: 'Funds are a loan against property; we confirm the source of funds on the first call.', at: '2026-10-06T11:00:00Z' };
+  // This one was judged before the criteria last changed.
+  list.find((l) => l.name === 'Diya Reddy')!.ai!.olderCriteria = true;
+  // And this one could not be judged.
+  const failed = list.find((l) => l.name === 'Test Lead')!;
+  delete failed.ai;
+  failed.judging = 'failed';
+  failed.judgeError = 'Claude declined to judge this lead.';
+  return list.sort((x, y) => y.createdAt.localeCompare(x.createdAt));
 };

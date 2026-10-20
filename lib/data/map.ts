@@ -30,6 +30,10 @@ import type {
   CreativeStyle,
   Goal,
   Hook,
+  Lead,
+  LeadCampaign,
+  LeadReason,
+  LeadSettings,
   LongVideo,
   LongVideoWithTranscript,
   Moment,
@@ -58,6 +62,7 @@ import type {
 import { parseVideoEdit } from '../video/edit';
 import { parseDesign } from '../creative/design';
 import { scanLabel } from '../schedule';
+import { isLeadPlatform, isZohoRegion, zohoLeadUrl } from '../leads';
 import { initialsOf } from './source';
 import type { RunWithStatus } from './source';
 
@@ -668,6 +673,7 @@ export function toTeamSettings(row: SettingsRow): TeamSettings {
       linkedin: row.linkedin_org_id ? { id: row.linkedin_org_id, name: row.linkedin_page_name ?? '' } : null,
     },
     postForReal: { facebook: row.facebook_live, instagram: row.instagram_live, linkedin: row.linkedin_live },
+    postLink: row.post_link,
   };
 }
 
@@ -879,3 +885,119 @@ export const toCreateLongVideoArgs = (input: NewLongVideo) => ({
   p_transcript: input.transcript as unknown as Json,
   ...(input.guidance ? { p_guidance: input.guidance } : {}),
 });
+
+// ---------------------------------------------------------------- leads
+
+export type LeadRow = Pick<
+  Database['public']['Tables']['leads']['Row'],
+  | 'id'
+  | 'zoho_id'
+  | 'name'
+  | 'zoho_status'
+  | 'zoho_source'
+  | 'platform'
+  | 'campaign'
+  | 'answers'
+  | 'place'
+  | 'created_in_zoho'
+  | 'verdict'
+  | 'reasons'
+  | 'judged_at'
+  | 'judged_criteria_at'
+  | 'judge_status'
+  | 'judge_error'
+  | 'person_verdict'
+  | 'person_note'
+  | 'person_at'
+> & {
+  runs?: One<{ id: string; title: string }> | null;
+  ad_variants?: One<{ id: string; label: string; angle: string; ad_set_id: string }> | null;
+};
+
+const text = (v: Json | undefined, max: number): string | undefined => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined);
+
+function toLeadCampaign(raw: Json): LeadCampaign {
+  if (!isRecord(raw)) return {};
+  const utmRaw = isRecord(raw.utm) ? raw.utm : {};
+  const utm: NonNullable<LeadCampaign['utm']> = {};
+  for (const key of ['source', 'medium', 'campaign', 'content', 'term'] as const) {
+    const v = text(utmRaw[key], 120);
+    if (v) utm[key] = v;
+  }
+  const out: LeadCampaign = {};
+  for (const [key, from] of [['id', 'id'], ['name', 'name'], ['adId', 'ad_id'], ['adName', 'ad_name'], ['adset', 'adset'], ['form', 'form']] as const) {
+    const v = text(raw[from], 160);
+    if (v) out[key] = v;
+  }
+  return Object.keys(utm).length > 0 ? { ...out, utm } : out;
+}
+
+function toLeadReasons(raw: Json): LeadReason[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((r): LeadReason[] => {
+    if (!isRecord(r)) return [];
+    const reason = text(r.text, 300);
+    return reason ? [{ text: reason, field: text(r.field, 80) ?? null, quote: text(r.quote, 300) ?? null }] : [];
+  });
+}
+
+/** A lead as the dashboard shows it. A verdict judged before the criteria last changed says so. */
+export function toLead(row: LeadRow, settings: Pick<LeadSettings, 'zoho' | 'criteriaAt'>): Lead {
+  const run = one(row.runs);
+  const variant = one(row.ad_variants);
+  const label = variant && (variant.label === 'A' || variant.label === 'B' || variant.label === 'C') ? variant.label : undefined;
+  const place = row.place === 'x' || isOneOf(PLACES, row.place) ? row.place : undefined;
+  const answers = Array.isArray(row.answers)
+    ? row.answers.flatMap((a) => {
+        if (!isRecord(a)) return [];
+        const field = text(a.field, 80);
+        const value = text(a.value, 500);
+        return field && value ? [{ field, value }] : [];
+      })
+    : [];
+  const verdict = row.verdict === 'qualified' || row.verdict === 'not_qualified' || row.verdict === 'unclear' ? row.verdict : null;
+  const judging = row.judge_status === 'done' || row.judge_status === 'failed' || row.judge_status === 'working' ? row.judge_status : 'waiting';
+  return {
+    id: row.id,
+    name: row.name,
+    createdAt: row.created_in_zoho,
+    platform: isLeadPlatform(row.platform) ? row.platform : 'other',
+    ...(row.zoho_status ? { zohoStatus: row.zoho_status } : {}),
+    ...(row.zoho_source ? { zohoSource: row.zoho_source } : {}),
+    ...(settings.zoho ? { zohoUrl: zohoLeadUrl(settings.zoho, row.zoho_id) } : {}),
+    campaign: toLeadCampaign(row.campaign),
+    ...(run
+      ? {
+          from: {
+            runId: run.id,
+            runTitle: run.title,
+            ...(variant ? { adSetId: variant.ad_set_id, variantId: variant.id, angle: variant.angle } : {}),
+            ...(label ? { label } : {}),
+            ...(place ? { place } : {}),
+          },
+        }
+      : {}),
+    answers,
+    ...(verdict && row.judged_at
+      ? { ai: { verdict, reasons: toLeadReasons(row.reasons), at: row.judged_at, olderCriteria: !row.judged_criteria_at || Date.parse(row.judged_criteria_at) < Date.parse(settings.criteriaAt) } }
+      : {}),
+    judging,
+    ...(judging === 'failed' && row.judge_error ? { judgeError: row.judge_error } : {}),
+    ...(row.person_verdict === 'qualified' || row.person_verdict === 'not_qualified'
+      ? { person: { verdict: row.person_verdict, ...(row.person_note ? { note: row.person_note } : {}), at: row.person_at ?? row.created_in_zoho } }
+      : {}),
+  };
+}
+
+export function toLeadSettings(row: SettingsRow): LeadSettings {
+  return {
+    criteria: row.lead_criteria,
+    criteriaAt: row.lead_criteria_at,
+    source: row.leads_source === 'zoho' ? 'zoho' : 'off',
+    zoho: isZohoRegion(row.zoho_region) ? { region: row.zoho_region, org: row.zoho_org } : null,
+    syncedAt: row.leads_synced_at,
+    checkedAt: row.leads_checked_at,
+    syncError: row.leads_sync_error,
+    postLink: row.post_link,
+  };
+}

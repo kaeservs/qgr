@@ -14,7 +14,8 @@ import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
-import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, LongVideoWithTranscript, Post, Run, TeamSettings } from '../types';
+import { taggedLink } from '../leads';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, TeamSettings } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -31,8 +32,12 @@ const store = globalThis as typeof globalThis & {
   __qgrMemory?: BrandMemory;
   __qgrExamples?: BrandExample[];
   __qgrLongVideos?: LongVideoWithTranscript[];
+  __qgrLeads?: Lead[];
+  __qgrLeadSettings?: LeadSettings;
 };
 const runList = (): Run[] => (store.__qgrRuns ??= structuredClone(mock.runs));
+const leadList = (): Lead[] => (store.__qgrLeads ??= mock.leads());
+const leadSettings = (): LeadSettings => (store.__qgrLeadSettings ??= structuredClone(mock.leadSettings));
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
@@ -238,7 +243,8 @@ export const sampleData: DataSource = {
   createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteClipUpload: async () => ({ ok: true, value: null, sample: true }),
 
-  getTeamSettings: async () => settings(),
+  // Where posts send people is kept with the leads' settings, as in team_settings.
+  getTeamSettings: async () => ({ ...settings(), postLink: leadSettings().postLink }),
   saveAgentSettings: async (next) => {
     store.__qgrSettings = { ...settings(), ...next };
     return { ok: true, value: null, sample: true };
@@ -271,6 +277,28 @@ export const sampleData: DataSource = {
     return { ok: true, value: { stage }, sample: true };
   },
 
+  getLeads: async () => ({ leads: structuredClone(leadList()), settings: leadSettings() }),
+  saveLeadCriteria: async (criteria) => {
+    const was = leadSettings();
+    store.__qgrLeadSettings = { ...was, criteria, criteriaAt: criteria === was.criteria ? was.criteriaAt : new Date().toISOString() };
+    if (criteria !== was.criteria) for (const l of leadList()) if (l.ai) l.ai.olderCriteria = true;
+    return { ok: true, value: null, sample: true };
+  },
+  setLeadsSource: async () => ({ ok: false, status: 400, error: 'The sample data is not connected to Zoho. Set Supabase up, then connect Zoho.' }),
+  setLeadVerdict: async (leadId, verdict, note) => {
+    const lead = leadList().find((l) => l.id === leadId);
+    if (!lead) return { ok: false, status: 404, error: 'That lead is gone.' };
+    if (verdict) lead.person = { verdict, ...(note ? { note } : {}), at: new Date().toISOString() };
+    else delete lead.person;
+    return { ok: true, value: null, sample: true };
+  },
+  // No model judges the sample's leads: nothing is asked, and the page says so.
+  judgeLeadsAgain: async () => ({ ok: false, status: 400, error: 'No model judges the sample’s leads: connect Supabase and n8n to judge real ones.' }),
+  readLeadsNow: async () => ({ ok: false, status: 400, error: 'The sample data is not connected to Zoho.' }),
+  savePostLink: async (link) => {
+    store.__qgrLeadSettings = { ...leadSettings(), postLink: link };
+    return { ok: true, value: null, sample: true };
+  },
   getPosts: async () =>
     [...postList()]
       .sort((a, b) => b.scheduledFor.localeCompare(a.scheduledFor))
@@ -279,6 +307,9 @@ export const sampleData: DataSource = {
     const set = mock.adSets.find((a) => a.variants.some((v) => v.id === post.variantId));
     const variant = set?.variants.find((v) => v.id === post.variantId);
     if (!set || !variant) return { ok: false, status: 404, error: 'Sample posts can be made from the sample’s own ads only.' };
+    // As the database does: a post that asks for the link needs one to be set.
+    const link = leadSettings().postLink;
+    if (post.targets.some((t) => t.link) && !link) return { ok: false, status: 400, error: 'Say where posts send people first (Leads, Setup).' };
     const now = new Date().toISOString();
     const id = `p-${crypto.randomUUID().slice(0, 8)}`;
     postList().push({
@@ -293,7 +324,7 @@ export const sampleData: DataSource = {
       ...(post.thumbnail ? { thumbnail: post.thumbnail } : {}),
       targets: post.targets.map((t) => ({
         place: t.place,
-        text: postText(variant, t.place),
+        text: t.link && link ? `${postText(variant, t.place)}\n\n${taggedLink(link, set.runId, variant.label, t.place)}` : postText(variant, t.place),
         media: t.media?.kind ?? null,
         // Sent now, it goes straight through the stand-in.
         ...(post.at ? { status: 'scheduled' as const } : { status: 'posted' as const, postedAt: now }),

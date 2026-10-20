@@ -475,6 +475,8 @@ export interface TeamSettings extends AgentSettings {
   pages: PostPages;
   /** Which places' posts go out for real (n8n's real steps, with its credentials); the others go through a stand-in. */
   postForReal: Record<Place, boolean>;
+  /** Where posts send people (Leads, Setup); a post that asks for it ends with it, tagged. */
+  postLink: string | null;
 }
 
 /**
@@ -547,4 +549,75 @@ export interface LongVideo {
 
 export interface LongVideoWithTranscript extends LongVideo {
   transcript: TranscriptLine[];
+}
+
+// ---------------------------------------------------------------- leads
+
+/** Where a lead came from: meta is a Meta lead form that does not say which; other, not known. */
+export const LEAD_PLATFORMS = ['facebook', 'instagram', 'meta', 'linkedin', 'x', 'website', 'other'] as const;
+export type LeadPlatform = (typeof LEAD_PLATFORMS)[number];
+
+export type LeadVerdict = 'qualified' | 'not_qualified' | 'unclear';
+
+/** One reason for a verdict; a qualified or not-qualified one quotes what the lead said. */
+export interface LeadReason {
+  text: string;
+  field: string | null;
+  quote: string | null;
+}
+
+/** What a lead carries about the ad it answered: a lead form's campaign and ad, and its link's tags. */
+export interface LeadCampaign {
+  id?: string;
+  name?: string;
+  adId?: string;
+  adName?: string;
+  adset?: string;
+  form?: string;
+  utm?: { source?: string; medium?: string; campaign?: string; content?: string; term?: string };
+}
+
+/**
+ * Someone who answered QGR's ads or posts, as Zoho holds them, without their
+ * contact details (those stay in Zoho, a link away).
+ */
+export interface Lead {
+  id: string;
+  name: string;
+  createdAt: string;
+  platform: LeadPlatform;
+  /** The sales team's Lead Status and Lead Source in Zoho. */
+  zohoStatus?: string;
+  zohoSource?: string;
+  /** The lead in Zoho, where its email and phone are. */
+  zohoUrl?: string;
+  campaign: LeadCampaign;
+  /** The QGR post it came from, by its tagged link or its ad's name. */
+  from?: { runId: string; runTitle: string; adSetId?: string; variantId?: string; label?: Variant['label']; angle?: string; place?: Place | 'x' };
+  /** What the lead said and what Zoho knows of them, field by field. */
+  answers: { field: string; value: string }[];
+  /** Claude's verdict, once judged; olderCriteria when the team's criteria changed since. */
+  ai?: { verdict: LeadVerdict; reasons: LeadReason[]; at: string; olderCriteria: boolean };
+  judging: 'waiting' | 'working' | 'failed' | 'done';
+  judgeError?: string;
+  /** A person's verdict, which counts over Claude's. */
+  person?: { verdict: Exclude<LeadVerdict, 'unclear'>; note?: string; at: string };
+}
+
+export const ZOHO_REGIONS = ['com', 'eu', 'in', 'com.au', 'jp', 'ca', 'sa', 'com.cn'] as const;
+export type ZohoRegion = (typeof ZOHO_REGIONS)[number];
+
+/** How leads come in and are judged (team_settings). */
+export interface LeadSettings {
+  /** What makes a lead qualified, in the team's words: Claude judges against it. */
+  criteria: string;
+  criteriaAt: string;
+  source: 'off' | 'zoho';
+  zoho: { region: ZohoRegion; org: string | null } | null;
+  /** The newest change read from Zoho; when it was last asked; why the last read failed. */
+  syncedAt: string | null;
+  checkedAt: string | null;
+  syncError: string | null;
+  /** Where posts send people, tagged per post; null for no link. */
+  postLink: string | null;
 }

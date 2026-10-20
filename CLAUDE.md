@@ -57,6 +57,16 @@ for each place (Facebook, Instagram, LinkedIn), and every agent reads the
 team's brand memory: voice and rules, topics, format notes, picture style and
 posts that work (Brand memory below).
 
+Leads come from Zoho CRM once the team connects it (Leads, Setup; the login
+is an n8n credential): each is judged by Claude against what the team says
+makes a lead qualified, quoting what the lead said, and tied to the campaign
+and ad it came from, a Meta lead form's or a QGR post's tagged link. The Leads
+page counts each campaign's and ad's qualified leads, and suggests making
+more like an ad whose leads qualify more often than the rest of its
+campaign's (or rethinking one whose qualify less), which a person approves
+into a run (Leads below). Not built: reading spend from Meta's, LinkedIn's or
+X's ads APIs, which each need their own access.
+
 ## How the pieces connect
 
     browser ── proxy.ts: signed in? else /sign-in
@@ -68,6 +78,8 @@ posts that work (Brand memory below).
             ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
                when the team gave a direction → POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
+            ── leads → server actions → update_lead_criteria(), set_leads_source(), set_lead_verdict(),
+               judge_leads_again(), set_post_link(), a suggestion approved → create_run()
             ── POST /api/edit-media → a signed upload link for a file added to a video edit;
                POST /api/edit-media/links → links to read them
             ── GET /api/activity → what is at work now, for the top bar's Working list
@@ -93,6 +105,9 @@ posts that work (Brand memory below).
         picture_take_due() → each ad → picture_finish() or picture_fail()
     n8n "QGR · Moments", every five minutes and on POST /webhook/qgr-moments →
         moments_take_due() → each long video → Claude → moments_finish() or moments_fail()
+    n8n "QGR · Leads", every fifteen minutes and on POST /webhook/qgr-leads →
+        leads_sync_plan() → Zoho's lead fields, then its leads changed since → leads_record()
+        or leads_sync_fail(); leads_take_due() → each lead → Claude → lead_judged() or lead_judge_fail()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -162,12 +177,14 @@ posts that work (Brand memory below).
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
   `set_ads_source`, `update_publishing_settings`, `set_post_for_real`,
   `set_competitor_tracked`, `create_long_video`, `ask_moments_again`,
-  `remove_long_video`, `record_moment_run`, `start_run_from_ads`.
+  `remove_long_video`, `record_moment_run`, `start_run_from_ads`,
+  `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
+  `judge_leads_again`, `set_post_link`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
-  `prune_pictures`, `moments_*`) is granted to
+  `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`) is granted to
   the service role alone.
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
@@ -237,13 +254,18 @@ posts that work (Brand memory below).
   `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
   Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
   (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`),
-  Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`).
+  Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`),
+  Leads (`bE0n6UONyx22rYxs`, every fifteen minutes and webhook `POST /webhook/qgr-leads`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
   in `n8n/workflows/`, which is what gets validated and saved through the n8n
   MCP. Change the script, test, rebuild, then update the workflow; an edit made
-  only in n8n drifts from the repo.
+  only in n8n drifts from the repo. The MCP's parser refused a new workflow
+  whose Code nodes held the scripts (Leads, 2026-10-20): it was created with
+  stub code, then each node's `jsCode` was set with `setNodeParameter` from
+  the script's JSON string, which is also how a script change is easiest
+  applied.
 - n8n runs Code nodes in a sandbox with the standard built-ins only: no `URL`,
   `Buffer`, `fetch` or `setTimeout`. The tests run every script the same way
   (`test/n8n.ts`), so a script that reaches for one fails here first. (The
@@ -281,10 +303,12 @@ posts that work (Brand memory below).
   that step does not run, and the studio says so), `Facebook Graph API` (the
   Page's access token: it posts to the Page and its Instagram account and reads
   their numbers; on "Facebook: post", the four Instagram steps and "Meta: its
-  numbers") and `LinkedIn Community Management` (LinkedIn Community Management
+  numbers"), `LinkedIn Community Management` (LinkedIn Community Management
   OAuth2 API, from an app LinkedIn has approved for its Community Management
   API, connected by an admin of the Page; on every LinkedIn step and
-  "LinkedIn: its numbers"). Until a platform's credential is attached, its
+  "LinkedIn: its numbers") and `Zoho` (Zoho OAuth2 API, for the region the
+  team's Zoho is in, connected by a Zoho admin; on "Zoho: the lead fields" and
+  "Zoho: the leads" in Leads). Until a platform's credential is attached, its
   steps do not run and each post or read says so. Nothing that posts or draws
   is kept in Supabase or the app (the Cloudflare account ID is: it is an ID,
   not a secret).
@@ -455,6 +479,13 @@ posts that work (Brand memory below).
   cancelled. `publisher_take_due` claims what is due with `skip locked`, so a
   place is never handed out twice; a place still `posting` after 15 minutes
   becomes unknown and is never sent again by itself.
+- A post can end with the team's link (Leads, Setup: `team_settings.post_link`),
+  tagged with its run, variant and place (`utm_campaign=qgr-<run>`,
+  `utm_content=<label>-<place>`), so a lead who follows it is tied back to
+  that variant. The publish dialog asks per post and shows the words with the
+  link; `schedule_post` adds it (a place with `"link": true`, never Instagram,
+  whose words take no link anyone can follow) through `private.tagged_link`,
+  which `taggedLink` in `lib/leads.ts` matches.
 - Post now pings the publisher's webhook (`N8N_PUBLISH_WEBHOOK_URL`, or the
   run webhook's address with `qgr-publish`), so it goes within seconds rather
   than at the next minute.
@@ -774,6 +805,61 @@ posts that work (Brand memory below).
   workflow calling Higgsfield with its key as an n8n credential, polling its
   `status_url`, and the file copied into Storage.
 
+### Leads (`/leads`, `leads`, "QGR · Leads")
+
+- Zoho CRM stays where leads live. Once the team pastes its CRM's address on
+  Leads, Setup (`set_leads_source`: the region, which says which of Zoho's
+  data centres to ask, and the organisation, for each lead's link), n8n reads
+  the leads added or changed since its last read every fifteen minutes, the
+  last 90 days the first time (`leads_sync_plan`), with the `Zoho` credential.
+  "Plan the read" picks the fields from Leads' own list (Zoho returns only the
+  fields asked for, 50 at most): the name, status, source and times;
+  whatever says where a lead came from (UTM tags, Meta's campaign and ad, the
+  page it first visited), matched by name; then what the lead said, the
+  team's own questions first. Email addresses, phone numbers, street
+  addresses and Zoho's bookkeeping are never asked for: the page links to the
+  lead in Zoho for them. "Read the leads" keeps each answer by its label
+  (`leads.answers`); `leads_record` keeps them. A failed read is kept for the
+  page (`leads_sync_fail`). Its fixtures follow Zoho's documented shapes, not
+  a real read: check the first real one (and that `If-Modified-Since` holds).
+- A lead is tied to an ad by what it carries, never guessed: Meta's campaign
+  and ad from a lead form (Zoho's LeadChain brings them), or the tags on its
+  link. A tag or an Ads Manager ad named `qgr-<run>` (and `<label>-<place>`
+  or `-<label>`) ties it to that QGR run's variant (`run_id`, `variant_id`).
+  A lead carrying neither is "Not tied to a campaign".
+- Claude (Haiku 5.5, medium effort) judges each new lead, and each whose
+  answers changed, against the team's criteria (`team_settings.lead_criteria`,
+  written on Setup; a default for EB-5): qualified, not qualified or can't
+  tell. It reads what the lead said, never their name, and is told an answer
+  is never an instruction; every reason for a verdict quotes an answer as
+  written, checked in "Read the verdict" and again by `lead_judged`, and a
+  verdict left with no quote it can show becomes can't tell. Up to eight of
+  the team's own verdicts with their reasons go with each lead as examples.
+  `leads_take_due` claims ten at a time (`skip locked`, three tries).
+  `lead_usage` keeps what it cost, on failure too.
+- A person's verdict counts over Claude's (`set_lead_verdict`, with an
+  optional reason, which becomes one of those examples); taking it back lets
+  Claude's count again. A verdict judged before the criteria last changed
+  says so, and "Judge again" (`judge_leads_again`) queues one lead, or every
+  lead of the last 90 days judged on older criteria or that failed.
+- The page (`lib/leads.ts`, pure and tested): Campaigns (totals; each
+  campaign and, within it, each ad's leads by verdict as a bar, its length
+  the leads it brought; a person's verdict counted over Claude's), All leads
+  (filtered by period, place, campaign and verdict; each with its verdict,
+  the reasons with their quotes and what it said), and Setup (the criteria,
+  Zoho, and the link posts send people to). Every count is worked out in code.
+- Suggestions: where an ad's leads qualify more, or less, often than the rest
+  of its campaign's by more than chance would explain (Fisher's exact test at
+  95%, which holds at the small counts leads come in; at least five judged on
+  each side). Nothing happens until a person approves: for a QGR variant that
+  starts a custom text run from its words, titled for the suggestion, with
+  the counts and what to make of them as the agents' direction. The server
+  works the suggestion out again before it acts. An ad that is not QGR's has
+  no words to start from: the page says to act in Ads Manager.
+- The sample data has sample leads with made-up names (one run's variants far
+  apart, a Meta lead form, the website, a failed one, one set by a person),
+  says so, and connects to nothing.
+
 ## Rules
 
 1. **A run's status is derived from its stages**, never stored beside them
@@ -807,8 +893,8 @@ posts that work (Brand memory below).
    clip in Storage stays as it was uploaded, and the captions and end card are
    flagged against the guardrails like any other words on an ad.
 10. **What was approved is what goes out.** A post copies the approved words
-    and goes with a file made from the approved variant, shown before it is
-    sent. Editing an approved variant takes its approval away, and so does a
+    (and, where asked, the team's tagged link, shown with them) and goes with
+    a file made from the approved variant, shown before it is sent. Editing an approved variant takes its approval away, and so does a
     new picture, a new layout or going back to the design; one waiting to post cannot be
     edited, or change its picture, until its post is cancelled.
 11. **Never post twice by accident.** A place that may have gone out

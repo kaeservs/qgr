@@ -1,6 +1,6 @@
 'use client';
 
-import { BookMarked, Clapperboard, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, UserRound, Workflow, X } from 'lucide-react';
+import { BookMarked, Clapperboard, Compass, Ellipsis, House, LifeBuoy, LogOut, Radar, Send, Settings, Sparkles, Target, UserRound, Workflow, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -19,6 +19,7 @@ const GROUPS = [
       { href: '/', label: 'Home', icon: House },
       { href: '/runs', label: 'Runs', icon: Workflow },
       { href: '/posts', label: 'Posts', icon: Send },
+      { href: '/leads', label: 'Leads', icon: Target },
     ],
   },
   {

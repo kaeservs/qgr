@@ -18,6 +18,8 @@ import type {
   BrandProfile,
   Competitor,
   ExamplePlace,
+  Lead,
+  LeadSettings,
   Notice,
   PageRead,
   PageSummary,
@@ -33,6 +35,7 @@ import type {
   Strategy,
   TeamSettings,
   User,
+  ZohoRegion,
 } from '../types';
 import type { VideoEdit } from '../video/edit';
 import type { CreativeDesign } from '../creative/design';
@@ -61,6 +64,8 @@ export interface NewBrandExample {
 export interface NewPostTarget {
   place: Place;
   media: { path: string; kind: 'image' | 'video' } | null;
+  /** Ends the words with the team's link, tagged with this run, variant and place (not on Instagram). */
+  link?: boolean;
 }
 
 /** An approved variant to post now (`at` null) or at a wall time in the team's zone (`YYYY-MM-DD HH:MM`). */
@@ -180,6 +185,21 @@ export interface DataSource {
   /** Starts the agent a run waits on (its switch is off) or one that failed, and hands it to n8n. */
   continueRun(runId: string): Promise<Saved<{ stage: StageKey }>>;
 
+  /** The leads of the last 180 days, newest first, and how leads come in and are judged. */
+  getLeads(): Promise<{ leads: Lead[]; settings: LeadSettings }>;
+  /** What makes a lead qualified, in the team's words. */
+  saveLeadCriteria(criteria: string): Promise<Saved>;
+  /** Where leads come from: off, or Zoho in its region (n8n holds the login). */
+  setLeadsSource(source: 'off' | 'zoho', zoho: { region: ZohoRegion; org: string | null } | null): Promise<Saved>;
+  /** A person's verdict on a lead, with why; null takes it back. */
+  setLeadVerdict(leadId: string, verdict: 'qualified' | 'not_qualified' | null, note: string | null): Promise<Saved>;
+  /** Judges one lead again, or every lead judged on older criteria; says how many. */
+  judgeLeadsAgain(leadId: string | null): Promise<Saved<{ count: number }>>;
+  /** Asks n8n to read Zoho and judge what waits now, rather than in its next fifteen minutes. */
+  readLeadsNow(): Promise<Saved>;
+  /** Where posts send people, tagged per post; null for no link. */
+  savePostLink(link: string | null): Promise<Saved>;
+
   /** Every post, newest first. */
   getPosts(): Promise<Post[]>;
   /** Records a post of an approved variant; one to send now is handed to the publisher at once. */
@@ -220,6 +240,7 @@ export const PAGES: SearchItem[] = [
   { label: 'Strategy', sub: STAGE_INFO.strategist.name, href: '/strategy', kind: 'page' },
   { label: 'Content', sub: STAGE_INFO.content.name, href: '/content', kind: 'page' },
   { label: 'Posts', sub: 'Scheduled and sent posts', href: '/posts', kind: 'page' },
+  { label: 'Leads', sub: 'Who answered, which ad brought them, who qualifies', href: '/leads', kind: 'page' },
   { label: 'Brand memory', sub: 'Voice, rules, formats and posts that work', href: '/brand', kind: 'page' },
   { label: 'Settings', sub: 'Agents, Pages and connections', href: '/settings', kind: 'page' },
 ];

@@ -40,7 +40,7 @@ export function parseNewPost(raw: unknown): ParseResult<NewPost> {
       media = { path: t.media.path, kind };
     }
     if (place === 'instagram' && !media) return { ok: false, error: 'Instagram needs a picture or a video.' };
-    targets.push({ place, media });
+    targets.push({ place, media, ...(t.link === true && place !== 'instagram' ? { link: true } : {}) });
   }
 
   let at: string | null = null;

@@ -7,7 +7,7 @@ import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
 import { mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
-import { momentsConfig, picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
+import { leadsConfig, momentsConfig, picturesConfig, pipelineConfig, publisherConfig } from '../supabase/config';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
@@ -21,6 +21,8 @@ import {
   toCompetitor,
   toCreateLongVideoArgs,
   toCreateRunArgs,
+  toLead,
+  toLeadSettings,
   toLongVideo,
   toNotices,
   toPost,
@@ -74,6 +76,10 @@ const PLAY_SECONDS = 6 * 60 * 60;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RECENT = 200;
+/** The leads a page reads: the newest, within what the period filters reach back to. */
+const LEADS = 1000;
+const LEAD =
+  'id, zoho_id, name, zoho_status, zoho_source, platform, campaign, answers, place, created_in_zoho, verdict, reasons, judged_at, judged_criteria_at, judge_status, judge_error, person_verdict, person_note, person_at, runs!leads_run_id_fkey(id, title), ad_variants!leads_variant_id_fkey(id, label, angle, ad_set_id)';
 
 async function db(): Promise<Supabase> {
   const supabase = await getSupabase();
@@ -460,6 +466,68 @@ export const liveData: DataSource = {
     return { ok: true, value: null, sample: false };
   },
 
+  getLeads: async () => {
+    const supabase = await db();
+    const [settingsRow, rows] = await Promise.all([
+      supabase.from('team_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase
+        .from('leads')
+        .select(LEAD)
+        .gte('created_in_zoho', new Date(Date.now() - 180 * 86_400_000).toISOString())
+        .order('created_in_zoho', { ascending: false })
+        .limit(LEADS),
+    ]);
+    if (settingsRow.error) readFailed('the team settings', settingsRow.error);
+    if (!settingsRow.data) throw new Error('The team settings are missing');
+    if (rows.error) readFailed('leads', rows.error);
+    const settings = toLeadSettings(settingsRow.data);
+    return { settings, leads: rows.data.map((row) => toLead(row, settings)) };
+  },
+
+  saveLeadCriteria: async (criteria) => {
+    const { error } = await (await db()).rpc('update_lead_criteria', { p_criteria: criteria });
+    if (error) return refused(error, 'The criteria could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  setLeadsSource: async (from, zoho) => {
+    const { error } = await (await db()).rpc('set_leads_source', { p_source: from, ...(zoho ? { p_region: zoho.region } : {}), ...(zoho?.org ? { p_org: zoho.org } : {}) });
+    if (error) return refused(error, 'Where leads come from could not be saved.');
+    // n8n reads at once, so the page can say whether Zoho answered.
+    const leads = leadsConfig();
+    if (from === 'zoho' && leads) await pingQueue(leads);
+    return { ok: true, value: null, sample: false };
+  },
+
+  setLeadVerdict: async (leadId, verdict, note) => {
+    // p_verdict takes null, which takes a person's verdict back: it has no default.
+    const { error } = await (await db()).rpc('set_lead_verdict', { p_lead_id: leadId, p_verdict: verdict as string, ...(note ? { p_note: note } : {}) });
+    if (error) return refused(error, 'The verdict could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  judgeLeadsAgain: async (leadId) => {
+    const { data, error } = await (await db()).rpc('judge_leads_again', leadId ? { p_lead_id: leadId } : {});
+    if (error) return refused(error, 'The leads could not be judged again.');
+    const leads = leadsConfig();
+    if (data > 0 && leads) await pingQueue(leads);
+    return { ok: true, value: { count: data }, sample: false };
+  },
+
+  readLeadsNow: async () => {
+    const leads = leadsConfig();
+    if (!leads) return { ok: false, status: 503, error: 'n8n isn’t connected yet, so Zoho can’t be read from here.' };
+    if (!(await pingQueue(leads))) return { ok: false, status: 502, error: 'n8n did not answer. It reads Zoho by itself every fifteen minutes.' };
+    return { ok: true, value: null, sample: false };
+  },
+
+  savePostLink: async (link) => {
+    // p_link takes null for no link: it has no default.
+    const { error } = await (await db()).rpc('set_post_link', { p_link: link as string });
+    if (error) return refused(error, 'The link could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
   // Nothing makes AI videos until Higgsfield is connected, so there are none to read yet.
   getAiVideos: async () => [],
   getAiVideo: async () => null,
@@ -570,7 +638,7 @@ export const liveData: DataSource = {
   schedulePost: async (post) => {
     const { data: id, error } = await (await db()).rpc('schedule_post', {
       p_variant_id: post.variantId,
-      p_targets: post.targets.map((t) => ({ place: t.place, ...(t.media ? { media_path: t.media.path, media_kind: t.media.kind } : {}) })),
+      p_targets: post.targets.map((t) => ({ place: t.place, ...(t.media ? { media_path: t.media.path, media_kind: t.media.kind } : {}), ...(t.link ? { link: true } : {}) })),
       ...(post.at ? { p_local_time: post.at } : {}),
       ...(post.thumbnail ? { p_thumbnail: post.thumbnail } : {}),
     });

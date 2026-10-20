@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Clapperboard, LoaderCircle, Send, X as Close } from 'lucide-react';
+import { CalendarClock, Clapperboard, Link2, LoaderCircle, Send, X as Close } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { schedulePostAction } from '@/app/(app)/posts/actions';
 import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
@@ -8,6 +8,7 @@ import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import { cx } from '@/lib/cx';
 import type { NewPostTarget } from '@/lib/data/source';
 import { INSTAGRAM_MAX } from '@/lib/guardrails';
+import { LINK_PLACES, taggedLink } from '@/lib/leads';
 import { PLATFORM_OF, postText } from '@/lib/platforms';
 import { MAX_THUMBNAIL, PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone, localTime, wallTime, zonedToUtc, zoneLabel } from '@/lib/schedule';
@@ -99,6 +100,7 @@ export function PublishDialog({
   timeZone,
   pages,
   forReal,
+  link,
   onClose,
   onPosted,
 }: {
@@ -111,6 +113,8 @@ export function PublishDialog({
   pages: PostPages;
   /** Which places post for real; the others go through their stand-ins. */
   forReal: Record<Place, boolean>;
+  /** The team's link for posts and this variant's run, to end its Facebook and LinkedIn posts with, tagged. */
+  link: { url: string; runId: string } | null;
   onClose: () => void;
   onPosted: () => void;
 }) {
@@ -127,7 +131,11 @@ export function PublishDialog({
   const [pictures, setPictures] = useState<Partial<Record<CreativeRatio, Picture>>>({});
   const [step, setStep] = useState<{ label: string; progress: number | null } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [withLink, setWithLink] = useState(link !== null);
   const edit = clip ? (variant.videoEdit ?? defaultEdit(clip.clip.duration)) : null;
+  // The words that go out to a place: what the database writes, the tagged link included.
+  const linked = (place: Place) => withLink && link !== null && LINK_PLACES.includes(place);
+  const words = (place: Place) => (linked(place) && link ? `${postText(variant, place)}\n\n${taggedLink(link.url, link.runId, variant.label, place)}` : postText(variant, place));
 
   useEffect(() => {
     const d = dialog.current;
@@ -233,7 +241,7 @@ export function PublishDialog({
           },
         });
         const path = await upload(made.blob, 'Uploading the video…', signal);
-        for (const place of places) targets.push({ place, media: { path, kind: 'video' } });
+        for (const place of places) targets.push({ place, media: { path, kind: 'video' }, ...(linked(place) ? { link: true } : {}) });
       } else {
         const paths: Partial<Record<CreativeRatio, string>> = {};
         for (const place of places) {
@@ -242,7 +250,7 @@ export function PublishDialog({
           if (!picture) throw new RenderError('The picture is still being made. Try again in a moment.');
           const path = paths[ratio] ?? (await upload(picture.blob, 'Uploading the picture…', signal));
           paths[ratio] = path;
-          targets.push({ place, media: { path, kind: 'image' } });
+          targets.push({ place, media: { path, kind: 'image' }, ...(linked(place) ? { link: true } : {}) });
         }
         const first = pictures[RATIO[places[0] ?? 'facebook']];
         thumbnail = first ? thumbnailOf(first.canvas) : null;
@@ -348,12 +356,24 @@ export function PublishDialog({
                         <LoaderCircle size={18} className="spin" aria-hidden />
                       </div>
                     )}
-                    <p className={styles.previewText}>{postText(variant, place)}</p>
+                    <p className={styles.previewText}>{words(place)}</p>
                   </div>
                 );
               })}
             </div>
           </section>
+        )}
+
+        {link && places.some((p) => LINK_PLACES.includes(p)) && (
+          <fieldset className={styles.section} disabled={working}>
+            <legend className={styles.sectionTitle}>Link</legend>
+            <label className={styles.whenOption}>
+              <input type="checkbox" checked={withLink} onChange={(e) => setWithLink(e.target.checked)} />
+              <Link2 size={15} aria-hidden />
+              End the {places.filter((p) => LINK_PLACES.includes(p)).map((p) => PLACE_LABEL[p]).join(' and ')} post{places.filter((p) => LINK_PLACES.includes(p)).length === 1 ? '' : 's'} with your link, tagged so its leads are tied to variant {variant.label}
+            </label>
+            {places.includes('instagram') && <p className="muted small">Instagram gets none: a link in its words cannot be followed.</p>}
+          </fieldset>
         )}
 
         <fieldset className={styles.section} disabled={working}>
