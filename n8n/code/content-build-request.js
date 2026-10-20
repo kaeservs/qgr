@@ -15,6 +15,30 @@ const strategy = ctx.strategy;
 if (!strategy || !strategy.angles || strategy.angles.length !== 3) {
   throw new Error('The strategy is missing its three angles.');
 }
+// The angles the team picked, when it picked some (their positions, from
+// agent_begin): the three variants are spread over them, so one angle picked
+// gets three takes and two get two and one. Without picks, A, B and C follow
+// the strategy's three angles and the request is exactly as before. The same
+// spread names the variants in "Read Claude's answer".
+const LABELS = ['A', 'B', 'C'];
+let picked = null;
+if (Array.isArray(ctx.chosen_angles) && ctx.chosen_angles.length > 0) {
+  picked = strategy.angles.filter(function (a) { return ctx.chosen_angles.indexOf(a.position) !== -1; });
+  if (picked.length === 0) throw new Error('The angles picked are not in the strategy.');
+  if (picked.length === strategy.angles.length) picked = null;
+}
+const spread = picked
+  ? LABELS.map(function (l, i) { return picked[Math.floor(i * picked.length / 3)]; })
+  : strategy.angles;
+function inWords(list) {
+  return list.length === 1 ? list[0] : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
+}
+const whatToWrite = picked
+  ? 'Write three variants from the angles the QGR team picked: ' + picked.map(function (a) {
+      const labels = LABELS.filter(function (l, i) { return spread[i] === a; });
+      return inWords(labels) + (labels.length === 1 ? ' follows' : ' follow') + ' the angle "' + a.name + '"';
+    }).join(', ') + '. Variants that share an angle are each a different take on it, with their own hook and words.'
+  : 'Write three variants: A follows the strategy\'s first angle, B the second, C the third.';
 
 const NAMES = { meta: 'Meta', linkedin: 'LinkedIn', x: 'X' };
 const LIMITS = {
@@ -137,7 +161,7 @@ places.concat(run.platforms.indexOf('x') !== -1 ? ['x'] : []).forEach(function (
 const hasMemory = Object.keys(formats).length > 0 || examples.length > 0 || bestPosts.length > 0;
 
 const system = [
-  'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. Write three variants: A follows the strategy\'s first angle, B the second, C the third.',
+  'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. ' + whatToWrite,
   '',
   'For each variant:',
   '- copy for each of these platforms, written for that platform rather than one text cut down, within these lengths:',
@@ -159,7 +183,7 @@ const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their
 
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
-  strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: strategy.angles, channels: strategy.channels },
+  strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: picked || strategy.angles, channels: strategy.channels },
 };
 if (brand.topics && brand.topics.length > 0) material.brand.topics = brand.topics;
 if (ctx.report) {

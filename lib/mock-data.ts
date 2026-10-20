@@ -212,6 +212,28 @@ const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
 
 export const strategies: Strategy[] = [
   {
+    id: 's-filing',
+    title: 'Stay while you file',
+    createdAt: '2026-10-07T10:12:00Z',
+    status: 'draft',
+    runId: 'r-1045',
+    competitorIds: [],
+    sourceLabel: 'Text · concurrent filing',
+    goal: 'consultations',
+    audiences: ['H-1B professionals in the U.S.', 'Families who cannot leave work to wait abroad'],
+    positioning: 'The advisor that explains concurrent filing plainly, with estimates rather than promises.',
+    angles: [
+      { id: 'sa-16', name: 'Stay and work', why: 'The text’s main point: families can file without leaving their jobs.', hook: 'File for a green card. Keep your job.' },
+      { id: 'sa-17', name: 'One family, one file', why: 'Spouses and children under 21 file together, which few ads say.', hook: 'One filing for the whole family.' },
+      { id: 'sa-18', name: 'Questions first', why: 'Readers want the conditions spelled out before they call.', hook: 'Three questions before you file.' },
+    ],
+    channels: [
+      { platform: 'meta', share: 60, role: 'Reach H-1B households', format: 'Single image' },
+      { platform: 'linkedin', share: 40, role: 'Reach professionals at work', format: 'Single image' },
+    ],
+    guardrails: GUARDRAILS,
+  },
+  {
     id: 's-clip',
     title: 'EB-5, explained',
     createdAt: '2026-10-07T07:20:00Z',
@@ -767,6 +789,33 @@ export const adSets: AdSet[] = [
 ];
 
 export const runs: Run[] = [
+  {
+    id: 'r-1045',
+    title: 'Text: What concurrent filing means for H-1B families',
+    source: {
+      kind: 'custom',
+      type: 'text',
+      excerpt:
+        'Concurrent filing lets an EB-5 investor already in the U.S. on an H-1B file for a green card at the same time as the I-526E petition, so the family can stay and keep working while both are processed. Spouses and unmarried children under 21 file with them. Processing times are estimates.',
+    },
+    platforms: ['meta', 'linkedin'],
+    goal: 'consultations',
+    createdAt: '2026-10-07T10:10:00Z',
+    pickFirst: true,
+    stages: {
+      tracker: { status: 'skipped' },
+      strategist: { status: 'done', summary: 'Built a strategy with 3 angles from the text.' },
+      content: { status: 'waiting' },
+    },
+    output: { strategyId: 's-filing' },
+    counts: { angles: 3 },
+    activity: [
+      { at: '2026-10-07T10:10:00Z', text: 'Run started from pasted text' },
+      { at: '2026-10-07T10:10:00Z', text: 'Competitor Tracker skipped: custom runs start at the strategy' },
+      { at: '2026-10-07T10:12:00Z', text: 'Built a strategy with 3 angles' },
+      { at: '2026-10-07T10:12:00Z', text: 'The Content Agent waits for you to pick the angles it writes from' },
+    ],
+  },
   {
     id: 'r-1044',
     title: 'Horizon Visa Partners · scheduled scan',

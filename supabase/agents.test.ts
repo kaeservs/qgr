@@ -124,6 +124,103 @@ describe('the switches', () => {
   });
 });
 
+describe('picking the ads and angles inside a run', () => {
+  const ad = (n: number) => ({
+    platform: 'meta', format: 'image', text: `Ad ${n} says something.`, days_running: 10 + n, days_known: true,
+    headline: `Headline ${n}`, cta: 'Learn more', page_name: 'Horizon', angle: 'Family',
+  });
+  const report = {
+    competitor: { name: 'Horizon', domain: 'horizon.example' }, data_source: 'placeholder', active_ads: 5, platforms: ['meta'],
+    summary: 's', insights: ['i'], angles: [], hooks: [{ text: 'h', platform: 'meta', format: 'image', days_running: 3, variations: 1 }],
+    ads: [1, 2, 3, 4, 5].map(ad),
+  };
+  const asMember = <T>(sql: string, params: unknown[] = []) => t.asUser(member, () => t.value<T>(sql, params));
+
+  async function scanned(pick: boolean): Promise<string> {
+    const runId = await asMember<string>(`select public.create_run('competitor', 'website', 'horizon.example', array['meta'], 'consultations', p_url => 'https://horizon.example')`);
+    await asMember(`select public.set_run_pick_first($1, $2)`, [runId, pick]);
+    await service(`select public.agent_begin($1, 'tracker')`, [runId]);
+    await service(`select public.agent_finish_tracker($1, $2::jsonb)`, [runId, JSON.stringify(report)]);
+    return runId;
+  }
+  const ids = (sql: string, runId: string) => t.db.query<{ id: string }>(sql, [runId]).then((r) => r.rows.map((x) => x.id));
+  const adsOf = (runId: string) => ids(`select a.id from public.competitor_ads a join public.competitor_reports r on r.id = a.report_id where r.run_id = $1 order by a.position`, runId);
+  const anglesOf = (runId: string) => ids(`select a.id from public.strategy_angles a join public.strategies s on s.id = a.strategy_id where s.run_id = $1 order by a.position`, runId);
+
+  it('waits after the tracker for the ads, and after the strategist for the angles, and hands each agent what was picked', async () => {
+    const runId = await scanned(true);
+    expect(await service<boolean>(`select public.pipeline_next($1, 'strategist')`, [runId])).toBe(false);
+    expect(await stage(runId, 'strategist')).toBe('queued (waiting)');
+    await expect(service(`select public.agent_begin($1, 'strategist')`, [runId])).rejects.toThrow(/waits for a person/);
+
+    const [a1, , a3] = await adsOf(runId);
+    const elsewhere = (await adsOf(await scanned(false)))[0];
+    await expect(asMember(`select public.continue_with_ads($1, $2)`, [runId, [a1, elsewhere]])).rejects.toThrow(/Pick the ads from this run's report/);
+    // In the order picked, each once.
+    expect(await asMember<string>(`select public.continue_with_ads($1, $2)`, [runId, [a3, a1, a3]])).toBe('strategist');
+    expect(await stage(runId, 'strategist')).toBe('queued');
+    const strategist = await service<{ chosen_ads: { text: string }[] }>(`select public.agent_begin($1, 'strategist')`, [runId]);
+    expect(strategist.chosen_ads.map((a) => a.text)).toEqual(['Ad 3 says something.', 'Ad 1 says something.']);
+    await service(`select public.agent_finish_strategist($1, $2::jsonb)`, [runId, JSON.stringify(STRATEGY)]);
+
+    expect(await service<boolean>(`select public.pipeline_next($1, 'content')`, [runId])).toBe(false);
+    expect(await stage(runId, 'content')).toBe('queued (waiting)');
+    const [first, , third] = await anglesOf(runId);
+    await expect(asMember(`select public.continue_with_angles($1, $2)`, [runId, [first, a1]])).rejects.toThrow(/Pick the angles from this run's strategy/);
+    expect(await asMember<string>(`select public.continue_with_angles($1, $2)`, [runId, [third, first]])).toBe('content');
+    const content = await service<{ chosen_angles: number[]; chosen_ads: unknown[] }>(`select public.agent_begin($1, 'content')`, [runId]);
+    expect(content.chosen_angles).toEqual([0, 2]);
+    expect(content.chosen_ads).toHaveLength(2);
+
+    expect((await events(runId)).filter((e) => /waits|Go-ahead/.test(e))).toEqual([
+      'The Ad Strategist waits for you to pick the ads it works from',
+      "Go-ahead given for the Ad Strategist, with 2 of the report's 5 ads",
+      'The Content Agent waits for you to pick the angles it writes from',
+      "Go-ahead given for the Content Agent, from 2 of the strategy's 3 angles",
+    ]);
+  });
+
+  it('goes on with everything when the team uses all, or ticks every box', async () => {
+    const runId = await scanned(true);
+    await service(`select public.pipeline_next($1, 'strategist')`, [runId]);
+    await asMember(`select public.continue_with_ads($1, $2)`, [runId, []]);
+    expect(await service<{ chosen_ads: unknown }>(`select public.agent_begin($1, 'strategist')`, [runId])).toMatchObject({ chosen_ads: null });
+    await service(`select public.agent_finish_strategist($1, $2::jsonb)`, [runId, JSON.stringify(STRATEGY)]);
+    await service(`select public.pipeline_next($1, 'content')`, [runId]);
+    await asMember(`select public.continue_with_angles($1, $2)`, [runId, await anglesOf(runId)]);
+    expect(await service<{ chosen_angles: unknown }>(`select public.agent_begin($1, 'content')`, [runId])).toMatchObject({ chosen_angles: null });
+    expect(await events(runId)).toEqual(expect.arrayContaining([
+      "Go-ahead given for the Ad Strategist, with all of the report's ads",
+      'Go-ahead given for the Content Agent, from every angle',
+    ]));
+  });
+
+  it('asks nothing of a run that did not ask to pick, and is set only before the agents start', async () => {
+    const runId = await scanned(false);
+    expect(await service<boolean>(`select public.pipeline_next($1, 'strategist')`, [runId])).toBe(true);
+    await expect(asMember(`select public.set_run_pick_first($1, true)`, [runId])).rejects.toThrow(/agents have started/);
+    await expect(asMember(`select public.continue_with_ads($1, $2)`, [runId, []])).rejects.toThrow(/not waiting/);
+
+    // A custom run has no report: only the Content Agent waits for its angles.
+    const custom = await customRun();
+    await asMember(`select public.set_run_pick_first($1, true)`, [custom]);
+    await strategize(custom);
+    expect(await service<boolean>(`select public.pipeline_next($1, 'content')`, [custom])).toBe(false);
+    // The same pickers answer a stage held by its switch.
+    await settings({ content: false });
+    const held = await customRun();
+    await strategize(held);
+    await service(`select public.pipeline_next($1, 'content')`, [held]);
+    expect(await asMember<string>(`select public.continue_with_angles($1, $2)`, [held, (await anglesOf(held)).slice(0, 1)])).toBe('content');
+
+    await t.asUser(outsider, async () => {
+      await expect(t.db.query(`select public.set_run_pick_first($1, true)`, [custom])).rejects.toThrow(/Only the QGR team/);
+      await expect(t.db.query(`select public.continue_with_ads($1, $2)`, [custom, []])).rejects.toThrow(/Only the QGR team/);
+      await expect(t.db.query(`select public.continue_with_angles($1, $2)`, [custom, []])).rejects.toThrow(/Only the QGR team/);
+    });
+  });
+});
+
 describe('where the tracker reads ads', () => {
   it('reads sample ads until the team switches to Apify, and tells the tracker alone', async () => {
     const competitorRun = () => t.asUser(member, () => t.value<string>(`select public.create_run('competitor', 'website', 'horizonvisa.example', array['meta'], 'consultations', p_url => 'https://horizonvisa.example/')`));

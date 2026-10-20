@@ -255,7 +255,7 @@ async function dashboardRun(runId: string): Promise<RunRow> {
         'id', r.id, 'title', r.title, 'kind', r.kind, 'input', r.input, 'url', r.url, 'competitor_name', r.competitor_name,
         'files', r.files, 'excerpt', r.excerpt, 'platforms', r.platforms, 'goal', r.goal, 'summary', r.summary,
         'competitor_id', r.competitor_id, 'created_at', r.created_at, 'approved_at', r.approved_at,
-        'page_ok', r.page -> 'ok', 'page_url', r.page ->> 'url', 'page_title', r.page ->> 'title', 'page_words', r.page -> 'words', 'page_error', r.page ->> 'error', 'chosen_ad_ids', r.chosen_ad_ids,
+        'page_ok', r.page -> 'ok', 'page_url', r.page ->> 'url', 'page_title', r.page ->> 'title', 'page_words', r.page -> 'words', 'page_error', r.page ->> 'error', 'chosen_ad_ids', r.chosen_ad_ids, 'source_report_id', r.source_report_id, 'pick_first', r.pick_first, 'chosen_angle_ids', r.chosen_angle_ids,
         'run_stages', (select json_agg(json_build_object('stage', s.stage, 'status', s.status, 'summary', s.summary, 'error', s.error, 'finished_at', s.finished_at, 'waiting_since', s.waiting_since)) from public.run_stages s where s.run_id = r.id),
         'strategies', (select json_build_object('id', st.id, 'strategy_angles', coalesce((select json_agg(json_build_object('id', a.id)) from public.strategy_angles a where a.strategy_id = st.id), '[]')) from public.strategies st where st.run_id = r.id),
         'ad_sets', (select json_build_object('id', ad.id, 'ad_variants', coalesce((select json_agg(json_build_object('id', v.id)) from public.ad_variants v where v.ad_set_id = ad.id), '[]')) from public.ad_sets ad where ad.run_id = r.id),
@@ -700,6 +700,38 @@ describe('the switches and the schedule, down to the ads', () => {
     );
     expect(Object.keys(toAdSet(await dashboardAdSet(scan)).variants[0]!.copy)).toEqual(['meta', 'linkedin']);
     await settings({ strategist: true, content: true });
+  });
+
+  it('waits for the team’s picks: the ads after the scan, the angles after the strategy, and three takes on the one angle picked', async () => {
+    const form = { source: { kind: 'competitor', input: 'website', url: 'horizonvisa.example' }, platforms: ['meta'], goal: 'consultations', pickFirst: true };
+    const runId = await startRun(form);
+    // As the app does once the run is saved (live.ts, saveRunOptions).
+    expect(parseNewRun(form)).toMatchObject({ ok: true, value: { pickFirst: true } });
+    await t.asUser(teammate, () => t.db.query(`select public.set_run_pick_first($1, true)`, [runId]));
+
+    await runTracker(runId);
+    expect(await next(runId, 'strategist')).toBe(false);
+    let run = toRun(await dashboardRun(runId));
+    expect(run).toMatchObject({ status: 'waiting', pickFirst: true, stages: { strategist: { status: 'waiting' } } });
+
+    // Two of the report's ads, ticked on the run page; the app hands the pipeline the stage returned.
+    const ads = (await t.db.query<{ id: string; text: string }>(`select a.id, a.text from public.competitor_ads a join public.competitor_reports r on r.id = a.report_id where r.run_id = $1 order by a.position`, [runId])).rows;
+    const picked = [ads[3]!, ads[0]!];
+    expect(await t.asUser(teammate, () => t.value<string>(`select public.continue_with_ads($1, $2)`, [runId, picked.map((a) => a.id)]))).toBe('strategist');
+    const strategist = await runStrategist(runId);
+    expect((materialOf(strategist.body).competitor_report as { chosen_ads: { text: string }[] }).chosen_ads.map((a) => a.text)).toEqual(picked.map((a) => a.text));
+
+    expect(await next(runId, 'content')).toBe(false);
+    expect(toRun(await dashboardRun(runId)).stages.content.status).toBe('waiting');
+    const angles = toStrategy(await dashboardStrategy(runId)).angles;
+    expect(await t.asUser(teammate, () => t.value<string>(`select public.continue_with_angles($1, $2)`, [runId, [angles[1]!.id]]))).toBe('content');
+    const content = await runContent(runId);
+    expect(String(content.body.system)).toContain('A, B and C follow the angle "Family first"');
+
+    run = toRun(await dashboardRun(runId));
+    expect(run).toMatchObject({ status: 'review', picked: { ads: 2, angles: 1 } });
+    expect(run.chosenAds).toBeUndefined();
+    expect(toAdSet(await dashboardAdSet(runId)).variants.map((v) => [v.label, v.angle])).toEqual([['A', 'Family first'], ['B', 'Family first'], ['C', 'Family first']]);
   });
 
   it('holds the ads of a custom run for a go-ahead when the content agent is switched off', async () => {

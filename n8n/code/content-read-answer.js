@@ -6,7 +6,14 @@
 const res = $input.first().json;
 const ctx = $('Begin: load the run').first().json;
 const run = ctx.run;
-const angles = ctx.strategy.angles;
+// The angle each variant follows: the strategy's three in order, or spread
+// over the angles the team picked, as "Build the Claude request" asked.
+const chosen = Array.isArray(ctx.chosen_angles) && ctx.chosen_angles.length > 0
+  ? ctx.strategy.angles.filter(function (a) { return ctx.chosen_angles.indexOf(a.position) !== -1; })
+  : [];
+const angles = chosen.length > 0
+  ? [0, 1, 2].map(function (i) { return chosen[Math.floor(i * chosen.length / 3)]; })
+  : ctx.strategy.angles;
 const u = res.usage || {};
 const usage = {
   model: res.model || 'claude-haiku-5-5',

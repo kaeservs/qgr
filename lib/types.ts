@@ -117,6 +117,16 @@ export interface Run {
   guidance?: string;
   /** A run built on a few of a report's ads, chosen by a person: how many. It starts at the strategist. */
   chosenAds?: number;
+  /** The run waits after each agent for the team to pick the ads and the angles the next one works from. */
+  pickFirst?: boolean;
+  /** What the team picked inside the run: how many of its report's ads, and of its strategy's angles. */
+  picked?: { ads?: number; angles?: number };
+}
+
+/** What a person picks from while a run waits: its report's ads for the strategist, its strategy's angles for the Content Agent. */
+export interface RunPicks {
+  ads: AdExample[];
+  angles: StrategyAngle[];
 }
 
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';

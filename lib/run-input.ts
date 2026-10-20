@@ -14,6 +14,8 @@ export interface RunOptions {
   goal: Goal;
   /** The team's direction for the agents: what to make of the source, which hooks to focus on. */
   guidance?: string;
+  /** The run waits after each agent for the team to pick the ads and the angles the next one works from. */
+  pickFirst?: boolean;
 }
 
 export interface NewRunInput extends RunOptions {
@@ -225,8 +227,19 @@ function parseRunOptions(body: Record<string, unknown>): ParseResult<RunOptions>
       goal: body.goal,
       ...(title ? { title } : {}),
       ...(guidance ? { guidance } : {}),
+      ...(body.pickFirst === true ? { pickFirst: true } : {}),
     },
   };
+}
+
+/** Validates the ids a person picked inside a run: the report's ads or the strategy's angles, each once, in the order picked. */
+export function parsePicks(ids: unknown, most: number): ParseResult<string[]> {
+  const list = Array.isArray(ids) ? ids : null;
+  if (!list || !list.every((id): id is string => typeof id === 'string' && RECORD_ID.test(id)) || new Set(list).size !== list.length) {
+    return { ok: false, error: 'Pick from this run.' };
+  }
+  if (list.length > most) return { ok: false, error: `Pick up to ${most}, or use them all.` };
+  return { ok: true, value: list };
 }
 
 /**

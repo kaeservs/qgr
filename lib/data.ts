@@ -81,6 +81,9 @@ export const savePostPages: DataSource['savePostPages'] = (pages) => source().sa
 export const setPostForReal: DataSource['setPostForReal'] = (place, on) => source().setPostForReal(place, on);
 export const setCompetitorTracked: DataSource['setCompetitorTracked'] = (id, tracked) => source().setCompetitorTracked(id, tracked);
 export const continueRun: DataSource['continueRun'] = (runId) => source().continueRun(runId);
+export const continueWithAds: DataSource['continueWithAds'] = (runId, adIds) => source().continueWithAds(runId, adIds);
+export const continueWithAngles: DataSource['continueWithAngles'] = (runId, angleIds) => source().continueWithAngles(runId, angleIds);
+export const getRunPicks: DataSource['getRunPicks'] = (runId) => source().getRunPicks(runId);
 
 export const getPosts: DataSource['getPosts'] = () => source().getPosts();
 export const schedulePost: DataSource['schedulePost'] = (post) => source().schedulePost(post);
