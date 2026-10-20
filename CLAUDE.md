@@ -929,9 +929,12 @@ X's ads APIs, which each need their own access.
   - Every Higgsfield step reads its answer in code
     (`n8n/code/video-*.js`), tested in `n8n/ai-video.test.ts`. The workflow
     keeps no execution data for runs that succeed.
-  - The answers to `generate_video` and `job_status` follow what Higgsfield's
-    MCP documents, not a real video: check the first real one against
-    `video-read-start.js` and `video-read-job.js`.
+  - Checked with the first real video (2026-10-20: Seedance 2.0 Mini, 4 s,
+    480p, silent, 2 credits): offered the preset "IN THE DARK", declined, sent
+    as written once; the send answers `results[0].id` as the job;
+    `job_status` answers `generation.status` (in_progress, then completed in
+    about two and a half minutes) with `results.rawUrl`, the MP4 (1.5 MB).
+    These answers are fixtures in `n8n/ai-video.test.ts`.
 - The library (`AiVideoStudio`) shows each video as waiting, being made,
   ready (it plays, from a link signed for an hour), not made (and why), check
   Higgsfield, or nothing made (the stand-in), and re-reads while one is under
