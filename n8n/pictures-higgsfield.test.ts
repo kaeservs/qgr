@@ -100,6 +100,13 @@ describe('the request and its price', () => {
       { kind: 'retry', variant_id: VARIANT, error: 'Higgsfield could not be reached for its price' },
     ]);
     expect(runJson('pictures-higgsfield-price.js', [answer({ job_id: 'job-9' })], { 'Write the Higgsfield request': written })[0]).toMatchObject({ kind: 'refused', error: expect.stringContaining('check its history') });
+    // One of Higgsfield's presets offered in place of the prompt (seen for videos only): never taken.
+    const offer = answer({ notice: { type: 'preset_recommendation', data: { preset: { id: 'preset-1', name: 'GOLDEN HOUR' }, retry_literal_with: { declined_preset_id: 'preset-1' } } } });
+    expect(runJson('pictures-higgsfield-price.js', [offer], { 'Write the Higgsfield request': written })[0]).toEqual({
+      kind: 'refused',
+      variant_id: VARIANT,
+      error: 'Higgsfield offered its preset "GOLDEN HOUR" in place of the prompt as written: nothing was made. Change the picture\'s prompt a little and ask again.',
+    });
   });
 });
 

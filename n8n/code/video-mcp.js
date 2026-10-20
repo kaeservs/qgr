@@ -55,6 +55,33 @@ function notReached(json, own) {
   return Object.prototype.hasOwnProperty.call(json, own);
 }
 
+/**
+ * Higgsfield's offer of one of its presets in place of the prompt ("This
+ * prompt looks like the Higgsfield preset … generate literally"), which comes
+ * instead of a price or a job: nothing was priced or made. Its id and name,
+ * or null. Seen on every video prompt tried on 2026-10-20, never on a picture.
+ */
+function presetNotice(json) {
+  const answer = answerOf(json);
+  const notice = answer && answer.notice;
+  if (notice && typeof notice === 'object' && notice.type === 'preset_recommendation') {
+    const data = notice.data && typeof notice.data === 'object' ? notice.data : {};
+    const preset = data.preset && typeof data.preset === 'object' ? data.preset : {};
+    const id = (data.retry_literal_with && data.retry_literal_with.declined_preset_id) || preset.id || '';
+    return { id: String(id), name: typeof preset.name === 'string' ? preset.name : '' };
+  }
+  const words = wordsOf(json);
+  const said = words.match(/declined_preset_id:?\s*"?([A-Za-z0-9-]{8,})/);
+  if (!said) return null;
+  const name = words.match(/preset "([^"]+)"/);
+  return { id: said[1], name: name ? name[1] : '' };
+}
+
+/** What the team is told when Higgsfield offered a preset again after it was declined. */
+function presetSaid(preset) {
+  return 'Higgsfield offered its preset' + (preset.name ? ' "' + preset.name + '"' : '') + ' in place of the prompt as written';
+}
+
 /** A refusal that means nothing was made (the request, the model, the credits, the content). */
 function isRefusal(message) {
   return /input validation error|invalid request|invalid arguments|unknown model|not enough credits|insufficient|top up|balance is|out of credits|nsfw|moderation|content policy|not allowed|prohibited|rejected/i.test(message);

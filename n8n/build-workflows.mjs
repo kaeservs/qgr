@@ -549,6 +549,17 @@ const ${varName} = node({
   output: [${output}],
 });`;
 
+/**
+ * Higgsfield offered one of its presets in place of the prompt: declined, and
+ * the same request asked once more as written (video-as-written.js). Three
+ * steps after a Higgsfield call: the script, a branch on what it found, and
+ * the call again. Both ways lead to the same reader.
+ */
+const asWrittenNodes = (prefix, { decline, branch, call }, tool, source, key, output) => `
+${codeNode(prefix + 'Decline', decline, code(['video-mcp.js', 'video-as-written.js'], { "$('Write the request')": `$('${source}')`, "const KEY = 'generate_input';": `const KEY = '${key}';` }), `{ as_written: true, ${key}: '{"params":{"declined_preset_id":"preset-id"}}' }`)}
+${ifTrue(prefix + 'AsWritten', branch, '{{ $json.as_written === true }}')}
+${higgsfieldNode(prefix + 'Again', call, tool, `{{ $json.${key} }}`, output)}`;
+
 /** A switch on expressions that come out true or false, one output each, in order. */
 const routeNode = (varName, name, routes) => `
 const ${varName} = switchCase({
@@ -1550,6 +1561,7 @@ const priceIt = trigger({
 // ---- the price, asked before anyone presses Generate
 ${codeNode('priceRequest', 'Price request', videoCode('video-quote-request.js', ['video-params.js']), `{ quote_input: '{"params":{"model":"seedance_2_0_mini","get_cost":true},"get_cost":true}' }`)}
 ${higgsfieldNode('higgsPrice', 'Higgsfield: price', 'generate_video', '{{ $json.quote_input }}', `{ structuredContent: { cost: { credits: 2, credits_exact: 2 } }, content: [{ type: 'text', text: 'Cost preflight for seedance_2_0_mini: 2 credits (2 exact). No job submitted.' }] }`)}
+${asWrittenNodes('price', { decline: 'Decline a preset (price)', branch: 'As written? (price)', call: 'Higgsfield: price, as written' }, 'generate_video', 'Price request', 'quote_input', `{ structuredContent: { cost: { credits: 2, credits_exact: 2 } }, content: [{ type: 'text', text: 'Cost preflight for seedance_2_0_mini: 2 credits (2 exact). No job submitted.' }] }`)}
 ${codeNode('readPrice', 'Read the price', videoCode('video-read-quote.js'), `{ ok: true, credits: 2 }`)}
 ${higgsfieldNode('higgsBalance', 'Higgsfield: credits left', 'balance', '{}', `{ structuredContent: { credits: 280, subscription_plan_type: 'starter' }, content: [{ type: 'text', text: 'Credits: 280 | Plan: starter' }] }`, "\n    executeOnce: true,")}
 ${codeNode('answer', 'The answer', videoCode('video-answer.js'), `{ ok: true, credits: 2, balance: 280 }`)}
@@ -1587,9 +1599,11 @@ ${codeNode('readMedia', 'Read the picture\'s id', videoCode('video-read-media.js
 ${ifTrue('pictureTaken', 'Picture taken?', '{{ $json.kind === "go" }}')}
 ${codeNode('writeRequest', 'Write the request', videoCode('video-build-request.js', ['video-params.js']), `{ id: 'video-id', generate_input: '{"params":{"model":"seedance_2_0_mini"}}' }`)}
 ${higgsfieldNode('makeIt', 'Higgsfield: make it', 'generate_video', '{{ $json.generate_input }}', `{ structuredContent: { job_id: 'job-id' } }`)}
+${asWrittenNodes('make', { decline: 'Decline a preset', branch: 'As written?', call: 'Higgsfield: make it, as written' }, 'generate_video', 'Write the request', 'generate_input', `{ structuredContent: { job_id: 'job-id' } }`)}
 ${codeNode('readStart', 'Read the answer', videoCode('video-read-start.js'), `{ kind: 'started', id: 'video-id', job_id: 'job-id', credits: null }`)}
 ${codeNode('writeRequestPicture', 'Write the request (picture)', videoCode('video-build-request.js', ['video-params.js']), `{ id: 'video-id', generate_input: '{"params":{"model":"kling3_0"}}' }`)}
 ${higgsfieldNode('makeItPicture', 'Higgsfield: make it (picture)', 'generate_video', '{{ $json.generate_input }}', `{ structuredContent: { job_id: 'job-id' } }`)}
+${asWrittenNodes('makePicture', { decline: 'Decline a preset (picture)', branch: 'As written? (picture)', call: 'Higgsfield: make it (picture), as written' }, 'generate_video', 'Write the request (picture)', 'generate_input', `{ structuredContent: { job_id: 'job-id' } }`)}
 ${codeNode('readStartPicture', 'Read the answer (picture)', code(['video-mcp.js', 'video-read-start.js'], { "$('Write the request')": "$('Write the request (picture)')" }), `{ kind: 'started', id: 'video-id', job_id: 'job-id', credits: null }`)}
 ${routeNode('whatHappened', 'What happened?', [
   ['started', '{{ $json.kind === "started" }}'],
@@ -1628,14 +1642,16 @@ ${ifTrue('stored', 'In Storage?', '{{ $json.kind === "stored" }}')}
 ${rpcNode('recordReady', 'Record: ready', 'video_finish', '{{ JSON.stringify({ p_id: $json.id, p_path: $json.path }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 
 const noteFlow = sticky('## AI video\\nThe team asks on the AI video page. **Price** answers the page with Higgsfield\\'s price for the request (generate_video with **get_cost**, which makes nothing) and the credits left on the plan. Every minute, and at once when someone asks, the asks waiting (**video_take_due**, each sent once) go to Higgsfield, and the jobs being made (**video_take_making**) are checked until their video can be fetched, stored in ai-videos and recorded.', [everyMinute, makeNow, priceIt, takeDue, eachAsk, takeMaking, eachJob], { color: 4 });
-const noteHiggsfield = sticky('## Higgsfield\\nCalled through its MCP (**mcp.higgsfield.ai**) with the **Higgsfield** credential (MCP OAuth2 API), signed in with the team\\'s own Higgsfield account: every video spends the plan\\'s credits, even on an Unlimited plan, and the team\\'s monthly limit in Settings holds them. A first picture is signed for 15 minutes and imported first (**media_import_url**).\\n\\nAn ask is sent once. Not reached at all, it waits for the next minute (three tries). Refused, nothing was made. Any other trouble after sending is **unknown**: never sent again by itself (Higgsfield: do not automatically resubmit), a person checks Higgsfield\\'s history.', [forReal, firstPicture, signPicture, pictureLink, linkMade, importPicture, readMedia, pictureTaken, writeRequest, makeIt, readStart, writeRequestPicture, makeItPicture, readStartPicture, whatHappened], { color: 5 });
+const noteHiggsfield = sticky('## Higgsfield\\nCalled through its MCP (**mcp.higgsfield.ai**) with the **Higgsfield** credential (MCP OAuth2 API), signed in with the team\\'s own Higgsfield account: every video spends the plan\\'s credits, even on an Unlimited plan, and the team\\'s monthly limit in Settings holds them. A first picture is signed for 15 minutes and imported first (**media_import_url**).\\n\\nAn ask is sent once. Not reached at all, it waits for the next minute (three tries). Refused, nothing was made. Any other trouble after sending is **unknown**: never sent again by itself (Higgsfield: do not automatically resubmit), a person checks Higgsfield\\'s history.\\n\\nHiggsfield may offer one of its presets in place of the prompt: nothing is priced or made, so it is declined and the request asked once more as written (**declined_preset_id**). Offered again, nothing was made and the page says so.', [forReal, firstPicture, signPicture, pictureLink, linkMade, importPicture, readMedia, pictureTaken, writeRequest, makeIt, makeDecline, makeAsWritten, makeAgain, readStart, writeRequestPicture, makeItPicture, makePictureDecline, makePictureAsWritten, makePictureAgain, readStartPicture, whatHappened], { color: 5 });
 const noteStandIn = sticky('## Stand-in\\nThe way taken while AI video is not switched on (Settings, AI video). Nothing is sent and nothing is spent: the page says no video was made and where to switch it on.', [standIn, recordStandIn], { color: 3 });
 
 export default workflow('qgr-ai-video', 'QGR · AI video')
   .add(priceIt)
   .to(priceRequest)
   .to(higgsPrice)
-  .to(readPrice)
+  .to(priceDecline)
+  .to(priceAsWritten.onTrue(priceAgain.to(readPrice)).onFalse(readPrice))
+  .add(readPrice)
   .to(higgsBalance)
   .to(answer)
   .to(respond)
@@ -1645,7 +1661,9 @@ export default workflow('qgr-ai-video', 'QGR · AI video')
   .to(takeDue)
   .add(takeDue)
   .to(eachAsk)
-  .to(forReal.onTrue(firstPicture.onTrue(signPicture.to(pictureLink).to(linkMade.onTrue(importPicture.to(readMedia).to(pictureTaken.onTrue(writeRequestPicture.to(makeItPicture).to(readStartPicture).to(whatHappened)).onFalse(whatHappened))).onFalse(whatHappened))).onFalse(writeRequest.to(makeIt).to(readStart))).onFalse(standIn.to(recordStandIn)))
+  .to(forReal.onTrue(firstPicture.onTrue(signPicture.to(pictureLink).to(linkMade.onTrue(importPicture.to(readMedia).to(pictureTaken.onTrue(writeRequestPicture.to(makeItPicture).to(makePictureDecline).to(makePictureAsWritten.onTrue(makePictureAgain.to(readStartPicture)).onFalse(readStartPicture))).onFalse(whatHappened))).onFalse(whatHappened))).onFalse(writeRequest.to(makeIt).to(makeDecline).to(makeAsWritten.onTrue(makeAgain.to(readStart)).onFalse(readStart)))).onFalse(standIn.to(recordStandIn)))
+  .add(readStartPicture)
+  .to(whatHappened)
   .add(readStart)
   .to(whatHappened.onCase(0, recordStarted).onCase(1, recordFailed).onCase(2, recordRetry).onCase(3, recordUnknown))
   .add(everyMinute)

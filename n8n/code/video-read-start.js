@@ -1,6 +1,7 @@
 // Higgsfield's answer to an ask, read once and recorded once:
 //   took it        -> started, with its job (and its price, when it says one)
-//   refused it     -> refused: nothing was made
+//   refused it     -> refused: nothing was made (so is a preset offered again
+//                     in place of the prompt after it was declined: no job)
 //   not reached    -> retry: nothing was sent, so it is sent again next minute
 //   anything else  -> unknown: it may have been made, so it is never sent
 //                     again by itself (Higgsfield: "do not automatically
@@ -17,6 +18,8 @@ return $input.all().map(function (item, i) {
         : { kind: 'unknown', id: sent.id, error: 'Higgsfield may have started it (' + error + '). Check its history before asking again.' },
     };
   }
+  const preset = presetNotice(json);
+  if (preset) return { json: { kind: 'refused', id: sent.id, error: presetSaid(preset) + ': nothing was made. Change the prompt a little and ask again.' } };
   const answer = answerOf(json);
   const words = wordsOf(json);
   const fromWords = words.match(/job[_ -]?id[\s:="']+([A-Za-z0-9_-]{6,})/i);

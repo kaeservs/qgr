@@ -691,6 +691,9 @@ X's ads APIs, which each need their own access.
   - An ad whose picture Higgsfield has is never taken again
     (`picture_in_flight`), whatever its claim says. A picture stopped or asked
     again meanwhile is kept with the ad's others when it arrives.
+  - A preset Higgsfield offers in place of the prompt (as it does for videos,
+    AI video below) is read as nothing made, with the reason; pictures have
+    never been offered one, so they are not asked again as written.
   - The answers to `generate_image` and `job_status` follow what Higgsfield's
     MCP documents, not a real picture: check the first real one against
     `pictures-higgsfield-job.js` and `pictures-higgsfield-file.js`.
@@ -883,6 +886,14 @@ X's ads APIs, which each need their own access.
   before and after), with the credits left on the plan (`balance`). A price
   is shown only for the settings it was asked for. The words of the prompt do
   not change it, so they do not ask again.
+- Higgsfield may answer a video's price or its ask with one of its presets in
+  place of the prompt ("looks like the Higgsfield preset IN THE DARK … generate
+  literally"), and then nothing is priced or made: on 2026-10-20 it did for
+  every video prompt tried, never for a picture. The team asked for its own
+  prompt, so "Decline a preset" asks the same request once more with
+  `declined_preset_id` (`video-as-written.js`, after each `generate_video`
+  step); offered again, nothing was made and the page says so. A preset's id
+  is never read as a job (`presetNotice` in `video-mcp.js`).
 - AI video is off until the team switches it on (Settings, AI video:
   `team_settings.videos_live`, through `set_video_settings`, which asks once
   more first). Off, Generate goes through "Higgsfield (stand-in)": nothing is sent
