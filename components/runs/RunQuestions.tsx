@@ -2,14 +2,27 @@
 
 import { ArrowRight, X as Close } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { cx } from '@/lib/cx';
+import type { MediaSetup, RunMediaInput } from '@/lib/run-media';
 import video from '../video/video.module.css';
+import { MediaChoice, mediaAnswer } from './MediaChoice';
+import type { MediaDraft } from './MediaChoice';
 import styles from './runs.module.css';
 
 /** What a run is asked once Start run is pressed, before anything is saved. */
 export interface RunAnswers {
   /** The run waits after each agent for the team to pick what the next one works from. */
   pickFirst: boolean;
+  /** What the ads are made of, and Higgsfield's references. Absent for a run from a clip, whose ads are the clip. */
+  media?: RunMediaInput;
+}
+
+/** The media question's state, kept by whoever opens the dialog so the answer outlasts Back. */
+export interface MediaQuestion {
+  setup: MediaSetup;
+  draft: MediaDraft;
+  setDraft: Dispatch<SetStateAction<MediaDraft>>;
 }
 
 /**
@@ -46,10 +59,34 @@ export function PickFirstChoice({ skipsTracker, value, onChange, disabled = fals
 }
 
 /** The questions a run is asked after Start run, in a dialog: Back keeps the form as it was. */
-export function RunQuestions({ skipsTracker, busy, busyLabel = 'Starting…', onStart, onClose }: { skipsTracker: boolean; busy: boolean; busyLabel?: string; onStart: (answers: RunAnswers) => void; onClose: () => void }) {
+export function RunQuestions({
+  skipsTracker,
+  media,
+  busy,
+  busyLabel = 'Starting…',
+  onStart,
+  onClose,
+}: {
+  skipsTracker: boolean;
+  /** Absent for a run from a clip: its ads are the clip. */
+  media?: MediaQuestion | undefined;
+  busy: boolean;
+  busyLabel?: string;
+  onStart: (answers: RunAnswers) => void;
+  onClose: () => void;
+}) {
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const [pickFirst, setPickFirst] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function start() {
+    if (!media) return onStart({ pickFirst });
+    const answer = mediaAnswer(media.draft);
+    if (typeof answer === 'string') return setError(answer);
+    setError(null);
+    onStart({ pickFirst, media: answer });
+  }
 
   useEffect(() => {
     const d = dialog.current;
@@ -79,12 +116,18 @@ export function RunQuestions({ skipsTracker, busy, busyLabel = 'Starting…', on
       <div className={video.dialogBody}>
         <PickFirstChoice skipsTracker={skipsTracker} value={pickFirst} onChange={setPickFirst} disabled={busy} />
         <p className="muted small">Three ads are written either way: one angle picked gets three takes on it, two get two and one.</p>
+        {media && <MediaChoice setup={media.setup} draft={media.draft} setDraft={media.setDraft} disabled={busy} />}
+        {error && (
+          <p className="error-text" role="alert">
+            {error}
+          </p>
+        )}
       </div>
       <footer className={video.dialogFoot}>
         <button type="button" className="btn btn-quiet" onClick={onClose} disabled={busy}>
           Back
         </button>
-        <button type="button" className="btn btn-primary" onClick={() => onStart({ pickFirst })} disabled={busy} aria-busy={busy}>
+        <button type="button" className="btn btn-primary" onClick={start} disabled={busy} aria-busy={busy}>
           {busy ? busyLabel : 'Start run'}
           {!busy && <ArrowRight size={16} aria-hidden />}
         </button>

@@ -9,6 +9,9 @@ import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { MAX_CHOSEN_ADS, MAX_GUIDANCE } from '@/lib/run-input';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { AdExample, Goal, Platform } from '@/lib/types';
+import type { MediaSetup } from '@/lib/run-media';
+import { firstDraft, MediaChoice, mediaAnswer } from '../runs/MediaChoice';
+import type { MediaDraft } from '../runs/MediaChoice';
 import { PickFirstChoice } from '../runs/RunQuestions';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
@@ -22,7 +25,7 @@ import styles from './competitors.module.css';
  * run skips the tracker (the report is already there) and the strategist
  * builds its angles on the ads chosen, with the rest of the report as context.
  */
-export function ChooseAds({ competitor, reportId, ads }: { competitor: string; reportId: string; ads: AdExample[] }) {
+export function ChooseAds({ competitor, reportId, ads, mediaSetup }: { competitor: string; reportId: string; ads: AdExample[]; mediaSetup: MediaSetup }) {
   const [chosen, setChosen] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const full = chosen.length >= MAX_CHOSEN_ADS;
@@ -51,12 +54,12 @@ export function ChooseAds({ competitor, reportId, ads }: { competitor: string; r
           <AdThumb key={ad.id} ad={ad} chosen={chosen.includes(ad.id)} onChoose={(on) => toggle(ad.id, on)} />
         ))}
       </div>
-      {open && <StartFromAds competitor={competitor} reportId={reportId} ads={ads.filter((a) => chosen.includes(a.id))} onClose={() => setOpen(false)} />}
+      {open && <StartFromAds competitor={competitor} reportId={reportId} ads={ads.filter((a) => chosen.includes(a.id))} mediaSetup={mediaSetup} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
-function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: string; reportId: string; ads: AdExample[]; onClose: () => void }) {
+function StartFromAds({ competitor, reportId, ads, mediaSetup, onClose }: { competitor: string; reportId: string; ads: AdExample[]; mediaSetup: MediaSetup; onClose: () => void }) {
   const id = useId();
   const router = useRouter();
   const toast = useToast();
@@ -66,6 +69,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
   const [guidance, setGuidance] = useState('');
   const [title, setTitle] = useState('');
   const [pickFirst, setPickFirst] = useState(false);
+  const [media, setMedia] = useState<MediaDraft>(() => firstDraft(mediaSetup));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +83,8 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
 
   async function start() {
     if (platforms.length === 0) return setError('Pick at least one platform.');
+    const answer = mediaAnswer(media);
+    if (typeof answer === 'string') return setError(answer);
     setError(null);
     setBusy(true);
     const result = await startFromAdsAction({
@@ -89,6 +95,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
       ...(pickFirst ? { pickFirst: true } : {}),
+      media: answer,
     }).catch(() => ({ ok: false as const, status: 500, error: 'The run could not be started.' }));
     if (!result.ok) {
       setBusy(false);
@@ -165,6 +172,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
           <input className="input" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${competitor} · ${ads.length} chosen ad${ads.length === 1 ? '' : 's'}`} />
         </label>
         <PickFirstChoice skipsTracker value={pickFirst} onChange={setPickFirst} disabled={busy} />
+        <MediaChoice setup={mediaSetup} draft={media} setDraft={setMedia} disabled={busy} />
         {error && (
           <p className="error-text" role="alert">
             {error}

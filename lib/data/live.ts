@@ -10,7 +10,7 @@ import { getViewer } from '../session';
 import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
 import type { PipelineConfig } from '../supabase/config';
 import type { RunOptions } from '../run-input';
-import { videoPriceRequest } from '../run-media';
+import { forTheRun, videoPriceRequest } from '../run-media';
 import type { StageKey } from '../types';
 import { askPrice } from '../video-price';
 import type { Json } from '../supabase/database.types';
@@ -166,6 +166,11 @@ async function runVideoCredits(input: RunOptions): Promise<Saved<number | null>>
   if (!video) return { ok: true, value: null, sample: false };
   const price = await liveData.priceVideo(videoPriceRequest(video));
   if (!price.ok) return { ok: false, status: price.status, error: `Higgsfield could not price the videos, so the run did not start: ${price.error}` };
+  // set_run_media holds the limit again; asked here, a run that would pass it is not recorded at all.
+  const budget = await liveData.getVideoBudget();
+  if (budget.spent + forTheRun(price.value.credits) > budget.cap) {
+    return { ok: false, status: 400, error: `Three videos at ${price.value.credits} credits would take this month past its Higgsfield limit of ${budget.cap} credits (${budget.spent} used). Pick a shorter or lower video, or raise the limit in Settings.` };
+  }
   return { ok: true, value: price.value.credits, sample: false };
 }
 

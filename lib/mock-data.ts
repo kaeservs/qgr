@@ -212,6 +212,28 @@ const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
 
 export const strategies: Strategy[] = [
   {
+    id: 's-site',
+    title: 'See where the money goes',
+    createdAt: '2026-10-08T09:14:00Z',
+    status: 'draft',
+    runId: 'r-1046',
+    competitorIds: [],
+    sourceLabel: 'Text · project visits',
+    goal: 'consultations',
+    audiences: ['Investors comparing EB-5 projects', 'Families who want to see a project before they commit'],
+    positioning: 'The advisor that shows the projects it checks, with risk spelled out.',
+    angles: [
+      { id: 'sa-21', name: 'See the site', why: 'The text’s point: investors can visit the projects we review.', hook: 'Visit the project before you invest.' },
+      { id: 'sa-22', name: 'Diligence you can read', why: 'Every project comes with its file, which few advisors share.', hook: 'Ask for the project’s file.' },
+      { id: 'sa-23', name: 'Plain about risk', why: 'EB-5 is an investment with risk, and the text says so.', hook: 'Every investment carries risk. Here is ours, plainly.' },
+    ],
+    channels: [
+      { platform: 'meta', share: 70, role: 'Reach investors comparing projects', format: 'Video' },
+      { platform: 'linkedin', share: 30, role: 'Reach professionals at work', format: 'Video' },
+    ],
+    guardrails: GUARDRAILS,
+  },
+  {
     id: 's-filing',
     title: 'Stay while you file',
     createdAt: '2026-10-07T10:12:00Z',
@@ -387,7 +409,61 @@ export const strategies: Strategy[] = [
   },
 ];
 
+/** A sample run's ad with its own AI video: the sample clip stands in for what Higgsfield made (it says so in the picture). */
+const sampleAdVideo = (id: string, status: 'ready' | 'making' | 'failed', error?: string) => ({
+  id,
+  status,
+  seconds: SAMPLE_CLIP.duration,
+  aspect: '16:9' as const,
+  quality: '720p',
+  ...(status === 'ready' ? { path: `videos/${id}.mp4`, url: SAMPLE_CLIP_URL } : {}),
+  ...(error ? { error } : {}),
+});
+
 export const adSets: AdSet[] = [
+  {
+    id: 'a-site',
+    title: 'See where the money goes',
+    createdAt: '2026-10-08T09:31:00Z',
+    runId: 'r-1046',
+    strategyId: 's-site',
+    status: 'review',
+    variants: [
+      {
+        id: 'v-site-a',
+        label: 'A',
+        angle: 'See the site',
+        creative: { text: 'Visit the project before you invest.', style: 'arcs' },
+        aiVideo: sampleAdVideo('v-sample-site-a', 'ready'),
+        copy: {
+          meta: { text: 'We take investors to the EB-5 projects we review. See the site, ask your questions, then decide.', headline: 'See the project first', description: 'Free consultation', cta: 'Book now' },
+          linkedin: { text: 'Before you invest in an EB-5 project, visit it. We arrange site visits for the projects we review.', headline: 'Visit before you invest', cta: 'Learn more' },
+        },
+      },
+      {
+        id: 'v-site-b',
+        label: 'B',
+        angle: 'Diligence you can read',
+        creative: { text: 'Ask for the project’s file.', style: 'split' },
+        aiVideo: sampleAdVideo('v-sample-site-b', 'making'),
+        copy: {
+          meta: { text: 'Every EB-5 project we recommend comes with its due-diligence file. Ask us for it.', headline: 'Read the file first', description: 'Free consultation', cta: 'Book now' },
+          linkedin: { text: 'We share the due-diligence file for every EB-5 project we recommend. Read it before you decide.', headline: 'Diligence you can read', cta: 'Learn more' },
+        },
+      },
+      {
+        id: 'v-site-c',
+        label: 'C',
+        angle: 'Plain about risk',
+        creative: { text: 'Every investment carries risk.', style: 'spotlight' },
+        aiVideo: sampleAdVideo('v-sample-site-c', 'failed', 'Higgsfield turned the prompt down. Nothing was made or spent.'),
+        copy: {
+          meta: { text: 'EB-5 is an investment, and every investment carries risk. We set it out plainly, project by project.', headline: 'Plain about risk', description: 'Free consultation', cta: 'Book now' },
+          linkedin: { text: 'EB-5 carries investment risk. We explain it plainly for every project we review, before you commit.', headline: 'Risk, spelled out', cta: 'Learn more' },
+        },
+      },
+    ],
+  },
   {
     id: 'a-clip',
     title: 'EB-5, explained',
@@ -789,6 +865,40 @@ export const adSets: AdSet[] = [
 ];
 
 export const runs: Run[] = [
+  {
+    id: 'r-1046',
+    title: 'Text: Visiting the projects we review',
+    source: {
+      kind: 'custom',
+      type: 'text',
+      excerpt:
+        'We take investors to see the EB-5 projects we review before they commit: the site, the developer, the due-diligence file. EB-5 is an investment with risk, and seeing the project is part of judging it. Processing times are estimates.',
+    },
+    platforms: ['meta', 'linkedin'],
+    goal: 'consultations',
+    createdAt: '2026-10-08T09:10:00Z',
+    summary: 'Three ads, each with its own AI video.',
+    media: {
+      kind: 'video',
+      video: { seconds: 15, quality: '720p', aspect: '16:9', credits: null },
+      references: [{ path: 'refs/00000000-0000-4000-8000-000000000000/3f2a9c4e-6b1d-4e8a-9c7f-1a2b3c4d5e6f.jpg', note: 'The project site at dusk', status: 'ready', url: SAMPLE_PICTURE_URL }],
+    },
+    stages: {
+      tracker: { status: 'skipped' },
+      strategist: { status: 'done', summary: 'Built a strategy with 3 angles from the text.' },
+      content: { status: 'done', summary: 'Wrote 3 ad variants for Meta and LinkedIn, each with a video prompt.' },
+    },
+    output: { strategyId: 's-site', adSetId: 'a-site' },
+    counts: { angles: 3, variants: 3 },
+    activity: [
+      { at: '2026-10-08T09:10:00Z', text: 'Run started from pasted text' },
+      { at: '2026-10-08T09:10:00Z', text: 'Every ad gets an AI video (15 s, 720p, 16:9), with one reference picture for Higgsfield' },
+      { at: '2026-10-08T09:10:00Z', text: 'Competitor Tracker skipped: custom runs start at the strategy' },
+      { at: '2026-10-08T09:14:00Z', text: 'Built a strategy with 3 angles' },
+      { at: '2026-10-08T09:31:00Z', text: 'Wrote 3 ad variants for Meta and LinkedIn' },
+      { at: '2026-10-08T09:31:00Z', text: "Asked Higgsfield for variant A's video" },
+    ],
+  },
   {
     id: 'r-1045',
     title: 'Text: What concurrent filing means for H-1B families',

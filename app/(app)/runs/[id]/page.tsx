@@ -17,8 +17,9 @@ import { formatDate, formatTime } from '@/lib/format';
 import { GO_AHEAD, STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
 import { SHOT_PATH } from '@/lib/run-input';
+import { answerOf, mediaSaid } from '@/lib/run-media';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
-import type { Run, StageKey } from '@/lib/types';
+import type { Run, RunMedia, StageKey } from '@/lib/types';
 import { length } from '@/lib/video/edit';
 import styles from '@/components/runs/runs.module.css';
 
@@ -155,6 +156,42 @@ function SourceBlock({ run, clipUrl }: { run: Run; clipUrl: string | null }) {
   );
 }
 
+const REFERENCE_STATE: Record<RunMedia['references'][number]['status'], string> = {
+  waiting: 'Going to Higgsfield',
+  ready: 'With Higgsfield',
+  failed: 'Not taken',
+};
+
+/** What the ads are made of, as asked at Start run, and the pictures Higgsfield keeps to. */
+function MediaBlock({ media }: { media: RunMedia }) {
+  return (
+    <>
+      <h3 className={styles.notesTitle}>What the ads are made of</h3>
+      <p className="small">{mediaSaid(media.kind, media.video)}</p>
+      {media.references.length > 0 && (
+        <ol className={styles.runRefs} aria-label="Reference pictures for Higgsfield">
+          {media.references.map((r, i) => (
+            <li key={r.path}>
+              <span className={styles.refThumb}>
+                {r.url ? <img src={r.url} alt={`Reference ${i + 1}${r.note ? `: ${r.note}` : ''}`} /> : null}
+                <span className={styles.refNum}>{i + 1}</span>
+              </span>
+              <span className={styles.refBody}>
+                <span className="small">{r.note ?? 'No note on what it shows'}</span>
+                <span className={cx('small', r.status === 'failed' ? styles.priceOver : 'muted')}>
+                  {REFERENCE_STATE[r.status]}
+                  {r.error ? `: ${r.error}` : ''}
+                  {!r.url && usingSampleData() ? ' · sample data keeps no uploads' : ''}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </>
+  );
+}
+
 export default async function RunPage({ params }: Props) {
   const run = await getRun((await params).id);
   if (!run) notFound();
@@ -239,6 +276,7 @@ export default async function RunPage({ params }: Props) {
             <blockquote className={styles.excerpt}>{run.guidance}</blockquote>
           </>
         )}
+        {run.media && <MediaBlock media={run.media} />}
       </section>
 
       <section className="section" aria-labelledby="agents">
@@ -283,7 +321,7 @@ export default async function RunPage({ params }: Props) {
                         Start from their link
                       </Link>
                     ) : (
-                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} pickFirst={run.pickFirst ?? false} />
+                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} pickFirst={run.pickFirst ?? false} media={run.media ? answerOf(run.media) : undefined} />
                     )}
                   </div>
                 )}

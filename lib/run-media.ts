@@ -11,7 +11,7 @@
 // them, measured 2026-10-20), and a run is three ads, so three of each.
 
 import { modelOf } from './ai-video';
-import type { Clip, RunMediaKind, RunVideo, VariantVideo } from './types';
+import type { AgentSettings, Clip, PictureModel, PictureQuality, RunMedia, RunMediaKind, RunVideo, VariantVideo, VideoBudget } from './types';
 import { RUN_MEDIA } from './types';
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -127,3 +127,44 @@ export function mediaSaid(kind: RunMediaKind, video?: RunVideo & { credits: numb
 }
 
 const trimCredits = (n: number) => String(Math.round(n * 100) / 100);
+
+/** What the question after Start run needs to know: the team's picture switch and model, and AI video's. */
+export interface MediaSetup {
+  /** A run nobody asked follows the picture switch, so the question starts there. */
+  picturesAuto: boolean;
+  pictureModel: PictureModel;
+  picturesQuality: PictureQuality;
+  /** AI video is switched on in Settings. */
+  videosLive: boolean;
+  /** What this month's Higgsfield limit still allows, in credits. */
+  creditsLeft: number;
+  /** The sample data prices nothing and keeps no uploads. */
+  sample: boolean;
+}
+
+export function mediaSetup(settings: Pick<AgentSettings, 'picturesAuto' | 'pictureModel' | 'picturesQuality'>, budget: VideoBudget, sample: boolean): MediaSetup {
+  return {
+    picturesAuto: settings.picturesAuto,
+    pictureModel: settings.pictureModel,
+    picturesQuality: settings.picturesQuality,
+    videosLive: budget.live,
+    creditsLeft: Math.max(0, Math.round((budget.cap - budget.spent) * 100) / 100),
+    sample,
+  };
+}
+
+/**
+ * Who makes a run's pictures: Higgsfield whenever the run has references
+ * (the other models take none), else the team's image model.
+ */
+export const picturesBy = (model: PictureModel, references: number): PictureModel => (references > 0 ? 'higgsfield' : model);
+
+/** A run's answer as it was given, for Start over: the same references, the video priced again. */
+export function answerOf(media: RunMedia): RunMediaInput {
+  const references = media.references.map((r) => ({ path: r.path, ...(r.note ? { note: r.note } : {}) }));
+  if (media.kind === 'video' && media.video) {
+    const { credits: _, ...video } = media.video;
+    return { kind: 'video', references, video };
+  }
+  return { kind: media.kind === 'video' ? 'design' : media.kind, references: media.kind === 'design' ? [] : references };
+}
