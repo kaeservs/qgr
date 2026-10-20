@@ -751,6 +751,39 @@ describe('Content Agent', () => {
     expect(() => run('content-build-request.js', { ...ctx, chosen_angles: [7] })).toThrow('The angles picked are not in the strategy.');
   });
 
+  it('writes each ad’s video prompt on a video run, and uses the team’s reference pictures by number', () => {
+    const videoCtx = {
+      ...ctx,
+      run: { ...ctx.run, ai_media: 'video', ai_video: { model: 'seedance_2_0_mini', seconds: 4, quality: '480p', aspect: '1:1', credits: 2 } },
+      references: [{ number: 1, note: 'Our Miami office' }, { number: 2, note: null }],
+    };
+    const { body } = run('content-build-request.js', videoCtx) as { body: Json };
+    const schema = JSON.stringify((body.output_config as { format: { schema: unknown } }).format.schema);
+    expect(schema).toContain('"video_prompt":{"type":"string"}');
+    expect(schema).toContain('"required":["label","creative_text","creative_style","image_prompt","copy","video_prompt","posts"]');
+    expect(String(body.system)).toContain('- creative_text: the words shown over the ad\'s video, eight words at most.');
+    expect(String(body.system)).toContain('- video_prompt: the ad\'s video, for a video model making 4 seconds at 1:1: one continuous shot');
+    expect(String(body.system)).toContain('Write image_prompt and video_prompt to use them where they fit, naming each as reference 1, reference 2 and so on.');
+    expect(materialOf(body).references).toEqual([{ number: 1, shows: 'Our Miami office' }, { number: 2 }]);
+
+    // The answer keeps each ad's video prompt.
+    const copy = { meta: { text: 't', headline: 'H', description: 'D', cta: 'Book now' }, x: { text: 't', headline: 'H' } };
+    const answer = { variants: ['A', 'B', 'C'].map((label) => ({ label, creative_text: 'w', creative_style: 'arcs', image_prompt: 'p', video_prompt: `  ${label}: a slow push-in on the office at dusk.  `, copy, posts: { facebook: 'P', instagram: 'C' } })) };
+    const out = run('content-read-answer.js', reply(answer), { 'Begin: load the run': videoCtx });
+    expect((out.p_ad_set as { variants: { video_prompt: string }[] }).variants.map((v) => v.video_prompt)).toEqual(['A: a slow push-in on the office at dusk.', 'B: a slow push-in on the office at dusk.', 'C: a slow push-in on the office at dusk.']);
+    // A picture run with references is told only about pictures.
+    const pictures = (run('content-build-request.js', { ...ctx, run: { ...ctx.run, ai_media: 'pictures' }, references: [{ number: 1, note: null }] }) as { body: Json }).body;
+    expect(String(pictures.system)).toContain('which the image model is given with every picture of this run');
+    expect(JSON.stringify(pictures.output_config)).not.toContain('video_prompt');
+
+    // Without a video run or references, the request and the answer are exactly as before.
+    const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
+    expect((run('content-build-request.js', { ...ctx, run: { ...ctx.run, ai_media: 'design', ai_video: null }, references: null }) as { body: Json }).body).toEqual(plain);
+    expect(JSON.stringify(plain)).not.toContain('reference');
+    const before = run('content-read-answer.js', reply(answer), { 'Begin: load the run': ctx });
+    expect((before.p_ad_set as { variants: Json[] }).variants[0]).not.toHaveProperty('video_prompt');
+  });
+
   it('fails when a variant is missing', () => {
     const out = run('content-read-answer.js', reply({ variants: [] }), { 'Begin: load the run': ctx });
     expect(out).toMatchObject({ ok: false, p_error: 'Claude did not write variant A.' });

@@ -23,6 +23,7 @@ const HELPERS: Record<string, string[]> = {
   'pictures-higgsfield-send.js': [],
   'pictures-higgsfield-file.js': [],
   'video-uploaded.js': [],
+  'references-link.js': [],
 };
 const script = (file: string, swap: Record<string, string> = {}) => {
   let src = [...(HELPERS[file] ?? ['video-mcp.js']), file].map((f) => readFileSync(join(here, 'code', f), 'utf8')).join('\n');
@@ -57,6 +58,38 @@ const ask = (over: Json = {}): Json => ({
 });
 const answer = (structuredContent: Json, text = '') => ({ structuredContent, content: [{ type: 'text', text }] });
 
+describe('a run’s reference pictures, given to Higgsfield once', () => {
+  const REF = { id: 'reference-1', run_id: 'run-1', position: 0, path: 'refs/user-1/picture-1.png' };
+  const STORAGE = 'https://tcinsdexwvzpznqlcpww.supabase.co/storage/v1';
+
+  it('signs each for 15 minutes, and tries again later when Storage does not', () => {
+    const links = runJson('references-link.js', [
+      { statusCode: 200, body: { signedURL: '/object/sign/run-refs/refs/user-1/picture-1.png?token=t' } },
+      { statusCode: 500, body: { message: 'Storage is down' } },
+    ], { 'One item per reference': [REF, REF] });
+    expect(links).toEqual([
+      { id: 'reference-1', url: `${STORAGE}/object/sign/run-refs/refs/user-1/picture-1.png?token=t` },
+      { kind: 'retry', id: 'reference-1', error: 'The reference picture could not be read from Storage (500): Storage is down' },
+    ]);
+  });
+
+  it('keeps the media id Higgsfield gives, as its MCP answered on 2026-10-20', () => {
+    const link = { id: 'reference-1', url: `${STORAGE}/object/sign/run-refs/refs/user-1/picture-1.png?token=t` };
+    // The real answer to media_import_url, taken free with the reference probe.
+    const imported = answer(
+      { media_id: '584ab776-ec07-466d-87bf-a7b42e0357ae', type: 'image', content_type: 'image/png', source_url: link.url },
+      'Imported and confirmed image URL. Pass media_id 584ab776-ec07-466d-87bf-a7b42e0357ae as medias[].value in generation tools.',
+    );
+    const read = runJson('references-read.js', [imported, { error: { message: 'The image could not be downloaded' } }, link], { 'Reference link': [link, link, link] });
+    expect(read).toEqual([
+      { kind: 'ready', id: 'reference-1', media_id: '584ab776-ec07-466d-87bf-a7b42e0357ae' },
+      { kind: 'failed', id: 'reference-1', error: 'The image could not be downloaded' },
+      // The step handed on what it was given: Higgsfield was not reached.
+      { kind: 'retry', id: 'reference-1', error: 'Higgsfield could not be reached to take the reference picture' },
+    ]);
+  });
+});
+
 describe('the request and its price', () => {
   it('asks GPT Image 2.5 for a square picture at the team’s quality, priced first with get_cost', () => {
     const [written] = runJson('pictures-higgsfield-request.js', [ask({ quality: 'medium' })]);
@@ -71,6 +104,23 @@ describe('the request and its price', () => {
     expect(quote).toEqual({ params: { ...(written!.params as Json), get_cost: true }, get_cost: true });
     // A quality Higgsfield is not asked for falls back to the cheapest.
     expect(runJson('pictures-higgsfield-request.js', [ask({ quality: 'ultra' })])[0]!.quality).toBe('low');
+  });
+
+  it('gives GPT Image 2.5 the run’s reference pictures with the picture, priced the same way', () => {
+    const [plain] = runJson('pictures-higgsfield-request.js', [ask()]);
+    const [written] = runJson('pictures-higgsfield-request.js', [ask({ references: ['media-office', 'media-brochure'] })]);
+    const params = written!.params as Json;
+    expect(params.medias).toEqual([
+      { role: 'image_references', value: 'media-office' },
+      { role: 'image_references', value: 'media-brochure' },
+    ]);
+    expect(params.prompt).toBe(
+      'A calm skyline at dusk, indigo and gold. Picture style: Warm natural light, indigo and gold accents. Use the reference pictures given for what they show: the real place, product or look to keep to. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.',
+    );
+    expect(JSON.parse(written!.quote_input as string)).toEqual({ params: { ...params, get_cost: true }, get_cost: true });
+    // Without references the request is exactly as before.
+    expect(runJson('pictures-higgsfield-request.js', [ask({ references: [] })])[0]).toEqual(plain);
+    expect(plain!.params).not.toHaveProperty('medias');
   });
 
   it('prices one picture for Settings and the studio, making nothing', () => {

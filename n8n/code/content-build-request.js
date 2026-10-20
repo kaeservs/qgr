@@ -93,6 +93,10 @@ const variantProps = {
   image_prompt: { type: 'string' },
   copy: { type: 'object', additionalProperties: false, required: run.platforms, properties: copyProps },
 };
+// A video run's ads each get an AI video from Higgsfield, made from the
+// variant's video_prompt; their words go over it. Only then is it asked for.
+const aiVideo = run.ai_media === 'video' && run.ai_video ? run.ai_video : null;
+if (aiVideo) variantProps.video_prompt = { type: 'string' };
 if (places.length > 0) {
   const postProps = {};
   places.forEach(function (p) { postProps[p] = { type: 'string' }; });
@@ -123,11 +127,13 @@ const creativeLines = clip
       '- image_prompt: an empty string. No image is needed: the clip is the creative.',
     ]
   : [
-      '- creative_text: the words on the image, eight words at most.',
+      aiVideo ? '- creative_text: the words shown over the ad\'s video, eight words at most.' : '- creative_text: the words on the image, eight words at most.',
       '- creative_style: arcs, split or spotlight, each used once across the three variants.',
       '- image_prompt: a prompt for an image model describing the scene only: no words in the image, QGR indigo (#1C1B9D) and gold (#EFB74A), no real or identifiable people, no flags.' +
         (brand.picture_style ? ' Keep to picture_style.' : ''),
-    ];
+    ].concat(aiVideo
+      ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ': one continuous shot, the scene and how the camera moves, in under 600 characters. No words, captions or logos in it (the words go over it later), no real or identifiable people, no flags. Each variant\'s video is its own.']
+      : []);
 const postLines = places.length > 0
   ? ['- posts: the same idea written in full as an organic post for each place, not the ad copy cut down:'].concat(places.map(function (p) { return '  ' + POSTS[p]; }))
   : [];
@@ -159,6 +165,10 @@ places.concat(run.platforms.indexOf('x') !== -1 ? ['x'] : []).forEach(function (
   if (brand.post_formats && brand.post_formats[p]) formats[p] = brand.post_formats[p];
 });
 const hasMemory = Object.keys(formats).length > 0 || examples.length > 0 || bestPosts.length > 0;
+// The team's reference pictures for the image model, by number, with what each shows.
+const references = clip ? [] : (Array.isArray(ctx.references) ? ctx.references : []).map(function (r) {
+  return r.note ? { number: r.number, shows: r.note } : { number: r.number };
+});
 
 const system = [
   'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. ' + whatToWrite,
@@ -175,6 +185,8 @@ const system = [
   'The material holds the strategy and what it came from: the competitor report, or QGR\'s own source. Use their specifics (a question the source answers, a gap in the competitor\'s ads), never a competitor\'s claim or name.',
 ]).concat(hasMemory
   ? ['Brand memory: follow post_formats for each place, and write like posts_that_work and our_best_posts (their format, length and tone) without copying their words.']
+  : []).concat(references.length > 0
+  ? ['references are the QGR team\'s reference pictures, which the image model is given with every picture' + (aiVideo ? ' and video' : '') + ' of this run, each with what it shows where the team said. Write ' + (aiVideo ? 'image_prompt and video_prompt' : 'image_prompt') + ' to use them where they fit, naming each as reference 1, reference 2 and so on.']
   : []).join('\n');
 
 // The team's direction for the run, in their words. Only when they gave one;
@@ -212,6 +224,7 @@ if (Object.keys(formats).length > 0) material.post_formats = formats;
 if (brand.picture_style && !clip) material.picture_style = brand.picture_style;
 if (examples.length > 0) material.posts_that_work = examples;
 if (bestPosts.length > 0) material.our_best_posts = bestPosts;
+if (references.length > 0) material.references = references;
 
 return [{
   json: {

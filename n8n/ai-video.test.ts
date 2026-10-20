@@ -112,6 +112,17 @@ describe('an ask, sent once', () => {
     // A first picture goes as Higgsfield's media id, the start frame.
     const [withPicture] = runAll('video-build-request.js', [ask({ model: 'kling3_0', quality: 'std', seconds: 5, media_id: 'media-9' })]);
     expect(JSON.parse(withPicture!.generate_input as string).params).toMatchObject({ model: 'kling3_0', mode: 'std', sound: 'off', medias: [{ role: 'start_image', value: 'media-9' }] });
+    // An ad's video carries its run's reference pictures, after any first picture, and says what they are for.
+    const [withReferences] = runAll('video-build-request.js', [ask({ media_id: 'media-9', references: ['media-site', 'media-logo'] })]);
+    const referenced = JSON.parse(withReferences!.generate_input as string).params;
+    expect(referenced.medias).toEqual([
+      { role: 'start_image', value: 'media-9' },
+      { role: 'image_references', value: 'media-site' },
+      { role: 'image_references', value: 'media-logo' },
+    ]);
+    expect(referenced.prompt).toContain('Use the reference pictures given for what they show');
+    // Without references, nothing changes.
+    expect(JSON.parse(runAll('video-build-request.js', [ask({ look: 'Warm natural light, indigo and gold accents.', references: [] })])[0]!.generate_input as string).params).toEqual(JSON.parse(request!.generate_input as string).params);
     // A long prompt keeps the rules, within 2,000 characters.
     const [long] = runAll('video-build-request.js', [ask({ prompt: 'Wide slow shot. '.repeat(200) })]);
     const params = JSON.parse(long!.generate_input as string).params;
