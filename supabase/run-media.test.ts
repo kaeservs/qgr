@@ -101,6 +101,16 @@ describe('the question after Start run', () => {
     await service(`select public.agent_begin($1, 'strategist')`, [started]);
     await expect(setMedia(started, 'design')).rejects.toThrow(/agents have started/);
 
+    // A run from a clip makes its ads from the clip.
+    const clip = `uploads/${member}/${crypto.randomUUID()}.mp4`;
+    await t.asUser(member, () => t.db.query(`insert into storage.objects (bucket_id, name) values ('run-media', $1)`, [clip]));
+    const clipRun = await asMember<string>(
+      `select public.create_run('custom', 'video', 'Clip run', array['meta'], 'consultations', p_excerpt => $1, p_media_path => $2, p_media => '{"duration": 42.5, "width": 1920, "height": 1080}'::jsonb)`,
+      [EXCERPT, clip],
+    );
+    await expect(setMedia(clipRun, 'pictures')).rejects.toThrow(/run from a clip/);
+    await setMedia(clipRun, 'design');
+
     await t.asUser(outsider, async () => {
       await expect(t.db.query(`select public.set_run_media($1, 'design')`, [runId])).rejects.toThrow(/Only the QGR team/);
       expect(await t.value<number>(`select count(*)::int from public.run_references`)).toBe(0);
