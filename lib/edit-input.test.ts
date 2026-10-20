@@ -116,6 +116,12 @@ describe('parseAgentSettings: pictures', () => {
     expect(parseAgentSettings({ ...base, pictureModel: 'cloudflare', cloudflareAccount: '' })).toEqual({ ok: false, error: 'Cloudflare Workers AI needs your Cloudflare account ID.' });
     expect(parseAgentSettings({ ...base, pictureModel: 'stand-in', cloudflareAccount: 'my-account' })).toMatchObject({ ok: false, error: expect.stringMatching(/32 characters/) });
   });
+
+  it('takes Higgsfield at a quality, low when none is said, and no other quality', () => {
+    expect(parseAgentSettings({ ...base, pictureModel: 'higgsfield', cloudflareAccount: '', picturesQuality: 'medium' })).toMatchObject({ ok: true, value: { pictureModel: 'higgsfield', picturesQuality: 'medium' } });
+    expect(parseAgentSettings({ ...base, pictureModel: 'higgsfield', cloudflareAccount: '' })).toMatchObject({ ok: true, value: { picturesQuality: 'low' } });
+    expect(parseAgentSettings({ ...base, pictureModel: 'higgsfield', cloudflareAccount: '', picturesQuality: 'ultra' })).toEqual({ ok: false, error: 'Higgsfield draws pictures at low, medium or high quality.' });
+  });
 });
 
 describe('isRecordId', () => {

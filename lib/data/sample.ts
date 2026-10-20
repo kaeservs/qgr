@@ -40,7 +40,7 @@ const runList = (): Run[] => (store.__qgrRuns ??= structuredClone(mock.runs));
 const leadList = (): Lead[] => (store.__qgrLeads ??= mock.leads());
 const leadSettings = (): LeadSettings => (store.__qgrLeadSettings ??= structuredClone(mock.leadSettings));
 /** AI video's switch and limit, as changed this session; the sample spends nothing. */
-const videoBudget = (): VideoBudget => (store.__qgrVideoBudget ??= { live: false, cap: 100, spent: 0 });
+const videoBudget = (): VideoBudget => (store.__qgrVideoBudget ??= { live: false, cap: 100, spent: 0, pictures: 0 });
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
@@ -245,6 +245,7 @@ export const sampleData: DataSource = {
   getVideoBudget: async () => ({ ...videoBudget() }),
   // No Higgsfield to ask: nothing is priced, nothing is made, nothing is spent.
   priceVideo: async () => ({ ok: false, status: 503, error: 'The sample data has no Higgsfield to price it: prices show once the dashboard is connected.' }),
+  pricePicture: async () => ({ ok: false, status: 503, error: 'The sample data has no Higgsfield to price it: prices show once the dashboard is connected.' }),
   askForVideo: async () => ({ ok: false, status: 503, error: 'Sample data makes no videos: there is no Higgsfield to ask.' }),
   removeAiVideo: async () => ({ ok: true, value: null, sample: true }),
   createVideoPictureUpload: async (extension) => ({ ok: true, value: { path: `refs/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),

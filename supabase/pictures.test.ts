@@ -237,7 +237,7 @@ describe('a picture for an ad', () => {
     const setModel = (model: string, account?: string) => t.asUser(member, () => t.db.query(`select public.set_pictures_model($1${account === undefined ? '' : ', $2'})`, account === undefined ? [model] : [model, account]));
     await expect(setModel('cloudflare')).rejects.toThrow(/needs your Cloudflare account ID/);
     await expect(setModel('cloudflare', 'not-an-account')).rejects.toThrow(/32 characters/);
-    await expect(setModel('midjourney')).rejects.toThrow(/stand-in or by Cloudflare/);
+    await expect(setModel('midjourney')).rejects.toThrow(/stand-in, Cloudflare Workers AI or Higgsfield/);
     await setModel('cloudflare', ' 0123456789ABCDEF0123456789abcdef ');
     await askWith(variant.B, 'Keys on a kitchen table');
     expect(await takeDue()).toEqual([expect.objectContaining({ variant_id: variant.B, model: 'cloudflare', account: '0123456789abcdef0123456789abcdef' })]);

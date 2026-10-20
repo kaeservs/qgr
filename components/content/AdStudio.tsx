@@ -11,7 +11,7 @@ import { PLATFORM_LABEL, PLATFORM_OF, postText } from '@/lib/platforms';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone } from '@/lib/schedule';
 import { PLACES } from '@/lib/types';
-import type { AdSet, Clip, PictureModel, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
+import type { AdSet, Clip, PictureModel, PictureQuality, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
 import { defaultEdit } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
 import { PublishDialog } from '../posts/PublishDialog';
@@ -138,7 +138,7 @@ export function AdStudio({
   /** The team's zone, for posting times, the Pages posts go to, and the link posts can end with. */
   publishing: { timeZone: string; pages: PostPages; forReal: Record<Place, boolean>; postLink: string | null };
   /** What every picture keeps to (the brand's picture style), what makes them, and whether this is the sample data. */
-  pictures: { style: string; model: PictureModel; sample: boolean };
+  pictures: { style: string; model: PictureModel; quality: PictureQuality; sample: boolean };
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -609,6 +609,7 @@ export function AdStudio({
           variant={picturing}
           pictureStyle={pictures.style}
           model={pictures.model}
+          quality={pictures.quality}
           sample={pictures.sample}
           waitingToPost={postState(posts, picturing.id).waiting !== null}
           onChange={(change) => pictureChanged(picturing.id, change)}

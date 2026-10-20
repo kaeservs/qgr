@@ -415,7 +415,7 @@ describe('copyOf', () => {
 });
 
 describe('toAgents and toUser', () => {
-  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, pictureModel: 'stand-in' as const, cloudflareAccount: '', scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
+  const settings = { timeZone: 'America/New_York', strategistAuto: false, contentAuto: true, picturesAuto: false, adsSource: 'sample' as const, pictureModel: 'stand-in' as const, cloudflareAccount: '', picturesQuality: 'low' as const, scanEvery: 'week' as const, scanDay: 1, scanHour: 9 };
 
   it('counts from the data, and shows each agent’s switch as the team set it', () => {
     const agents = toAgents(settings, { competitors: 1, strategies: 2 }, []);
@@ -744,7 +744,7 @@ describe('AI video', () => {
   });
 
   it('reads the budget, with nothing spent and off when the answer is odd', () => {
-    expect(toVideoBudget({ live: true, cap: 100, spent: '7.50' })).toEqual({ live: true, cap: 100, spent: 7.5 });
-    expect(toVideoBudget(null)).toEqual({ live: false, cap: 0, spent: 0 });
+    expect(toVideoBudget({ live: true, cap: 100, spent: '7.50', pictures: '0.75' })).toEqual({ live: true, cap: 100, spent: 7.5, pictures: 0.75 });
+    expect(toVideoBudget(null)).toEqual({ live: false, cap: 0, spent: 0, pictures: 0 });
   });
 });

@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 import { askForPictureAction, removePictureAction, stopPictureAction, usePictureAction } from '@/app/(app)/content/actions';
 import { cx } from '@/lib/cx';
 import { LIMITS } from '@/lib/edit-input';
-import type { PictureChoice, PictureModel, Variant } from '@/lib/types';
+import type { PictureChoice, PictureModel, PictureQuality, Variant } from '@/lib/types';
+import { PicturePrice } from '../settings/PicturePrice';
 import { useToast } from '../ui/Toast';
 import video from '../video/video.module.css';
 import { Creative } from './Creative';
@@ -33,6 +34,7 @@ export function PictureDialog({
   variant,
   pictureStyle,
   model,
+  quality,
   sample,
   waitingToPost,
   onChange,
@@ -42,6 +44,8 @@ export function PictureDialog({
   /** The brand's picture style, from brand memory: added to every prompt. */
   pictureStyle: string;
   model: PictureModel;
+  /** How carefully Higgsfield draws, when it makes the pictures. */
+  quality: PictureQuality;
   /** Sample data: there is no image model to ask, and nothing is kept. */
   sample: boolean;
   /** Waiting to post: its picture, like its words, cannot change. */
@@ -177,6 +181,11 @@ export function PictureDialog({
               variant.picture?.note && <p className={cx('muted small', styles.pictureNote)}>{variant.picture.note}</p>
             )}
 
+            {model === 'higgsfield' && !sample && (
+              <p className={cx('small', styles.pictureModel)}>
+                Made by Higgsfield on the team’s plan: <PicturePrice quality={quality} />
+              </p>
+            )}
             {model === 'stand-in' && (
               <p className={cx('small', styles.pictureModel)}>
                 {sample ? (
@@ -185,9 +194,9 @@ export function PictureDialog({
                   <>
                     Pictures are set to the stand-in, which makes none.{' '}
                     <Link href="/settings" className="link">
-                      Choose Cloudflare Workers AI in Settings
-                    </Link>{' '}
-                    for free pictures, about 170 a day.
+                      Choose an image model in Settings
+                    </Link>
+                    : Cloudflare Workers AI, free for about 170 a day, or Higgsfield on the team’s plan.
                   </>
                 )}
               </p>

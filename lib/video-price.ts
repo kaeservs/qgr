@@ -1,5 +1,6 @@
-// Higgsfield's price for a video, asked through n8n ("QGR · AI video", its
-// Price webhook) before anyone presses Generate. n8n asks Higgsfield with
+// Higgsfield's price, asked through n8n before anything is made: a video's
+// ("QGR · AI video", its Price webhook) before anyone presses Generate, or a
+// picture's at a quality ("QGR · Pictures", its own). n8n asks Higgsfield with
 // get_cost, which makes nothing, and answers with the price and the credits
 // left on the team's plan. This only says what came back, in words a person
 // can act on.
@@ -26,7 +27,7 @@ export async function askPrice(config: PipelineConfig, request: unknown, send: t
     return { ok: false, error: 'n8n did not answer: the price could not be asked.' };
   }
   if (res.status === 401 || res.status === 403) return { ok: false, error: 'n8n turned the price away: the webhook secret does not match.' };
-  if (res.status === 404) return { ok: false, error: 'n8n has no live AI video workflow: publish “QGR · AI video”.' };
+  if (res.status === 404) return { ok: false, error: 'n8n has no live workflow at that webhook: publish “QGR · AI video” and “QGR · Pictures”.' };
   const body: unknown = await res.json().catch(() => null);
   if (!res.ok || !isRecord(body)) return { ok: false, error: `n8n answered ${res.status} without a price.` };
   if (body.ok !== true) return { ok: false, error: typeof body.error === 'string' && body.error ? body.error : 'Higgsfield gave no price.' };

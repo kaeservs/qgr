@@ -256,3 +256,25 @@
   gap: 8px;
   margin-top: 10px;
 }
+
+.price {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.costNote {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--gold-50);
+  border: 1px solid var(--gold-100);
+  color: var(--gold-ink);
+  font-size: 13px;
+}
+
+.costNote p {
+  margin: 0;
+}

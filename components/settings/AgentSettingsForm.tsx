@@ -1,17 +1,21 @@
 'use client';
 
+import { TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { saveAgentSettingsAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
 import { hourLabel, SCAN_EVERY_LABEL, TIME_ZONES, WEEKDAYS, zoneLabel } from '@/lib/schedule';
-import type { AdsSetting, AgentSettings, PictureModel, ScanEvery } from '@/lib/types';
+import type { AdsSetting, AgentSettings, PictureModel, PictureQuality, ScanEvery } from '@/lib/types';
 import { Toggle } from '../ui/Toggle';
 import { useToast } from '../ui/Toast';
+import { PicturePrice } from './PicturePrice';
 import styles from './settings.module.css';
 
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
+const QUALITY_LABEL: Record<PictureQuality, string> = { low: 'Low: the cheapest, good for ads under words', medium: 'Medium', high: 'High: the finest, and the dearest' };
 
 /**
  * When the tracker scans on its own, which agents start by themselves, and the
@@ -117,13 +121,45 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         <select className="input" value={form.pictureModel} onChange={(e) => set('pictureModel', e.target.value as PictureModel)}>
           <option value="stand-in">The stand-in: no pictures, the ads use the drawn design</option>
           <option value="cloudflare">Cloudflare Workers AI: FLUX.1 schnell, free each day</option>
+          <option value="higgsfield">Higgsfield: GPT Image 2.5 on the team’s plan, for credits</option>
         </select>
         <span className="muted small">
           {form.pictureModel === 'cloudflare'
             ? 'About 170 pictures a day on Cloudflare’s free allowance (10,000 neurons, reset at 00:00 UTC). On Cloudflare’s free plan nothing is ever charged: past the allowance a picture fails and says so until the next day. Every prompt carries your picture style from Brand memory. It needs the API token in n8n’s “Cloudflare Workers AI” credential.'
-            : 'No picture is made, and the studio says so. Switch to Cloudflare Workers AI once its token is in n8n.'}
+            : form.pictureModel === 'higgsfield'
+              ? 'Each picture is drawn by GPT Image 2.5 through Higgsfield, signed in to the team’s own plan, and spends the credits Higgsfield quotes for it, asked first. Pictures count against the monthly Higgsfield limit with AI video; past it, a picture is not made and the studio says why. Every prompt carries your picture style from Brand memory.'
+              : 'No picture is made, and the studio says so. Switch to Cloudflare Workers AI once its token is in n8n, or to Higgsfield.'}
         </span>
       </label>
+      {form.pictureModel === 'higgsfield' && (
+        <label className="field">
+          <span className="label">Higgsfield: how carefully it draws</span>
+          <select className="input" value={form.picturesQuality} onChange={(e) => set('picturesQuality', e.target.value as PictureQuality)}>
+            {(Object.keys(QUALITY_LABEL) as PictureQuality[]).map((q) => (
+              <option key={q} value={q}>
+                {QUALITY_LABEL[q]}
+              </option>
+            ))}
+          </select>
+          <PicturePrice quality={form.picturesQuality} perRun={form.picturesAuto} />
+          <span className="muted small">
+            Square, 1k: one picture serves the square feed post and LinkedIn’s wide one, under the ad’s words. The limit is under{' '}
+            <Link href="#ai-video" className="link">
+              Higgsfield
+            </Link>{' '}
+            below.
+          </span>
+        </label>
+      )}
+      {form.pictureModel === 'higgsfield' && settings.pictureModel !== 'higgsfield' && (
+        <div className={styles.costNote} role="note">
+          <TriangleAlert size={16} aria-hidden />
+          <p>
+            Once saved, every picture asked for spends Higgsfield credits from the team’s plan
+            {form.picturesAuto ? ', and every new ad asks for one: three a run' : ''}. It goes through the “Higgsfield” credential in n8n, signed in to that plan.
+          </p>
+        </div>
+      )}
       {form.pictureModel === 'cloudflare' && (
         <label className="field">
           <span className="label">Cloudflare account ID</span>

@@ -30,8 +30,10 @@ Post results" reads its numbers, once the Facebook and LinkedIn credentials
 are attached in n8n (Posting below). An ad's
 picture is asked for in the studio from a prompt, or by every new ad, and goes
 through n8n's "QGR · Pictures" to the image model chosen in Settings: the
-stand-in, which makes none and says so, or Cloudflare Workers AI's FLUX.1
-schnell, free each day, once its token is in n8n (Pictures below). A clip's
+stand-in, which makes none and says so, Cloudflare Workers AI's FLUX.1
+schnell, free each day, once its token is in n8n, or Higgsfield's GPT Image
+2.5 on the team's plan, for credits held to the same monthly limit as AI
+video (Pictures below). A clip's
 transcript is heard in the browser, on the team's own computer (Whisper, free;
 Video below). A video is made from a prompt by Higgsfield, through n8n's "QGR ·
 AI video" and Higgsfield's MCP signed in to the team's own plan: Generate goes
@@ -98,7 +100,8 @@ X's ads APIs, which each need their own access.
                continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
                update_agent_settings(), set_pictures_auto(), set_pictures_model(),
-               set_ads_source(), update_publishing_settings(), set_post_for_real(),
+               set_pictures_quality(), Higgsfield's price for a picture from n8n's
+               Pictures Price webhook, set_ads_source(), update_publishing_settings(), set_post_for_real(),
                set_competitor_tracked(), start_run_from_ads() then set_run_guidance() and
                the n8n webhook at the strategist
     n8n "QGR · Run pipeline" → Competitor Tracker → Ad Strategist → Content Agent,
@@ -109,8 +112,13 @@ X's ads APIs, which each need their own access.
         publisher_finish() or publisher_fail()
     n8n "QGR · Post results", every six hours → results_take_due() → each place's
         numbers from Meta or LinkedIn → results_record() or results_fail()
-    n8n "QGR · Pictures", every five minutes and on POST /webhook/qgr-picture →
-        picture_take_due() → each ad → picture_finish() or picture_fail()
+    n8n "QGR · Pictures", every minute and on POST /webhook/qgr-picture →
+        picture_take_due() → each ad → picture_finish() or picture_fail(); on
+        Higgsfield: its price → picture_higgsfield_begin() → sent once →
+        picture_higgsfield_started(), _release(), _unknown() or _fail();
+        picture_take_making() → each job → its file into ad-pictures →
+        picture_higgsfield_finish(); and POST /webhook/qgr-picture-price →
+        what one picture costs (get_cost: nothing is made)
     n8n "QGR · Moments", every five minutes and on POST /webhook/qgr-moments →
         moments_take_due() → each long video → Claude → moments_finish() or moments_fail()
     n8n "QGR · Leads", every fifteen minutes and on POST /webhook/qgr-leads →
@@ -194,15 +202,20 @@ X's ads APIs, which each need their own access.
   `remove_long_video`, `record_moment_run`, `start_run_from_ads`,
   `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
   `judge_leads_again`, `set_post_link`, `video_budget`, `set_video_settings`,
-  `ask_for_video`, `remove_ai_video`.
+  `ask_for_video`, `remove_ai_video`, `set_pictures_quality`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
   `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`,
   `video_take_due`, `video_started`, `video_release`, `video_unknown`,
-  `video_fail`, `video_take_making`, `video_finish`) is granted to the service
-  role alone.
+  `video_fail`, `video_take_making`, `video_finish`; the picture ones include
+  `picture_release`, `picture_in_flight`, `picture_not_made`,
+  `picture_higgsfield_*` and `picture_take_making`) is granted to the service
+  role alone. The service role has no use of the private schema, so a helper
+  n8n's functions call lives in public, granted to it alone, and one that
+  needs a private function (`picture_higgsfield_begin`, for the month's
+  spending) runs as its owner (`security definer`).
 - Clips live in the private bucket `run-media` (50 MB a file, video types
   only) at `uploads/{uploader}/{uuid}.{ext}`. Storage policies: a member reads
   any clip, uploads only into their own folder, and removes only their own
@@ -242,11 +255,12 @@ X's ads APIs, which each need their own access.
   `supabase/posts.test.ts`, `supabase/agents.test.ts` and
   `supabase/pictures.test.ts` the posts, the switches, the scan schedule and
   the pictures, `supabase/ai-videos.test.ts` AI video's asks, limit and
-  retries, `n8n/pipeline.test.ts` takes each kind of run through all three
+  retries, `supabase/higgsfield-pictures.test.ts` Higgsfield's pictures and
+  the limit they share with videos, `n8n/pipeline.test.ts` takes each kind of run through all three
   agents' scripts against them, with Claude's answers as fixtures,
   `n8n/publisher.test.ts` a post, its results and a picture through their
-  workflows, and `n8n/ai-video.test.ts` AI video's scripts against
-  Higgsfield's answers.
+  workflows, and `n8n/ai-video.test.ts` and `n8n/pictures-higgsfield.test.ts`
+  AI video's and Higgsfield pictures' scripts against Higgsfield's answers.
 - `team_members` decides who sees anything. Policies let a member read every
   dashboard table; anyone else, signed in or not, reads nothing, and nobody but
   the service role writes a table. Add a person: create the account
@@ -278,7 +292,8 @@ X's ads APIs, which each need their own access.
   (`iSwaVrynhCGWkqOg`), Publisher (`0251XoQKheUhUQEP`, every minute and webhook
   `POST /webhook/qgr-publish`), Scheduled scans (`GYflolbtsiiENms6`, hourly),
   Post results (`bpHjnEFbijGOTrBw`, every six hours), Pictures
-  (`qjRr2WxZvDz1WdQO`, every five minutes and webhook `POST /webhook/qgr-picture`),
+  (`qjRr2WxZvDz1WdQO`, every minute and webhooks `POST /webhook/qgr-picture` and
+  `POST /webhook/qgr-picture-price`),
   Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`),
   Leads (`bE0n6UONyx22rYxs`, every fifteen minutes and webhook `POST /webhook/qgr-leads`),
   AI video (`tsZjQUQ0TEajMs3h`, every minute and webhooks `POST /webhook/qgr-video`
@@ -336,7 +351,8 @@ X's ads APIs, which each need their own access.
   "LinkedIn: its numbers") and `Zoho` (Zoho OAuth2 API, for the region the
   team's Zoho is in, connected by a Zoho admin; on "Zoho: the lead fields" and
   "Zoho: the leads" in Leads) and `Higgsfield` (MCP OAuth2 API, signed in to
-  the team's Higgsfield account; on every "Higgsfield:" step in AI video).
+  the team's Higgsfield account; on every "Higgsfield:" step in AI video and
+  Pictures).
   Until a platform's credential is attached, its
   steps do not run and each post or read says so. Nothing that posts or draws
   is kept in Supabase or the app (the Cloudflare account ID is: it is an ID,
@@ -402,14 +418,15 @@ X's ads APIs, which each need their own access.
 
 - `team_settings` is one row: the team's time zone, the two switches
   (`strategist_auto`, `content_auto`), whether every new ad asks for a picture
-  (`pictures_auto`), what makes pictures (`pictures_model`: stand-in or
-  cloudflare, with `cloudflare_account`), where the tracker reads ads
+  (`pictures_auto`), what makes pictures (`pictures_model`: stand-in,
+  cloudflare, with `cloudflare_account`, or higgsfield, with
+  `pictures_quality`), where the tracker reads ads
   (`ads_source`), the scan schedule (`scan_every` off, day or week, with
   `scan_day` and `scan_hour`), the Pages posts go to and whether each posts
   for real (`facebook_live`, `instagram_live`, `linkedin_live`). Settings
   changes it through `update_agent_settings`, `set_pictures_auto`,
-  `set_pictures_model`, `set_ads_source`, `update_publishing_settings` and
-  `set_post_for_real`; Home's agent cards flip the same switches.
+  `set_pictures_model`, `set_pictures_quality`, `set_ads_source`,
+  `update_publishing_settings` and `set_post_for_real`; Home's agent cards flip the same switches.
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
   Content Agent's off, every strategy waits before the ads. The pipeline asks
@@ -624,17 +641,17 @@ X's ads APIs, which each need their own access.
   for n8n to remove (`prune_pictures`).
 - "QGR · Pictures" takes the asks (`picture_take_due`, claimed with
   `skip locked`; a claim lost for ten minutes is taken again, three tries at
-  most) at once when the app pings `qgr-picture`, otherwise within five
-  minutes, each with its prompt, the brand's picture style (`look`), the
-  team's image model and the path to upload to. `picture_finish` keeps every
+  most) at once when the app pings `qgr-picture`, otherwise within the
+  minute, each with its prompt, the brand's picture style (`look`), the
+  team's image model and quality, and the path to upload to. `picture_finish` keeps every
   picture that arrives: one that answers the open ask is shown under the ad's
   words from then on and takes an approval back; one for a variant scheduled
   meanwhile, or whose ask was stopped, only joins the others (what was
   approved is what goes out). The same answer twice is kept once.
   `picture_fail` keeps the reason.
 - The image model is the team's choice in Settings, Agents (`pictures_model`,
-  `set_pictures_model`): the stand-in, or Cloudflare Workers AI's FLUX.1
-  schnell on the account named there. "Real pictures?" sends a Cloudflare ask
+  `set_pictures_model`): the stand-in, Cloudflare Workers AI's FLUX.1
+  schnell on the account named there, or Higgsfield (below). "Real pictures?" sends a Cloudflare ask
   through "Write the prompt" (the scene, then the brand's picture style, then
   the rules: no text, no real or identifiable people, no flags; 2,048
   characters at most, only an agent's long scene is shortened), the call
@@ -645,6 +662,38 @@ X's ads APIs, which each need their own access.
   1024×1024, and on Cloudflare's free plan nothing is ever charged: past that a
   picture fails and says so until 00:00 UTC. The workflow keeps no execution
   data for runs that succeed, so pictures do not pile up in n8n.
+- Higgsfield draws with GPT Image 2.5 through its MCP, signed in with the
+  team's own account (as AI video does), square at 1k and the team's quality
+  (`pictures_quality`: low, 0.25 credits a picture on 2026-10-20; medium;
+  high): one picture serves Meta's square and LinkedIn's wide frame, as
+  Cloudflare's does. Settings and the Picture dialog show what one costs and
+  the credits left on the plan ("Price", `qgr-picture-price`, get_cost:
+  nothing is made), and Settings what a run costs when every new ad asks.
+  For each ask "QGR · Pictures" writes the same prompt Cloudflare gets
+  (`pictures-prompt.js`), asks the price, records the send against the
+  month's one Higgsfield limit (`picture_higgsfield_begin`, a row in
+  `higgsfield_pictures`; past the limit nothing is sent and the ad says why),
+  then sends it once:
+  - Answered with a job: `picture_higgsfield_started`.
+  - Refused: `picture_higgsfield_fail`, nothing was made.
+  - Not reached at all: `picture_higgsfield_release`, and the ad is taken
+    again at the next run, three tries at most (`picture_release` does the
+    same when the price could not be asked).
+  - Any other trouble after sending: `picture_higgsfield_unknown`, never sent
+    again by itself; a send with no answer for ten minutes, or a job not done
+    in thirty, becomes unknown too (`picture_take_making`). The ad says to
+    check Higgsfield's history before asking again.
+  - Jobs are checked every minute, each at most every 20 s
+    (`picture_take_making`, `job_status`). A finished picture is fetched,
+    typed by its file's type (else its link's ending: PNG, JPEG or WebP
+    only), stored in ad-pictures with that extension and recorded as any
+    picture is (`picture_higgsfield_finish` → `picture_finish`).
+  - An ad whose picture Higgsfield has is never taken again
+    (`picture_in_flight`), whatever its claim says. A picture stopped or asked
+    again meanwhile is kept with the ad's others when it arrives.
+  - The answers to `generate_image` and `job_status` follow what Higgsfield's
+    MCP documents, not a real picture: check the first real one against
+    `pictures-higgsfield-job.js` and `pictures-higgsfield-file.js`.
 - The studio shows pictures through links the server signs as the teammate
   for an hour (one `createSignedUrls` call for the ad set, the kept pictures
   with it; only the studio reads them). A picture asked for and not made in
@@ -840,9 +889,12 @@ X's ads APIs, which each need their own access.
   to Higgsfield or spent, and the library says nothing was made. On, the
   server asks Higgsfield's price again rather than take the page's, and
   `ask_for_video` refuses an ask that would take the month past the team's
-  limit (`videos_cap`, 100 credits to start). The month counts in the team's
-  time zone (`private.videos_spent`): every ask waiting, being made, made or
-  unknown counts; one that failed or was stopped does not. Four wait at once
+  limit (`videos_cap`, 100 credits to start). It is the team's one Higgsfield
+  limit: pictures made by Higgsfield count against it too (Settings,
+  Higgsfield, which shows how much went on pictures). The month counts in the
+  team's time zone (`private.videos_spent`, videos and pictures): every ask
+  waiting, being made, made or unknown counts; one that failed or was stopped
+  does not. Four wait at once
   at most.
 - "QGR · AI video" sends each ask once (`video_take_due`, `skip locked`).
   - A first picture is signed for 15 minutes and imported first
@@ -977,10 +1029,11 @@ X's ads APIs, which each need their own access.
 11. **Never post twice by accident.** A place that may have gone out
     (`unknown`) is never sent again by itself: a person checks the Page, then
     sends it again or dismisses it.
-12. **A paid video is a person's, priced first and sent once.** Only Generate
-    makes one, never a run; Higgsfield's price shows before it and the
-    month's limit holds it; an ask whose answer was lost (`unknown`) is never
-    sent again by itself.
+12. **Higgsfield's credits are spent knowingly, and once.** A video is made
+    only by a person's Generate, never a run; a picture only when someone
+    asks, or the team's switch asks for every new ad. Each is priced by
+    Higgsfield first and held to the month's one limit; an ask whose answer
+    was lost (`unknown`) is never sent again by itself.
 
 ## Design
 

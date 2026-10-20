@@ -65,7 +65,7 @@ export default async function AdSetPage({ params }: Props) {
         {...(set.clip ? { clip: { clip: set.clip, url: clipUrl } } : {})}
         posts={posts.filter((p) => p.adSetId === set.id)}
         publishing={{ timeZone: settings.timeZone, pages: settings.pages, forReal: settings.postForReal, postLink: settings.postLink }}
-        pictures={{ style: memory?.memory.pictureStyle ?? '', model: settings.pictureModel, sample: usingSampleData() }}
+        pictures={{ style: memory?.memory.pictureStyle ?? '', model: settings.pictureModel, quality: settings.picturesQuality, sample: usingSampleData() }}
       />
     </>
   );

@@ -1,11 +1,11 @@
 'use server';
 
-import { getTeamSettings, saveAgentSettings, savePostPages, setPostForReal, setVideoSettings } from '@/lib/data';
+import { getTeamSettings, pricePicture, saveAgentSettings, savePostPages, setPostForReal, setVideoSettings } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { parseAgentSettings, parsePostPages } from '@/lib/post-input';
 import { checkTeam } from '@/lib/session';
-import { PLACES } from '@/lib/types';
-import type { Place } from '@/lib/types';
+import { PICTURE_QUALITIES, PLACES } from '@/lib/types';
+import type { Place, PictureQuality } from '@/lib/types';
 
 export async function saveAgentSettingsAction(settings: unknown): Promise<Saved> {
   const team = await checkTeam();
@@ -51,4 +51,12 @@ export async function setVideoSettingsAction(live: unknown, cap: unknown): Promi
   if (typeof live !== 'boolean') return { ok: false, status: 400, error: 'Say whether AI video is on.' };
   if (typeof cap !== 'number' || !Number.isInteger(cap) || cap < 0 || cap > 100_000) return { ok: false, status: 400, error: 'Set the monthly limit as whole credits, from 0 to 100,000.' };
   return setVideoSettings(live, cap);
+}
+
+/** What one Higgsfield picture costs at a quality, and the credits left on the plan: asked of Higgsfield, nothing is made. */
+export async function pricePictureAction(quality: unknown): Promise<Saved<{ credits: number; balance: number | null }>> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!(PICTURE_QUALITIES as readonly unknown[]).includes(quality)) return { ok: false, status: 400, error: 'Higgsfield draws pictures at low, medium or high quality.' };
+  return pricePicture(quality as PictureQuality);
 }

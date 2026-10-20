@@ -65,6 +65,7 @@ export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
 export const getVideoBudget: DataSource['getVideoBudget'] = () => source().getVideoBudget();
 export const priceVideo: DataSource['priceVideo'] = (request) => source().priceVideo(request);
+export const pricePicture: DataSource['pricePicture'] = (quality) => source().pricePicture(quality);
 export const askForVideo: DataSource['askForVideo'] = (request, credits) => source().askForVideo(request, credits);
 export const removeAiVideo: DataSource['removeAiVideo'] = (id) => source().removeAiVideo(id);
 export const createVideoPictureUpload: DataSource['createVideoPictureUpload'] = (extension) => source().createVideoPictureUpload(extension);
