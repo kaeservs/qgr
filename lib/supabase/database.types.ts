@@ -80,6 +80,7 @@ export type Database = {
           updated_at: string
           updated_by: string | null
           video_edit: Json | null
+          video_prompt: string | null
           warnings: string[]
         }
         Insert: {
@@ -105,6 +106,7 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
+          video_prompt?: string | null
           warnings?: string[]
         }
         Update: {
@@ -130,6 +132,7 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
           video_edit?: Json | null
+          video_prompt?: string | null
           warnings?: string[]
         }
         Relationships: [
@@ -208,6 +211,7 @@ export type Database = {
           sound: boolean
           status: string
           tries: number
+          variant_id: string | null
         }
         Insert: {
           asked_at?: string
@@ -230,6 +234,7 @@ export type Database = {
           sound?: boolean
           status?: string
           tries?: number
+          variant_id?: string | null
         }
         Update: {
           asked_at?: string
@@ -252,8 +257,17 @@ export type Database = {
           sound?: boolean
           status?: string
           tries?: number
+          variant_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_videos_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "ad_variants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       brand_examples: {
         Row: {
@@ -964,6 +978,56 @@ export type Database = {
           },
         ]
       }
+      run_references: {
+        Row: {
+          claimed_at: string | null
+          created_at: string
+          error: string | null
+          id: string
+          media_id: string | null
+          note: string | null
+          path: string
+          position: number
+          run_id: string
+          status: string
+          tries: number
+        }
+        Insert: {
+          claimed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          media_id?: string | null
+          note?: string | null
+          path: string
+          position: number
+          run_id: string
+          status?: string
+          tries?: number
+        }
+        Update: {
+          claimed_at?: string | null
+          created_at?: string
+          error?: string | null
+          id?: string
+          media_id?: string | null
+          note?: string | null
+          path?: string
+          position?: number
+          run_id?: string
+          status?: string
+          tries?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "run_references_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       run_stages: {
         Row: {
           error: string | null
@@ -1007,6 +1071,8 @@ export type Database = {
       }
       runs: {
         Row: {
+          ai_media: string | null
+          ai_video: Json | null
           approved_at: string | null
           chosen_ad_ids: string[] | null
           chosen_angle_ids: string[] | null
@@ -1032,6 +1098,8 @@ export type Database = {
           url: string | null
         }
         Insert: {
+          ai_media?: string | null
+          ai_video?: Json | null
           approved_at?: string | null
           chosen_ad_ids?: string[] | null
           chosen_angle_ids?: string[] | null
@@ -1057,6 +1125,8 @@ export type Database = {
           url?: string | null
         }
         Update: {
+          ai_media?: string | null
+          ai_video?: Json | null
           approved_at?: string | null
           chosen_ad_ids?: string[] | null
           chosen_angle_ids?: string[] | null
@@ -1583,6 +1653,19 @@ export type Database = {
         Args: { p_run_id: string; p_stage: string; p_usage: Json }
         Returns: undefined
       }
+      reference_failed: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      reference_ready: {
+        Args: { p_id: string; p_media_id: string }
+        Returns: undefined
+      }
+      reference_release: {
+        Args: { p_error: string; p_id: string }
+        Returns: undefined
+      }
+      reference_take_due: { Args: { p_limit?: number }; Returns: Json }
       remember_post: {
         Args: { p_note?: string; p_place: string; p_post_id: string }
         Returns: string
@@ -1690,6 +1773,15 @@ export type Database = {
       set_post_link: { Args: { p_link: string }; Returns: undefined }
       set_run_guidance: {
         Args: { p_guidance: string; p_run_id: string }
+        Returns: undefined
+      }
+      set_run_media: {
+        Args: {
+          p_kind: string
+          p_references?: Json
+          p_run_id: string
+          p_video?: Json
+        }
         Returns: undefined
       }
       set_run_pick_first: {

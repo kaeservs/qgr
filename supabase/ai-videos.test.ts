@@ -57,7 +57,7 @@ describe('while AI video is not switched on', () => {
 
     const [due, ...rest] = await takeDue();
     expect(rest).toEqual([]);
-    expect(due).toEqual({ id, prompt: PROMPT, model: 'seedance_2_0_mini', seconds: 4, aspect: '9:16', quality: '480p', sound: false, picture_path: null, look: expect.toBeOneOf([null, expect.any(String)]), live: false, path: `videos/${id}.mp4` });
+    expect(due).toEqual({ id, prompt: PROMPT, model: 'seedance_2_0_mini', seconds: 4, aspect: '9:16', quality: '480p', sound: false, picture_path: null, look: expect.toBeOneOf([null, expect.any(String)]), live: false, path: `videos/${id}.mp4`, references: [] });
     // Claimed: the next run does not take it again.
     expect(await takeDue()).toEqual([]);
 
