@@ -143,10 +143,10 @@ export function creditsLeft(budget: { cap: number; spent: number }): number {
   return Math.max(0, Math.round((budget.cap - budget.spent) * 100) / 100);
 }
 
-/** Credits as Higgsfield counts them: whole where they are whole, else to a tenth. */
+/** Credits as Higgsfield counts them: whole where they are whole, else to the hundredth (a picture is 0.25). */
 export function formatCredits(credits: number): string {
-  const n = Math.round(credits * 10) / 10;
-  return `${Number.isInteger(n) ? n : n.toFixed(1)} credit${n === 1 ? '' : 's'}`;
+  const n = Math.round(credits * 100) / 100;
+  return `${n} credit${n === 1 ? '' : 's'}`;
 }
 
 /** A video's name in the library: the prompt's first words. */

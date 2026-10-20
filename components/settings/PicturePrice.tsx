@@ -58,8 +58,9 @@ export function PicturePrice({ quality, perRun = false, className }: { quality: 
       </span>
     );
   }
+  // Plain text, so the line wraps as a sentence rather than breaking before its dots.
   return (
-    <span className={cx('small', styles.price, className)} role="status">
+    <span className={cx('small', className)} role="status">
       <strong>{formatCredits(price.credits)} a picture</strong>
       <span className="muted">
         {perRun ? ` · ${formatCredits(price.credits * 3)} a run when every new ad asks for one` : ''}
