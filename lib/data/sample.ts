@@ -12,10 +12,11 @@ import { initialStages, runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
 import { PLATFORM_LABEL, postText } from '../platforms';
 import { runTitle } from '../run-input';
 import type { NewRunInput } from '../run-input';
+import type { RunMediaInput } from '../run-media';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
 import { taggedLink } from '../leads';
-import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, TeamSettings, VideoBudget } from '../types';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, RunMedia, TeamSettings, VideoBudget } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -62,6 +63,15 @@ const brand: BrandProfile = {
   pageName: 'Quantum Global',
   xHandle: '@quantumglobal',
 };
+
+/** What a sample run's ads are made of: nothing is priced or uploaded here, so its references have no picture to show. */
+function sampleMedia(media: RunMediaInput): RunMedia {
+  return {
+    kind: media.kind,
+    ...(media.video ? { video: { ...media.video, credits: null } } : {}),
+    references: media.references.map((r) => ({ path: r.path, ...(r.note ? { note: r.note } : {}), status: 'waiting' as const })),
+  };
+}
 
 function startedFrom(input: NewRunInput): string {
   const { source } = input;
@@ -136,6 +146,7 @@ export const sampleData: DataSource = {
       ...(page ? { page: summarizePage(page) } : {}),
       ...(input.guidance ? { guidance: input.guidance } : {}),
       ...(input.pickFirst ? { pickFirst: true } : {}),
+      ...(input.media ? { media: sampleMedia(input.media) } : {}),
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },
@@ -166,11 +177,14 @@ export const sampleData: DataSource = {
         { at: now, text: 'Sample data: the agents don’t run here' },
       ],
       ...(input.guidance ? { guidance: input.guidance } : {}),
+      ...(input.media ? { media: sampleMedia(input.media) } : {}),
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },
   createShotUpload: async (extension) => ({ ok: true, value: { path: `shots/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteShot: async () => ({ ok: true, value: null, sample: true }),
+  createReferenceUpload: async (extension) => ({ ok: true, value: { path: `refs/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
+  deleteReference: async () => ({ ok: true, value: null, sample: true }),
   saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy), edit.posts) }, sample: true }),
   approveVariant: async () => ({ ok: true, value: null, sample: true }),
   saveBrandProfile: async () => ({ ok: true, value: null, sample: true }),

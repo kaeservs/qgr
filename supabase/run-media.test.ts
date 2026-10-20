@@ -262,6 +262,25 @@ describe('a video for every ad', () => {
     await asMember(`select public.set_pictures_auto(false)`);
   });
 
+  it('lets an ad’s video be edited once Higgsfield has made it, held to its length', async () => {
+    await asMember(`select public.set_video_settings(true, 100)`);
+    const runId = await customRun();
+    await setMedia(runId, 'video', [], VIDEO);
+    const variant = await writeAds(runId);
+    const edit = (id: string, end: number) => asMember(`select public.save_video_edit($1, $2::jsonb)`, [id, JSON.stringify({ keep: [{ start: 0, end }] })]);
+
+    await expect(edit(variant.A, 3)).rejects.toThrow(/no clip to edit/);
+    await t.db.query(`update public.ai_videos set status = 'ready', path = 'videos/' || id || '.mp4' where variant_id = $1`, [variant.A]);
+    await edit(variant.A, 3.5);
+    await expect(edit(variant.A, 6)).rejects.toThrow(/outside the clip/);
+    expect(await t.value<unknown>(`select video_edit from public.ad_variants where id = $1`, [variant.A])).toEqual({ keep: [{ start: 0, end: 3.5 }] });
+    // A picture run's ads have no video to edit.
+    const pictures = await customRun();
+    await setMedia(pictures, 'pictures');
+    await expect(edit((await writeAds(pictures)).A, 3)).rejects.toThrow(/no clip to edit/);
+    await asMember(`select public.set_video_settings(false, 100)`);
+  });
+
   it('records a video that would pass the month’s limit as not asked, and says so', async () => {
     await asMember(`select public.set_video_settings(true, 100)`);
     const runId = await customRun();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, sourceOf, toActivity, toAdSet, toAgents, toAiVideo, toVideoBudget, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
+import { clipOf, copyOf, one, runMediaOf, sourceOf, toActivity, toAdSet, toAgents, toAiVideo, toVideoBudget, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
 import type { ActivityRows, AdSetRow, AiVideoRow, BrandRow, CompetitorRow, LeadRow, PostRow, RunRow, SettingsRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
@@ -389,6 +389,58 @@ describe('toAdSet', () => {
     for (const v of set.variants.slice(1)) expect(v).not.toHaveProperty('design');
     const clip = row([variant('A', { design })], { media_path: CLIP_PATH_OK, media: { name: 'clip.mp4', duration: 12, width: 1280, height: 720, size: 1000 } });
     expect(clip.variants[0]).not.toHaveProperty('design');
+  });
+});
+
+describe('what a run’s ads are made of', () => {
+  const ref = (position: number, status: string, extra: Partial<NonNullable<RunRow['run_references']>[number]> = {}) => ({ position, path: `refs/u/${position}.png`, note: null, status, error: null, ...extra });
+
+  it('reads the answer and the references in their order, each with its link where the page signs one', () => {
+    const media = runMediaOf(
+      { ai_media: 'pictures', ai_video: null, run_references: [ref(1, 'failed', { error: 'Higgsfield could not read it' }), ref(0, 'ready', { note: 'Our Miami office' })] },
+      (path) => (path === 'refs/u/0.png' ? 'https://signed.example/0' : undefined),
+    );
+    expect(media).toEqual({
+      kind: 'pictures',
+      references: [
+        { path: 'refs/u/0.png', note: 'Our Miami office', status: 'ready', url: 'https://signed.example/0' },
+        { path: 'refs/u/1.png', status: 'failed', error: 'Higgsfield could not read it' },
+      ],
+    });
+  });
+
+  it('keeps a video run’s settings and price, and says nothing for a run nobody asked', () => {
+    expect(runMediaOf({ ai_media: 'video', ai_video: { model: 'seedance_2_0_mini', seconds: 4, quality: '480p', aspect: '9:16', credits: 2 }, run_references: [] })).toEqual({
+      kind: 'video',
+      video: { seconds: 4, quality: '480p', aspect: '9:16', credits: 2 },
+      references: [],
+    });
+    expect(runMediaOf({ ai_media: null, ai_video: null, run_references: [] })).toBeNull();
+    expect(toRun(runRow())).not.toHaveProperty('media');
+    expect(toRun(runRow({ ai_media: 'design', run_references: [] })).media).toEqual({ kind: 'design', references: [] });
+  });
+
+  it('gives each ad its newest AI video, with a link once it is made', () => {
+    const variant = (label: string, ai_videos: NonNullable<AdSetRow['ad_variants'][number]['ai_videos']>): AdSetRow['ad_variants'][number] => ({
+      id: `v-${label}`, label, angle: 'a', creative_text: 't', creative_style: 'arcs', image_prompt: null, picture_path: null, picture_status: 'none', picture_error: null,
+      picture_requested_at: null, copy: { meta: { text: 't', headline: 'h' } }, posts: {}, warnings: [], approved_at: null, video_edit: null, ai_videos,
+    });
+    const video = (id: string, status: string, asked_at: string, extra: Partial<NonNullable<AdSetRow['ad_variants'][number]['ai_videos']>[number]> = {}) => ({ id, status, seconds: 4, aspect: '9:16', quality: '480p', path: null, error: null, asked_at, ...extra });
+    const set = toAdSet(
+      {
+        id: 's', run_id: 'r', strategy_id: 't', title: 'T', created_at: '2026-10-20T10:00:00Z', runs: null,
+        ad_variants: [
+          variant('A', [video('old', 'failed', '2026-10-20T10:00:00Z', { error: 'Refused' }), video('new', 'ready', '2026-10-20T11:00:00Z', { path: 'videos/new.mp4' })]),
+          variant('B', [video('b', 'making', '2026-10-20T11:00:00Z')]),
+          variant('C', []),
+        ],
+      },
+      undefined,
+      (path) => `https://signed.example/${path}`,
+    );
+    expect(set.variants[0]?.aiVideo).toEqual({ id: 'new', status: 'ready', seconds: 4, aspect: '9:16', quality: '480p', path: 'videos/new.mp4', url: 'https://signed.example/videos/new.mp4' });
+    expect(set.variants[1]?.aiVideo).toEqual({ id: 'b', status: 'making', seconds: 4, aspect: '9:16', quality: '480p' });
+    expect(set.variants[2]).not.toHaveProperty('aiVideo');
   });
 });
 

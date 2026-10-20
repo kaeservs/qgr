@@ -121,6 +121,38 @@ export interface Run {
   pickFirst?: boolean;
   /** What the team picked inside the run: how many of its report's ads, and of its strategy's angles. */
   picked?: { ads?: number; angles?: number };
+  /** What its ads are made of, as asked at Start run. Absent on a run nobody asked: the team's picture switch decides. */
+  media?: RunMedia;
+}
+
+/** What a run's ads are made of: the drawn design, an AI picture for each, or an AI video for each (lib/run-media.ts). */
+export const RUN_MEDIA = ['design', 'pictures', 'video'] as const;
+export type RunMediaKind = (typeof RUN_MEDIA)[number];
+
+/** The video each ad of a video run gets from Higgsfield (Seedance 2.0 Mini, silent). */
+export interface RunVideo {
+  seconds: number;
+  quality: '480p' | '720p';
+  aspect: '9:16' | '1:1' | '16:9';
+}
+
+/** A picture the team gave Higgsfield to keep to: a place, a product, a look. */
+export interface RunReference {
+  path: string;
+  /** What it shows, in the team's words; the Content Agent names it by its number. */
+  note?: string;
+  /** waiting: not in Higgsfield yet; ready: Higgsfield has it; failed: it could not be taken, and why. */
+  status: 'waiting' | 'ready' | 'failed';
+  error?: string;
+  /** A link the viewer may open, on the run page. */
+  url?: string;
+}
+
+export interface RunMedia {
+  kind: RunMediaKind;
+  /** A video run's settings, and Higgsfield's price for one video when the run started (none on the sample data). */
+  video?: RunVideo & { credits: number | null };
+  references: RunReference[];
 }
 
 /** What a person picks from while a run waits: its report's ads for the strategist, its strategy's angles for the Content Agent. */
@@ -276,6 +308,21 @@ export interface Variant {
   videoEdit?: VideoEdit;
   /** A picture ad's own layout: where its words and logo sit, and the texts added. Absent: the style's layout. */
   design?: CreativeDesign;
+  /** On a run that asked for AI video: the video Higgsfield makes for this ad. Once made, it is the ad's clip. */
+  aiVideo?: VariantVideo;
+}
+
+/** An ad's own AI video, asked as the ad was saved (ai_videos.variant_id). */
+export interface VariantVideo {
+  id: string;
+  status: AiVideo['status'];
+  seconds: number;
+  aspect: RunVideo['aspect'];
+  quality: string;
+  /** Where the made file is kept (ai-videos), and a link to play it. */
+  path?: string;
+  url?: string;
+  error?: string;
 }
 
 export interface VariantPicture {
