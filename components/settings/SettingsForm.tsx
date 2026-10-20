@@ -1,6 +1,6 @@
 'use client';
 
-import { AudioLines, BookMarked, CircleCheck, CircleDashed, Database, ImagePlus, Workflow } from 'lucide-react';
+import { AudioLines, BookMarked, CircleCheck, CircleDashed, Clapperboard, Database, ImagePlus, Workflow } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { cx } from '@/lib/cx';
@@ -37,7 +37,7 @@ export function SettingsForm({
   connections,
   children,
 }: {
-  connections: { supabase: boolean; agents: boolean; pictures: PictureModel; posting: Record<Place, PostingState> };
+  connections: { supabase: boolean; agents: boolean; pictures: PictureModel; videos: boolean; posting: Record<Place, PostingState> };
   children?: ReactNode;
 }) {
   return (
@@ -95,6 +95,16 @@ export function SettingsForm({
               <span className="muted small">Pictures for ads, through n8n: chosen under Agents</span>
             </span>
             {connections.pictures === 'cloudflare' ? <Connection on onLabel="FLUX.1 schnell, free" offLabel="" /> : <span className="pill pill-quiet pill-sm">Stand-in</span>}
+          </li>
+          <li>
+            <span className={styles.serviceIcon}>
+              <Clapperboard size={18} aria-hidden />
+            </span>
+            <span className={styles.serviceText}>
+              <strong>Higgsfield</strong>
+              <span className="muted small">AI video on the team’s plan, through n8n: switched under AI video</span>
+            </span>
+            {connections.videos ? <Connection on onLabel="Real videos" offLabel="" /> : <span className="pill pill-quiet pill-sm">Stand-in</span>}
           </li>
           <li>
             <span className={styles.serviceIcon}>

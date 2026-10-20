@@ -6,7 +6,7 @@ import { AiVideoStudio } from '@/components/videos/AiVideoStudio';
 import styles from '@/components/videos/videos.module.css';
 import postStyles from '@/components/posts/posts.module.css';
 import { ScrollingNav } from '@/components/ui/ScrollingNav';
-import { getAiVideos, getLongVideos } from '@/lib/data';
+import { getAiVideos, getLongVideos, getVideoBudget, usingSampleData } from '@/lib/data';
 import { clock } from '@/lib/long-video';
 import { dayLabel } from '@/lib/schedule';
 import type { LongVideo } from '@/lib/types';
@@ -31,7 +31,6 @@ export default async function VideoPage({ searchParams }: { searchParams: Promis
           <p className="lead">{view === 'ai' ? 'Make a video from a prompt with Higgsfield, then start a run from it: the agents write the ads over it.' : 'Turn a long recording into short ads: the agent finds the moments, you cut the ones you like.'}</p>
         </div>
         <div className={styles.viewsWrap}>
-          {view === 'ai' && <span className="pill pill-gold">Preview</span>}
           <ScrollingNav className={postStyles.views} label="Show" current={view}>
             <Link href="/videos" aria-current={view === 'long' ? 'page' : undefined}>
               <Film size={16} aria-hidden />
@@ -44,7 +43,7 @@ export default async function VideoPage({ searchParams }: { searchParams: Promis
           </ScrollingNav>
         </div>
       </header>
-      {view === 'ai' ? <AiVideoStudio videos={await getAiVideos()} /> : <LongVideos videos={await getLongVideos()} />}
+      {view === 'ai' ? <AiVideoStudio videos={await getAiVideos()} budget={await getVideoBudget()} sample={usingSampleData()} /> : <LongVideos videos={await getLongVideos()} />}
     </div>
   );
 }

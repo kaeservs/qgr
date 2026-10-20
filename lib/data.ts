@@ -63,6 +63,13 @@ export const readLeadsNow: DataSource['readLeadsNow'] = () => source().readLeads
 export const savePostLink: DataSource['savePostLink'] = (link) => source().savePostLink(link);
 export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
+export const getVideoBudget: DataSource['getVideoBudget'] = () => source().getVideoBudget();
+export const priceVideo: DataSource['priceVideo'] = (request) => source().priceVideo(request);
+export const askForVideo: DataSource['askForVideo'] = (request, credits) => source().askForVideo(request, credits);
+export const removeAiVideo: DataSource['removeAiVideo'] = (id) => source().removeAiVideo(id);
+export const createVideoPictureUpload: DataSource['createVideoPictureUpload'] = (extension) => source().createVideoPictureUpload(extension);
+export const deleteVideoPicture: DataSource['deleteVideoPicture'] = (path) => source().deleteVideoPicture(path);
+export const setVideoSettings: DataSource['setVideoSettings'] = (live, cap) => source().setVideoSettings(live, cap);
 export const getClipUrl: DataSource['getClipUrl'] = (path) => source().getClipUrl(path);
 export const createClipUpload: DataSource['createClipUpload'] = (extension) => source().createClipUpload(extension);
 export const deleteClipUpload: DataSource['deleteClipUpload'] = (path) => source().deleteClipUpload(path);

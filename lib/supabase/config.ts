@@ -50,6 +50,12 @@ export const momentsConfig = (): PipelineConfig | null => siblingWebhook('N8N_MO
 /** The "QGR · Leads" webhook, which reads Zoho and judges the leads waiting now instead of in its next fifteen minutes. */
 export const leadsConfig = (): PipelineConfig | null => siblingWebhook('N8N_LEADS_WEBHOOK_URL', 'qgr-leads');
 
+/** The "QGR · AI video" webhook, which sends a video someone asked for now instead of at the workflow's next minute. */
+export const videoConfig = (): PipelineConfig | null => siblingWebhook('N8N_VIDEO_WEBHOOK_URL', 'qgr-video');
+
+/** The same workflow's price webhook: Higgsfield's price for a request, answered at once (nothing is made). */
+export const videoPriceConfig = (): PipelineConfig | null => siblingWebhook('N8N_VIDEO_PRICE_WEBHOOK_URL', 'qgr-video-price');
+
 /** A webhook beside the run pipeline's: its own setting, or the run webhook's address with its path in place of qgr-run. */
 function siblingWebhook(setting: string, path: string): PipelineConfig | null {
   const pipeline = pipelineConfig();

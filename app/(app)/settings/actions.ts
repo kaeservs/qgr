@@ -1,6 +1,6 @@
 'use server';
 
-import { getTeamSettings, saveAgentSettings, savePostPages, setPostForReal } from '@/lib/data';
+import { getTeamSettings, saveAgentSettings, savePostPages, setPostForReal, setVideoSettings } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { parseAgentSettings, parsePostPages } from '@/lib/post-input';
 import { checkTeam } from '@/lib/session';
@@ -42,4 +42,13 @@ export async function setPostForRealAction(place: unknown, on: unknown): Promise
   if (!team.ok) return team;
   if (typeof on !== 'boolean' || !PLACES.includes(place as Place)) return { ok: false, status: 400, error: 'That is not a place posts go to.' };
   return setPostForReal(place as Place, on);
+}
+
+/** Making AI videos for real (they spend the Higgsfield plan's credits), and the month's limit in credits. */
+export async function setVideoSettingsAction(live: unknown, cap: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (typeof live !== 'boolean') return { ok: false, status: 400, error: 'Say whether AI video is on.' };
+  if (typeof cap !== 'number' || !Number.isInteger(cap) || cap < 0 || cap > 100_000) return { ok: false, status: 400, error: 'Set the monthly limit as whole credits, from 0 to 100,000.' };
+  return setVideoSettings(live, cap);
 }

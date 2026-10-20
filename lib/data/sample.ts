@@ -15,7 +15,7 @@ import type { NewRunInput } from '../run-input';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
 import { taggedLink } from '../leads';
-import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, TeamSettings } from '../types';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, TeamSettings, VideoBudget } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -34,10 +34,13 @@ const store = globalThis as typeof globalThis & {
   __qgrLongVideos?: LongVideoWithTranscript[];
   __qgrLeads?: Lead[];
   __qgrLeadSettings?: LeadSettings;
+  __qgrVideoBudget?: VideoBudget;
 };
 const runList = (): Run[] => (store.__qgrRuns ??= structuredClone(mock.runs));
 const leadList = (): Lead[] => (store.__qgrLeads ??= mock.leads());
 const leadSettings = (): LeadSettings => (store.__qgrLeadSettings ??= structuredClone(mock.leadSettings));
+/** AI video's switch and limit, as changed this session; the sample spends nothing. */
+const videoBudget = (): VideoBudget => (store.__qgrVideoBudget ??= { live: false, cap: 100, spent: 0 });
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
@@ -239,6 +242,17 @@ export const sampleData: DataSource = {
   },
   getAiVideos: async () => [mock.SAMPLE_AI_VIDEO],
   getAiVideo: async (id) => (id === mock.SAMPLE_AI_VIDEO.id ? mock.SAMPLE_AI_VIDEO : null),
+  getVideoBudget: async () => ({ ...videoBudget() }),
+  // No Higgsfield to ask: nothing is priced, nothing is made, nothing is spent.
+  priceVideo: async () => ({ ok: false, status: 503, error: 'The sample data has no Higgsfield to price it: prices show once the dashboard is connected.' }),
+  askForVideo: async () => ({ ok: false, status: 503, error: 'Sample data makes no videos: there is no Higgsfield to ask.' }),
+  removeAiVideo: async () => ({ ok: true, value: null, sample: true }),
+  createVideoPictureUpload: async (extension) => ({ ok: true, value: { path: `refs/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
+  deleteVideoPicture: async () => ({ ok: true, value: null, sample: true }),
+  setVideoSettings: async (live, cap) => {
+    store.__qgrVideoBudget = { ...videoBudget(), live, cap };
+    return { ok: true, value: null, sample: true };
+  },
   getClipUrl: async (path) => (path === mock.SAMPLE_CLIP.path ? mock.SAMPLE_CLIP_URL : null),
   createClipUpload: async (extension) => ({ ok: true, value: { path: `${SAMPLE_UPLOADS}/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteClipUpload: async () => ({ ok: true, value: null, sample: true }),
