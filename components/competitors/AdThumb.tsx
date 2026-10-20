@@ -12,7 +12,7 @@ const FORMAT = { video: 'Video', image: 'Image', carousel: 'Carousel', document:
  * from it under it. Linked to Meta's Ad Library when Apify read it there.
  * With `onChoose`, a person can tick it to build a run on.
  */
-export function AdThumb({ ad, chosen, onChoose }: { ad: AdExample; chosen?: boolean; onChoose?: (chosen: boolean) => void }) {
+export function AdThumb({ ad, chosen, onChoose, chooseLabel = 'Build on this ad' }: { ad: AdExample; chosen?: boolean; onChoose?: (chosen: boolean) => void; chooseLabel?: string }) {
   const words = ad.text.length > 140 ? `${ad.text.slice(0, 140).trimEnd()}…` : ad.text;
   return (
     <figure className={cx(styles.thumb, chosen && styles.thumbChosen)}>
@@ -30,7 +30,9 @@ export function AdThumb({ ad, chosen, onChoose }: { ad: AdExample; chosen?: bool
         {onChoose && (
           <label className={styles.thumbPick}>
             <input type="checkbox" checked={chosen ?? false} onChange={(e) => onChoose(e.target.checked)} />
-            <span className="sr-only">Build on this ad: {words}</span>
+            <span className="sr-only">
+              {chooseLabel}: {words}
+            </span>
           </label>
         )}
       </div>

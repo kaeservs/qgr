@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { initialStages, runStatus } from './pipeline';
+import { angleSpreadSaid, initialStages, runStatus } from './pipeline';
 import type { Run, Stage, StageKey } from './types';
 
 const stages = (tracker: Stage['status'], strategist: Stage['status'], content: Stage['status']): Record<StageKey, Stage> => ({
@@ -60,5 +60,14 @@ describe('runStatus', () => {
   it('reports a failure over anything else', () => {
     expect(runStatus(run(stages('failed', 'queued', 'queued')))).toBe('failed');
     expect(runStatus(run(stages('done', 'running', 'failed')))).toBe('failed');
+  });
+});
+
+describe('angleSpreadSaid', () => {
+  it('says how the three variants spread over the angles picked, as the Content Agent spreads them', () => {
+    expect(angleSpreadSaid(['Family first'])).toBe('A, B and C are three takes on “Family first”.');
+    expect(angleSpreadSaid(['Clarity', 'Diligence'])).toBe('A and B are two takes on “Clarity”, C follows “Diligence”.');
+    expect(angleSpreadSaid(['One', 'Two', 'Three'])).toBe('A, B and C follow one angle each, as without picking.');
+    expect(angleSpreadSaid([])).toBe('Tick the angles to write from.');
   });
 });

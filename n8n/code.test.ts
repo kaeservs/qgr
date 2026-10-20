@@ -719,6 +719,38 @@ describe('Content Agent', () => {
     expect(String(plain.system)).not.toContain('direction');
   });
 
+  it('spreads the three variants over the angles the team picked, and asks exactly as before without picks', () => {
+    const copy = { meta: { text: 't', headline: 'H', description: 'D', cta: 'Book now' }, x: { text: 't', headline: 'H' } };
+    const answer = { variants: ['A', 'B', 'C'].map((label) => ({ label, creative_text: 'w', creative_style: 'arcs', image_prompt: 'p', copy, posts: { facebook: 'P', instagram: 'C' } })) };
+    const namesFor = (chosen_angles: number[] | null) => {
+      const picked = { ...ctx, chosen_angles };
+      const { body } = run('content-build-request.js', picked) as { body: Json };
+      const out = run('content-read-answer.js', reply(answer), { 'Begin: load the run': picked });
+      const variants = (out.p_ad_set as { variants: { angle: string }[] }).variants;
+      return { system: String(body.system), angles: (materialOf(body).strategy as { angles: { name: string }[] }).angles.map((a) => a.name), variants: variants.map((v) => v.angle) };
+    };
+
+    const one = namesFor([1]);
+    expect(one.system).toContain('Write three variants from the angles the QGR team picked: A, B and C follow the angle "Family first". Variants that share an angle are each a different take on it');
+    expect(one.angles).toEqual(['Family first']);
+    expect(one.variants).toEqual(['Family first', 'Family first', 'Family first']);
+
+    const two = namesFor([2, 0]);
+    expect(two.system).toContain('A and B follow the angle "Clarity over hype", C follows the angle "Diligence".');
+    expect(two.angles).toEqual(['Clarity over hype', 'Diligence']);
+    expect(two.variants).toEqual(['Clarity over hype', 'Clarity over hype', 'Diligence']);
+
+    // All three picked, or none, is the strategy as it is: the request is exactly as before.
+    const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
+    for (const chosen of [null, [0, 1, 2]]) {
+      expect((run('content-build-request.js', { ...ctx, chosen_angles: chosen }) as { body: Json }).body).toEqual(plain);
+      expect(namesFor(chosen).variants).toEqual(['Clarity over hype', 'Family first', 'Diligence']);
+    }
+    expect(String(plain.system)).toContain("Write three variants: A follows the strategy's first angle, B the second, C the third.");
+
+    expect(() => run('content-build-request.js', { ...ctx, chosen_angles: [7] })).toThrow('The angles picked are not in the strategy.');
+  });
+
   it('fails when a variant is missing', () => {
     const out = run('content-read-answer.js', reply({ variants: [] }), { 'Begin: load the run': ctx });
     expect(out).toMatchObject({ ok: false, p_error: 'Claude did not write variant A.' });

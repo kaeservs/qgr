@@ -50,3 +50,15 @@ export const GO_AHEAD: Record<StageKey, { start: string; again: string }> = {
   strategist: { start: 'Build the strategy', again: 'Build it again' },
   content: { start: 'Write the ads', again: 'Write them again' },
 };
+
+/**
+ * What the angles picked for the Content Agent come to: it always writes three
+ * variants, spread over them as n8n/code/content-build-request.js does (one
+ * angle gets three takes, two get two and one).
+ */
+export function angleSpreadSaid(names: string[]): string {
+  if (names.length === 0) return 'Tick the angles to write from.';
+  if (names.length >= 3) return 'A, B and C follow one angle each, as without picking.';
+  if (names.length === 1) return `A, B and C are three takes on “${names[0]}”.`;
+  return `A and B are two takes on “${names[0]}”, C follows “${names[1]}”.`;
+}

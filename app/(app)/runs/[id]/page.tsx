@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { GoAheadButton } from '@/components/runs/GoAheadButton';
 import { RetryButton } from '@/components/runs/RetryButton';
+import { PickAds, PickAngles } from '@/components/runs/RunPickers';
 import { StageBadge } from '@/components/runs/StageBadge';
 import { LiveRefresh } from '@/components/ui/LiveRefresh';
 import { PlatformIcons } from '@/components/ui/PlatformIcon';
@@ -11,7 +12,7 @@ import { SourceIcon } from '@/components/ui/SourceIcon';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { ClipPreview } from '@/components/video/ClipPreview';
 import { cx } from '@/lib/cx';
-import { getClipUrl, getRun, usingSampleData } from '@/lib/data';
+import { getClipUrl, getRun, getRunPicks, usingSampleData } from '@/lib/data';
 import { formatDate, formatTime } from '@/lib/format';
 import { GO_AHEAD, STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
@@ -40,6 +41,19 @@ const HELD: Record<StageKey, string> = {
   strategist: 'Waits for you: it doesn’t start by itself after a scan. Read the report, then build the strategy above.',
   content: 'Waits for your go-ahead: it doesn’t write ads by itself. Read the strategy, then write the ads above.',
 };
+
+/** What a stage waits for when the run asked to pick first. */
+const PICKING: Partial<Record<StageKey, string>> = {
+  strategist: 'Waits for you to pick the ads it works from, above.',
+  content: 'Waits for you to pick the angles it writes from, above.',
+};
+
+/** What the team picked for a stage while the run waited. */
+function pickedNote(key: StageKey, run: Run): string | null {
+  const n = key === 'strategist' ? run.picked?.ads : key === 'content' ? run.picked?.angles : undefined;
+  if (!n) return null;
+  return key === 'strategist' ? `From the ${n === 1 ? 'ad' : `${n} ads`} you picked.` : `From the ${n === 1 ? 'angle' : `${n} angles`} you picked.`;
+}
 
 function outputLink(key: StageKey, run: Run): { href: string; label: string } | null {
   if (run.stages[key].status !== 'done') return null;
@@ -146,6 +160,9 @@ export default async function RunPage({ params }: Props) {
   if (!run) notFound();
   const kind = sourceKind(run.source);
   const clipUrl = 'clip' in run.source ? await getClipUrl(run.source.clip.path) : null;
+  const waiting = STAGE_ORDER.filter((key) => run.stages[key].status === 'waiting');
+  // What the waiting agent can be given: the run's own report's ads, or its strategy's angles.
+  const picks = waiting.some((key) => key !== 'tracker') ? await getRunPicks(run.id) : { ads: [], angles: [] };
 
   return (
     <div className="page">
@@ -176,14 +193,20 @@ export default async function RunPage({ params }: Props) {
       </header>
 
       {run.status === 'waiting' &&
-        STAGE_ORDER.filter((key) => run.stages[key].status === 'waiting').map((key) => (
-          <div key={key} className={styles.callout}>
-            <span>
-              <strong>The {STAGE_INFO[key].name} waits for your go-ahead.</strong> Its switch is off under Settings, Agents.
-            </span>
-            <GoAheadButton runId={run.id} label={GO_AHEAD[key].start} />
-          </div>
-        ))}
+        waiting.map((key) =>
+          key === 'strategist' && picks.ads.length > 0 ? (
+            <PickAds key={key} runId={run.id} ads={picks.ads} held={!run.pickFirst} />
+          ) : key === 'content' && picks.angles.length > 0 ? (
+            <PickAngles key={key} runId={run.id} angles={picks.angles} held={!run.pickFirst} />
+          ) : (
+            <div key={key} className={styles.callout}>
+              <span>
+                <strong>The {STAGE_INFO[key].name} waits for your go-ahead.</strong> {run.pickFirst ? 'There is nothing to pick from, so it goes on with everything.' : 'Its switch is off under Settings, Agents.'}
+              </span>
+              <GoAheadButton runId={run.id} label={GO_AHEAD[key].start} />
+            </div>
+          ),
+        )}
 
       {run.status === 'review' && run.output.adSetId && (
         <div className={styles.callout}>
@@ -241,9 +264,10 @@ export default async function RunPage({ params }: Props) {
                     : stage.status === 'failed'
                       ? stage.error
                       : stage.status === 'waiting'
-                        ? HELD[key]
+                        ? ((run.pickFirst ? PICKING[key] : undefined) ?? HELD[key])
                         : (stage.summary ?? (stage.status === 'running' ? 'Working on it.' : key === 'strategist' && (run.source.kind === 'custom' || run.chosenAds) ? 'Waiting to start.' : WAITING[key]))}
                 </p>
+                {pickedNote(key, run) && <p className={cx('muted small', styles.pickedNote)}>{pickedNote(key, run)}</p>}
                 {/* The whole card opens the agent's result. */}
                 {link && (
                   <Link href={link.href} className={cx('link', styles.stageLink)}>
@@ -259,7 +283,7 @@ export default async function RunPage({ params }: Props) {
                         Start from their link
                       </Link>
                     ) : (
-                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} />
+                      <RetryButton source={run.source} platforms={run.platforms} goal={run.goal} title={run.title} {...(run.guidance ? { guidance: run.guidance } : {})} pickFirst={run.pickFirst ?? false} />
                     )}
                   </div>
                 )}

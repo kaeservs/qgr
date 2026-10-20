@@ -30,6 +30,7 @@ import type {
   Post,
   PostPages,
   Run,
+  RunPicks,
   RunStatus,
   SearchItem,
   StageKey,
@@ -206,6 +207,12 @@ export interface DataSource {
   setCompetitorTracked(competitorId: string, tracked: boolean): Promise<Saved>;
   /** Starts the agent a run waits on (its switch is off) or one that failed, and hands it to n8n. */
   continueRun(runId: string): Promise<Saved<{ stage: StageKey }>>;
+  /** Starts a waiting Ad Strategist on the report's ads picked, in the order picked; none is all of them. */
+  continueWithAds(runId: string, adIds: string[]): Promise<Saved<{ stage: StageKey }>>;
+  /** Starts a waiting Content Agent on the strategy's angles picked; none is all of them. */
+  continueWithAngles(runId: string, angleIds: string[]): Promise<Saved<{ stage: StageKey }>>;
+  /** What a person picks from while the run waits: its own report's ads and its strategy's angles. */
+  getRunPicks(runId: string): Promise<RunPicks>;
 
   /** The leads of the last 180 days, newest first, and how leads come in and are judged. */
   getLeads(): Promise<{ leads: Lead[]; settings: LeadSettings }>;

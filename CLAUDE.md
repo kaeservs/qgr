@@ -45,7 +45,10 @@ is paid; X copy is for pasting.
 
 The tracker scans the tracked competitors on the team's schedule, and the
 strategist and the Content Agent can each be switched off, so a run waits for
-a person before them (Switches and scans below).
+a person before them (Switches and scans below). A run can also ask, once
+Start run is pressed, to wait for the team's picks: the report's ads the
+strategy answers, then the strategy's angles the ads are written from, or
+"Use all" (Picking inside a run below).
 
 A competitor run can also start from screenshots of their ads, which Claude
 reads; and any few of a report's ads, ticked on the competitor page, start a
@@ -82,8 +85,10 @@ X's ads APIs, which each need their own access.
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
             ── POST /api/competitor-shots → a signed upload link for a screenshot of a competitor's ad
             ── a clip's words: heard in the browser (lib/speech.ts, public/speech/whisper-worker.js)
-            ── POST /api/runs → reads the run's link → create_run() → set_run_guidance()
-               when the team gave a direction → POST the n8n webhook { runId, startAt }
+            ── Start run → a question in the browser (RunQuestions) → POST /api/runs →
+               reads the run's link → create_run() → set_run_guidance() when the team
+               gave a direction → set_run_pick_first() when it picks first →
+               POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
             ── leads → server actions → update_lead_criteria(), set_leads_source(), set_lead_verdict(),
                judge_leads_again(), set_post_link(), a suggestion approved → create_run()
@@ -97,7 +102,7 @@ X's ads APIs, which each need their own access.
                save_variant_words(), approve_variant(), save_video_edit(), save_variant_design(),
                update_brand_profile(),
                update_brand_memory(), add_brand_example(), remove_brand_example(), remember_post(),
-               continue_run(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
+               continue_run(), continue_with_ads(), continue_with_angles(), schedule_post(), cancel_post(), retry_post(), reschedule_post(),
                ask_for_picture(), use_picture(), stop_picture(), remove_picture(),
                update_agent_settings(), set_pictures_auto(), set_pictures_model(),
                set_pictures_quality(), Higgsfield's price for a picture from n8n's
@@ -193,7 +198,8 @@ X's ads APIs, which each need their own access.
   `save_variant_words` (`save_variant` stays for pages opened before it),
   `approve_variant`, `save_video_edit`, `save_variant_design`, `update_brand_profile`,
   `update_brand_memory`, `add_brand_example`, `remove_brand_example`, `remember_post`,
-  `continue_run` and `report_continue_failure`, `schedule_post`,
+  `continue_run` and `report_continue_failure`, `set_run_pick_first`,
+  `continue_with_ads`, `continue_with_angles`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
   `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
   `update_agent_settings`, `set_pictures_auto`, `set_pictures_model`,
@@ -436,7 +442,9 @@ X's ads APIs, which each need their own access.
   page is `continue_run`, which clears it and returns the stage, and the app
   starts the pipeline from there. The same call runs a failed agent again
   where it stopped. "Waiting" is derived in `lib/data/map.ts`, like every
-  status (rule 1).
+  status (rule 1). A waiting stage with something to pick from shows the
+  same pickers a run that picks first does (below); "Use all" is the
+  go-ahead as before.
 - Every hour n8n asks `start_due_scans` for the scans that are due: the last
   slot of the schedule in the team's zone (`scan_slot`, daylight saving
   included), if no scan has run for it and the schedule was not changed after
@@ -504,10 +512,47 @@ X's ads APIs, which each need their own access.
   the strategist builds its angles on them first (`competitor_report.
   chosen_ads`, with one rule), the Content Agent reads their words. Without
   chosen ads both requests are exactly as before (`n8n/code.test.ts`).
+- The same choice is in "Make ads from these": the run can wait after the
+  strategy for the angles (Picking inside a run below).
 - Tested in `supabase/competitors.test.ts` and end to end in
   `n8n/pipeline.test.ts`; the screenshots' signing answer follows Storage's
   batch signing endpoint (`[{ path, signedURL, error }]`): check the first
   real run's against `tracker-screenshot-ads.js`.
+
+### Picking inside a run (`runs.pick_first`, the run page)
+
+- Start run asks one question before anything is saved (`RunQuestions`, a
+  dialog; Back keeps the form): straight through, or "Let me pick the ads and
+  angles" ("the angles" on a custom run or one from chosen ads, which have no
+  report of their own). Picking is kept as `runs.pick_first`, set by
+  `set_run_pick_first` right after the run is created and only while no agent
+  has started; Start over carries it.
+- `pipeline_next` holds such a run before the strategist when its own report
+  has ads and none were chosen, and before the Content Agent, as a switch
+  that is off does (`waiting_since`, with its own event). The switches still
+  hold everything else as before.
+- The run page shows what the waiting agent can be given (`getRunPicks`: the
+  run's own report's ads, signed screenshots included, or its strategy's
+  angles): ticks, then "Build the strategy from these" or "Write the ads from
+  these", and "Use all". `continue_with_ads` keeps the ads picked, in the
+  order ticked, as `runs.chosen_ad_ids` (up to 20; all or none is null), which
+  `agent_begin` already hands the strategist and the Content Agent;
+  `continue_with_angles` keeps the angles picked as `runs.chosen_angle_ids`
+  (all three or none is null). Each clears the wait and returns the stage,
+  and the app starts the pipeline there, as `continue_run` does.
+- The Content Agent always writes three variants. With angles picked,
+  `agent_begin` hands their positions (`chosen_angles`) and both its scripts
+  spread A, B and C over them, `Math.floor(i * n / 3)`: one angle gets three
+  takes on it, two get two and one (the first picked in strategy order gets
+  two). The request sends only the angles picked; each variant is named after
+  its angle, which is how the studio finds its chain. Without picks the
+  request is exactly as before (`n8n/code.test.ts`). The run page says what
+  the picks come to before they go (`angleSpreadSaid` in `lib/pipeline.ts`).
+- A run built on chosen ads (`source_report_id`) says so as before
+  (`chosenAds`); ads picked while a run waited are `picked.ads` instead, and
+  each stage card says what it worked from.
+- Tested in `supabase/agents.test.ts` and end to end in
+  `n8n/pipeline.test.ts`.
 
 ### Posting (`posts`, `post_targets`, "QGR · Publisher")
 
@@ -929,9 +974,12 @@ X's ads APIs, which each need their own access.
   - Every Higgsfield step reads its answer in code
     (`n8n/code/video-*.js`), tested in `n8n/ai-video.test.ts`. The workflow
     keeps no execution data for runs that succeed.
-  - The answers to `generate_video` and `job_status` follow what Higgsfield's
-    MCP documents, not a real video: check the first real one against
-    `video-read-start.js` and `video-read-job.js`.
+  - Checked with the first real video (2026-10-20: Seedance 2.0 Mini, 4 s,
+    480p, silent, 2 credits): offered the preset "IN THE DARK", declined, sent
+    as written once; the send answers `results[0].id` as the job;
+    `job_status` answers `generation.status` (in_progress, then completed in
+    about two and a half minutes) with `results.rawUrl`, the MP4 (1.5 MB).
+    These answers are fixtures in `n8n/ai-video.test.ts`.
 - The library (`AiVideoStudio`) shows each video as waiting, being made,
   ready (it plays, from a link signed for an hour), not made (and why), check
   Higgsfield, or nothing made (the stand-in), and re-reads while one is under

@@ -16,6 +16,8 @@ import { PlatformIcon } from '../ui/PlatformIcon';
 import { ClipEditButton } from '../video/ClipEditButton';
 import type { FrameBrandWords } from '../video/ClipEditButton';
 import { ClipField } from '../video/ClipField';
+import { RunQuestions } from '../runs/RunQuestions';
+import type { RunAnswers } from '../runs/RunQuestions';
 import { ShotsField } from './ShotsField';
 import type { ShotsStatus } from './ShotsField';
 import type { ClipStatus } from '../video/ClipField';
@@ -85,6 +87,8 @@ export function StartRunCard({
   const [guidance, setGuidance] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The run as built, while the questions after Start run are open. */
+  const [asking, setAsking] = useState<RunSource | null>(null);
   // A video is a link to read, or a clip uploaded from here.
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>(fromVideo ? 'upload' : 'link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
@@ -159,24 +163,38 @@ export function StartRunCard({
     return { kind: 'custom', type: sourceType === 'text' ? 'podcast' : sourceType, url: normalized };
   }
 
-  async function onSubmit(e: FormEvent) {
+  // Start run checks the form, then asks how the run should go before anything is saved.
+  function onSubmit(e: FormEvent) {
     e.preventDefault();
     const built = buildSource();
     if (typeof built === 'string') return setError(built);
     if (platforms.length === 0) return setError('Pick at least one platform.');
     setError(null);
+    setAsking(built);
+  }
+
+  async function start(built: RunSource, answers: RunAnswers) {
     setBusy(true);
     try {
       const res = await fetch('/api/runs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: built, platforms, goal, ...(title.trim() ? { title: title.trim() } : {}), ...(guidance.trim() ? { guidance: guidance.trim() } : {}) }),
+        body: JSON.stringify({
+          source: built,
+          platforms,
+          goal,
+          ...(title.trim() ? { title: title.trim() } : {}),
+          ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
+          ...(answers.pickFirst ? { pickFirst: true } : {}),
+        }),
       });
       const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !body?.id) throw new Error(body?.error ?? 'The run could not be started.');
       toast('Run started');
       router.push(`/runs/${body.id}`);
     } catch (err) {
+      // What went wrong is about the form (a page that can't be read, say), so it shows there.
+      setAsking(null);
       setError(err instanceof Error ? err.message : 'The run could not be started.');
       setBusy(false);
     }
@@ -456,6 +474,16 @@ export function StartRunCard({
             <span className="muted small">Every agent on this run reads it: what to focus on, the hooks to try, what to leave out.</span>
           </label>
         </div>
+
+        {asking && (
+          <RunQuestions
+            skipsTracker={asking.kind === 'custom'}
+            busy={busy}
+            busyLabel={readsLink && !adLibrary ? 'Reading the page…' : 'Starting…'}
+            onStart={(answers) => void start(asking, answers)}
+            onClose={() => setAsking(null)}
+          />
+        )}
 
         <ol className={styles.flow} aria-label="Agents this run uses">
           {STAGE_ORDER.map((key, i) => {

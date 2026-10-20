@@ -8,6 +8,9 @@ import { PHOTO_BUCKET } from '../profile-input';
 import { mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
 import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
+import type { PipelineConfig } from '../supabase/config';
+import type { RunOptions } from '../run-input';
+import type { StageKey } from '../types';
 import { askPrice } from '../video-price';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
@@ -31,6 +34,7 @@ import {
   toStrategy,
   toTeamSettings,
   toAiVideo,
+  toAdExamples,
   toUser,
   toVideoBudget,
   WORKING_MINUTES,
@@ -48,7 +52,7 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, source_report_id, pick_first, chosen_angle_ids, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
   'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known))';
@@ -109,6 +113,42 @@ function refused(error: PostgrestError, fallback: string): Saved<never> {
   if (error.code === 'P0001') return { ok: false, status: 400, error: error.message };
   console.error(fallback, error);
   return { ok: false, status: 500, error: fallback };
+}
+
+/**
+ * What a run carries besides its source, saved before n8n is told about it so
+ * every agent reads it: the team's direction, and whether it waits for their
+ * picks. One that cannot be saved stops the run with the reason, as a start
+ * that fails does.
+ */
+async function saveRunOptions(supabase: Supabase, id: string, input: RunOptions): Promise<Saved<never> | null> {
+  const unsaved = async (error: PostgrestError, what: string): Promise<Saved<never>> => {
+    const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: `${what} could not be saved, so the run did not start.` });
+    if (reportError) console.error('Recording that the run could not start failed', reportError);
+    return refused(error, `${what} could not be saved.`);
+  };
+  if (input.guidance) {
+    const { error } = await supabase.rpc('set_run_guidance', { p_run_id: id, p_guidance: input.guidance });
+    if (error) return unsaved(error, 'The direction for the agents');
+  }
+  if (input.pickFirst) {
+    const { error } = await supabase.rpc('set_run_pick_first', { p_run_id: id, p_on: true });
+    if (error) return unsaved(error, 'That the run waits for your picks');
+  }
+  return null;
+}
+
+/** Hands n8n the stage a go-ahead returned. If n8n cannot be reached, the stage waits again and says why. */
+async function startStage(supabase: Supabase, pipeline: PipelineConfig, runId: string, data: string): Promise<Saved<{ stage: StageKey }>> {
+  const stage = STAGE_ORDER.find((s) => s === data);
+  if (!stage) return { ok: false, status: 500, error: 'The agent could not be started.' };
+  const started = await startPipeline(pipeline, runId, stage);
+  if (!started.ok) {
+    const { error: reportError } = await supabase.rpc('report_continue_failure', { p_run_id: runId, p_stage: stage, p_error: started.error });
+    if (reportError) console.error('Recording that the agent could not start failed', reportError);
+    return { ok: false, status: 502, error: started.error };
+  }
+  return { ok: true, value: { stage }, sample: false };
 }
 
 /**
@@ -341,15 +381,8 @@ export const liveData: DataSource = {
     }
     const { data: id, error } = await supabase.rpc('create_run', toCreateRunArgs(input, page));
     if (error) return refused(error, 'The run could not be saved.');
-    // The direction is the run's before n8n is told about it, so every agent reads it.
-    if (input.guidance) {
-      const { error: guidanceError } = await supabase.rpc('set_run_guidance', { p_run_id: id, p_guidance: input.guidance });
-      if (guidanceError) {
-        const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: 'The direction for the agents could not be saved, so the run did not start.' });
-        if (reportError) console.error('Recording that the run could not start failed', reportError);
-        return refused(guidanceError, 'The direction for the agents could not be saved.');
-      }
-    }
+    const unsaved = await saveRunOptions(supabase, id, input);
+    if (unsaved) return unsaved;
     const started = await startPipeline(pipeline, id, input.source.kind === 'custom' ? 'strategist' : 'tracker');
     if (!started.ok) {
       // The run shows why it stopped, with a retry, instead of waiting forever.
@@ -371,14 +404,8 @@ export const liveData: DataSource = {
       ...(input.title ? { p_title: input.title } : {}),
     });
     if (error) return refused(error, 'The run could not be saved.');
-    if (input.guidance) {
-      const { error: guidanceError } = await supabase.rpc('set_run_guidance', { p_run_id: id, p_guidance: input.guidance });
-      if (guidanceError) {
-        const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: 'The direction for the agents could not be saved, so the run did not start.' });
-        if (reportError) console.error('Recording that the run could not start failed', reportError);
-        return refused(guidanceError, 'The direction for the agents could not be saved.');
-      }
-    }
+    const unsaved = await saveRunOptions(supabase, id, input);
+    if (unsaved) return unsaved;
     // The tracker is skipped: the report is already there.
     const started = await startPipeline(pipeline, id, 'strategist');
     if (!started.ok) {
@@ -741,15 +768,51 @@ export const liveData: DataSource = {
     const supabase = await db();
     const { data, error } = await supabase.rpc('continue_run', { p_run_id: runId });
     if (error) return refused(error, 'The agent could not be started.');
-    const stage = STAGE_ORDER.find((s) => s === data);
-    if (!stage) return { ok: false, status: 500, error: 'The agent could not be started.' };
-    const started = await startPipeline(pipeline, runId, stage);
-    if (!started.ok) {
-      const { error: reportError } = await supabase.rpc('report_continue_failure', { p_run_id: runId, p_stage: stage, p_error: started.error });
-      if (reportError) console.error('Recording that the agent could not start failed', reportError);
-      return { ok: false, status: 502, error: started.error };
+    return startStage(supabase, pipeline, runId, data);
+  },
+
+  continueWithAds: async (runId, adIds) => {
+    const pipeline = pipelineConfig();
+    if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so nothing can start.' };
+    const supabase = await db();
+    const { data, error } = await supabase.rpc('continue_with_ads', { p_run_id: runId, p_ad_ids: adIds });
+    if (error) return refused(error, 'The Ad Strategist could not be started.');
+    return startStage(supabase, pipeline, runId, data);
+  },
+
+  continueWithAngles: async (runId, angleIds) => {
+    const pipeline = pipelineConfig();
+    if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so nothing can start.' };
+    const supabase = await db();
+    const { data, error } = await supabase.rpc('continue_with_angles', { p_run_id: runId, p_angle_ids: angleIds });
+    if (error) return refused(error, 'The Content Agent could not be started.');
+    return startStage(supabase, pipeline, runId, data);
+  },
+
+  getRunPicks: async (runId) => {
+    if (!UUID.test(runId)) return { ads: [], angles: [] };
+    const supabase = await db();
+    const [{ data: report, error }, all] = await Promise.all([
+      supabase
+        .from('competitor_reports')
+        .select('id, competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known)')
+        .eq('run_id', runId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      strategies(),
+    ]);
+    if (error) readFailed('the run’s report', error);
+    const ads = report?.competitor_ads ?? [];
+    // Screenshots are private: each is shown through a link signed as the viewer, all in one call.
+    const paths = [...new Set(ads.flatMap((a) => (a.screenshot_path ? [a.screenshot_path] : [])))];
+    const links = new Map<string, string>();
+    if (paths.length > 0) {
+      const { data: signed, error: signError } = await supabase.storage.from(SHOTS_BUCKET).createSignedUrls(paths, PICTURE_SECONDS);
+      if (signError) console.error('Signing screenshots failed', signError);
+      for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
     }
-    return { ok: true, value: { stage }, sample: false };
+    return { ads: toAdExamples(ads, (path) => links.get(path)), angles: all.find((s) => s.runId === runId)?.angles ?? [] };
   },
 
   getPosts: () => posts(),

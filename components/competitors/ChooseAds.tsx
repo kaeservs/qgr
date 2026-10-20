@@ -9,6 +9,7 @@ import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { MAX_CHOSEN_ADS, MAX_GUIDANCE } from '@/lib/run-input';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { AdExample, Goal, Platform } from '@/lib/types';
+import { PickFirstChoice } from '../runs/RunQuestions';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
 import home from '../home/home.module.css';
@@ -64,6 +65,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
   const [goal, setGoal] = useState<Goal>('consultations');
   const [guidance, setGuidance] = useState('');
   const [title, setTitle] = useState('');
+  const [pickFirst, setPickFirst] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +88,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
       goal,
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
+      ...(pickFirst ? { pickFirst: true } : {}),
     }).catch(() => ({ ok: false as const, status: 500, error: 'The run could not be started.' }));
     if (!result.ok) {
       setBusy(false);
@@ -161,6 +164,7 @@ function StartFromAds({ competitor, reportId, ads, onClose }: { competitor: stri
           <span className="label">Run name (optional)</span>
           <input className="input" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={`${competitor} · ${ads.length} chosen ad${ads.length === 1 ? '' : 's'}`} />
         </label>
+        <PickFirstChoice skipsTracker value={pickFirst} onChange={setPickFirst} disabled={busy} />
         {error && (
           <p className="error-text" role="alert">
             {error}

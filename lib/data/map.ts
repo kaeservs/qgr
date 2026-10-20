@@ -49,6 +49,7 @@ import type {
   Post,
   PostStatus,
   PostTarget,
+  Run,
   RunSource,
   ScanEvery,
   Stage,
@@ -109,8 +110,11 @@ export interface RunRow {
   media_path: string | null;
   media: Json | null;
   guidance: string | null;
-  /** Set on a run built on a few of a report's ads, chosen by a person. */
+  /** Set on a run built on a few of a report's ads (source_report_id), or on the ads picked while the run waited. */
   chosen_ad_ids?: string[] | null;
+  source_report_id?: string | null;
+  pick_first?: boolean;
+  chosen_angle_ids?: string[] | null;
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -352,6 +356,7 @@ export function toRun(row: RunRow): RunWithStatus {
   const adSet = one(row.ad_sets);
   const report = one(row.competitor_reports);
   const stages = stagesOf(row.run_stages);
+  const picked = pickedOf(row);
   const run = {
     id: row.id,
     title: row.title,
@@ -375,9 +380,19 @@ export function toRun(row: RunRow): RunWithStatus {
     activity: [...(row.run_events ?? [])].sort((a, b) => a.at.localeCompare(b.at)).map((e) => ({ at: e.at, text: e.text })),
     ...(pageOf(row) ? { page: pageOf(row) as PageSummary } : {}),
     ...(row.guidance ? { guidance: row.guidance } : {}),
-    ...(row.chosen_ad_ids && row.chosen_ad_ids.length > 0 ? { chosenAds: row.chosen_ad_ids.length } : {}),
+    ...(row.chosen_ad_ids && row.chosen_ad_ids.length > 0 && row.source_report_id ? { chosenAds: row.chosen_ad_ids.length } : {}),
+    ...(row.pick_first ? { pickFirst: true } : {}),
+    ...(picked ? { picked } : {}),
   };
   return { ...run, status: runStatus(run) };
+}
+
+/** What the team picked while the run waited: ads from its own report, angles from its strategy. */
+function pickedOf(row: Pick<RunRow, 'chosen_ad_ids' | 'source_report_id' | 'chosen_angle_ids'>): NonNullable<Run['picked']> | null {
+  const ads = !row.source_report_id && row.chosen_ad_ids ? row.chosen_ad_ids.length : 0;
+  const angles = row.chosen_angle_ids ? row.chosen_angle_ids.length : 0;
+  if (ads === 0 && angles === 0) return null;
+  return { ...(ads > 0 ? { ads } : {}), ...(angles > 0 ? { angles } : {}) };
 }
 
 function pageOf(row: Pick<RunRow, 'page_ok' | 'page_url' | 'page_title' | 'page_words' | 'page_error'>): PageSummary | null {
@@ -416,22 +431,15 @@ export function toNotices(rows: RunRow[], limit = 6): Notice[] {
 
 // ---------------------------------------------------------------- reports, strategies, ads
 
+export type CompetitorAdRow = CompetitorRow['competitor_reports'][number]['competitor_ads'][number];
+
 /**
- * The competitor and their latest report. A screenshot is shown through a link
- * signed for the viewer (`shotUrl`); lists sign none.
+ * A report's ads as the dashboard shows them, in the tracker's order
+ * (longest-running first); reports from before it kept every ad, by days. A
+ * screenshot is shown through a link signed for the viewer (`shotUrl`).
  */
-export function toCompetitor(row: CompetitorRow, shotUrl: (path: string) => string | undefined = () => undefined): Competitor | null {
-  const report = [...row.competitor_reports].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
-  if (!report) return null;
-  const hooks = [...report.hooks]
-    .sort((a, b) => a.rank - b.rank)
-    .flatMap((h): Hook[] =>
-      isOneOf(PLATFORMS, h.platform)
-        ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_known ? h.days_running : null, variations: h.variations }]
-        : [],
-    );
-  // In the tracker's order (longest-running first); reports from before it kept every ad, by days.
-  const examples = [...report.competitor_ads]
+export function toAdExamples(ads: CompetitorAdRow[], shotUrl: (path: string) => string | undefined = () => undefined): AdExample[] {
+  return [...ads]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || b.days_running - a.days_running)
     .flatMap((a, i): AdExample[] => {
       if (!isOneOf(PLATFORMS, a.platform)) return [];
@@ -452,6 +460,23 @@ export function toCompetitor(row: CompetitorRow, shotUrl: (path: string) => stri
         },
       ];
     });
+}
+
+/**
+ * The competitor and their latest report. A screenshot is shown through a link
+ * signed for the viewer (`shotUrl`); lists sign none.
+ */
+export function toCompetitor(row: CompetitorRow, shotUrl: (path: string) => string | undefined = () => undefined): Competitor | null {
+  const report = [...row.competitor_reports].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  if (!report) return null;
+  const hooks = [...report.hooks]
+    .sort((a, b) => a.rank - b.rank)
+    .flatMap((h): Hook[] =>
+      isOneOf(PLATFORMS, h.platform)
+        ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_known ? h.days_running : null, variations: h.variations }]
+        : [],
+    );
+  const examples = toAdExamples(report.competitor_ads, shotUrl);
   return {
     id: row.id,
     name: row.name,

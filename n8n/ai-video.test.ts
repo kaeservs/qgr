@@ -1,7 +1,7 @@
 // "QGR · AI video" played step by step: a price is asked for without making
 // anything, an ask is sent to Higgsfield once in its own words for the model,
-// Higgsfield's answers (fixtures in the shapes its MCP gave on 2026-10-20, and
-// the shapes its tool descriptions promise) are read into started, refused,
+// Higgsfield's answers (fixtures in the shapes its MCP gave on 2026-10-20, the
+// first real video's among them) are read into started, refused,
 // retry or unknown, and a finished job is stored and recorded, against every
 // migration.
 import { readFileSync } from 'node:fs';
@@ -191,6 +191,38 @@ describe('a preset Higgsfield offers in place of the prompt', () => {
     expect(started).toEqual({ kind: 'refused', id: 'video-1', error: 'Higgsfield offered its preset "IN THE DARK" in place of the prompt as written: nothing was made. Change the prompt a little and ask again.' });
     expect(started).not.toHaveProperty('job_id');
     expect(runAll('video-read-quote.js', [presetOffer()])).toEqual([{ ok: false, error: 'Higgsfield offered its preset "IN THE DARK" in place of the prompt as written: change the prompt a little and ask again.' }]);
+  });
+});
+
+describe('Higgsfield’s real answers, from the first video made (2026-10-20)', () => {
+  // The cheapest video (Seedance 2.0 Mini, 4 s, 480p, silent: 2 credits). Trimmed only of the prompt Higgsfield echoes back.
+  const JOB = '7a5e4a07-c867-4a27-9b9b-49b707975a14';
+  const RAW = `https://d8j0ntlcm91z4.cloudfront.net/user_3KvMOcHKA9JTv89W2IDT4vG0Bc5/hf_20261020_183251_${JOB}.mp4`;
+  const params = { prompt: PROMPT, aspect_ratio: '9:16', duration: 4, resolution: '480p', generate_audio: false };
+  const written = [{ id: 'video-1', generate_input: JSON.stringify({ params: { model: 'seedance_2_0_mini', ...params } }) }];
+
+  it('was offered a preset, declined it, and was sent as written once', () => {
+    const [again] = runAll('video-as-written.js', [presetOffer()], { 'Write the request': written });
+    expect(JSON.parse(again!.generate_input as string).params.declined_preset_id).toBe(PRESET_ID);
+    const submitted = {
+      structuredContent: { results: [{ id: JOB, type: 'video', status: 'pending', model: 'seedance_2_0_mini', params }] },
+      content: [
+        { type: 'text', text: `Submitted 1 job. If a widget is visible, it polls automatically — do not call job_status or show_generations as a follow-up poll. In text-only clients, use job_status with sync:true to poll for completion.\n- ${JOB}  "${PROMPT}"` },
+        { type: 'text', text: 'If the user requests a combined display of multiple generations, … then call show_generation_by_ids with jobs: [{"index":0,"job_id":"<first actual job ID>"},{"index":1,"job_id":"<second actual job ID>"}, ...].' },
+      ],
+    };
+    expect(runAll('video-read-start.js', [submitted], { 'Write the request': written })[0]).toEqual({ kind: 'started', id: 'video-1', job_id: JOB, credits: null });
+  });
+
+  it('waits while it is made, then takes its MP4', () => {
+    const jobs = [{ id: 'video-1', job_id: JOB, path: 'videos/video-1.mp4' }];
+    const generation = (status: string, results?: Json) => ({
+      structuredContent: { generation: { id: JOB, type: status === 'completed' ? 'video' : 'image', status, model: 'seedance_2_0_mini', params: { ...params, width: 480, height: 854 }, ...(results ? { results } : {}), createdAt: 1792521171.83465, liked: false }, ...(results ? {} : { poll_after_seconds: 2 }) },
+      content: [{ type: 'text', text: `Job ${JOB} — ${status}` }],
+    });
+    const read = (out: Json) => runAll('video-read-job.js', [out], { 'One item per job': jobs })[0];
+    expect(read(generation('in_progress'))).toEqual({ kind: 'waiting', id: 'video-1' });
+    expect(read(generation('completed', { rawUrl: RAW }))).toEqual({ kind: 'done', id: 'video-1', path: 'videos/video-1.mp4', url: RAW });
   });
 });
 

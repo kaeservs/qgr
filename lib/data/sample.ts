@@ -135,6 +135,7 @@ export const sampleData: DataSource = {
       ],
       ...(page ? { page: summarizePage(page) } : {}),
       ...(input.guidance ? { guidance: input.guidance } : {}),
+      ...(input.pickFirst ? { pickFirst: true } : {}),
     });
     return { ok: true, value: { id: `r-${next}` }, sample: true };
   },
@@ -158,6 +159,7 @@ export const sampleData: DataSource = {
       output: { competitorId: competitor.id },
       counts: {},
       chosenAds: chosen.length,
+      ...(input.pickFirst ? { pickFirst: true } : {}),
       activity: [
         { at: now, text: 'Run started' },
         { at: now, text: `Competitor Tracker skipped: built on ${ads} chosen from the report on ${competitor.name}` },
@@ -290,6 +292,41 @@ export const sampleData: DataSource = {
     run.activity.push({ at: now, text: was === 'failed' ? `Trying the ${STAGE_INFO[stage].name} again` : `Go-ahead given for the ${STAGE_INFO[stage].name}` });
     run.activity.push({ at: now, text: 'Sample data: the agents don’t run here' });
     return { ok: true, value: { stage }, sample: true };
+  },
+  continueWithAds: async (runId, adIds) => {
+    const run = runList().find((r) => r.id === runId);
+    if (!run || run.stages.strategist.status !== 'waiting') return { ok: false, status: 400, error: 'The Ad Strategist is not waiting for your go-ahead on this run.' };
+    const ads = (await sampleData.getRunPicks(runId)).ads;
+    if (!adIds.every((id) => ads.some((a) => a.id === id))) return { ok: false, status: 400, error: 'Pick the ads from this run’s report.' };
+    const some = adIds.length > 0 && adIds.length < ads.length;
+    run.stages.strategist = { status: 'queued' };
+    if (some) run.picked = { ...run.picked, ads: adIds.length };
+    const now = new Date().toISOString();
+    run.activity.push({ at: now, text: some ? `Go-ahead given for the Ad Strategist, with ${adIds.length} of the report’s ${ads.length} ads` : 'Go-ahead given for the Ad Strategist, with all of the report’s ads' });
+    run.activity.push({ at: now, text: 'Sample data: the agents don’t run here' });
+    return { ok: true, value: { stage: 'strategist' }, sample: true };
+  },
+  continueWithAngles: async (runId, angleIds) => {
+    const run = runList().find((r) => r.id === runId);
+    if (!run || run.stages.content.status !== 'waiting') return { ok: false, status: 400, error: 'The Content Agent is not waiting for your go-ahead on this run.' };
+    const angles = (await sampleData.getRunPicks(runId)).angles;
+    if (!angleIds.every((id) => angles.some((a) => a.id === id))) return { ok: false, status: 400, error: 'Pick the angles from this run’s strategy.' };
+    const some = angleIds.length > 0 && angleIds.length < angles.length;
+    run.stages.content = { status: 'queued' };
+    if (some) run.picked = { ...run.picked, angles: angleIds.length };
+    const now = new Date().toISOString();
+    run.activity.push({ at: now, text: some ? `Go-ahead given for the Content Agent, from ${angleIds.length} of the strategy’s ${angles.length} angles` : 'Go-ahead given for the Content Agent, from every angle' });
+    run.activity.push({ at: now, text: 'Sample data: the agents don’t run here' });
+    return { ok: true, value: { stage: 'content' }, sample: true };
+  },
+  getRunPicks: async (runId) => {
+    const run = runList().find((r) => r.id === runId);
+    if (!run) return { ads: [], angles: [] };
+    return {
+      // A run built on chosen ads has no report of its own to pick from.
+      ads: run.chosenAds ? [] : (competitorList().find((c) => c.id === run.output.competitorId)?.examples ?? []),
+      angles: mock.strategies.find((s) => s.runId === run.id)?.angles ?? [],
+    };
   },
 
   getLeads: async () => ({ leads: structuredClone(leadList()), settings: leadSettings() }),

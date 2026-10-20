@@ -1009,6 +1009,7 @@ export type Database = {
         Row: {
           approved_at: string | null
           chosen_ad_ids: string[] | null
+          chosen_angle_ids: string[] | null
           competitor_id: string | null
           competitor_name: string | null
           created_at: string
@@ -1023,6 +1024,7 @@ export type Database = {
           media: Json | null
           media_path: string | null
           page: Json | null
+          pick_first: boolean
           platforms: string[]
           source_report_id: string | null
           summary: string | null
@@ -1032,6 +1034,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null
           chosen_ad_ids?: string[] | null
+          chosen_angle_ids?: string[] | null
           competitor_id?: string | null
           competitor_name?: string | null
           created_at?: string
@@ -1046,6 +1049,7 @@ export type Database = {
           media?: Json | null
           media_path?: string | null
           page?: Json | null
+          pick_first?: boolean
           platforms: string[]
           source_report_id?: string | null
           summary?: string | null
@@ -1055,6 +1059,7 @@ export type Database = {
         Update: {
           approved_at?: string | null
           chosen_ad_ids?: string[] | null
+          chosen_angle_ids?: string[] | null
           competitor_id?: string | null
           competitor_name?: string | null
           created_at?: string
@@ -1069,6 +1074,7 @@ export type Database = {
           media?: Json | null
           media_path?: string | null
           page?: Json | null
+          pick_first?: boolean
           platforms?: string[]
           source_report_id?: string | null
           summary?: string | null
@@ -1420,6 +1426,14 @@ export type Database = {
       }
       cancel_post: { Args: { p_post_id: string }; Returns: string[] }
       continue_run: { Args: { p_run_id: string }; Returns: string }
+      continue_with_ads: {
+        Args: { p_ad_ids: string[]; p_run_id: string }
+        Returns: string
+      }
+      continue_with_angles: {
+        Args: { p_angle_ids: string[]; p_run_id: string }
+        Returns: string
+      }
       create_long_video: {
         Args: {
           p_file: Json
@@ -1676,6 +1690,10 @@ export type Database = {
       set_post_link: { Args: { p_link: string }; Returns: undefined }
       set_run_guidance: {
         Args: { p_guidance: string; p_run_id: string }
+        Returns: undefined
+      }
+      set_run_pick_first: {
+        Args: { p_on: boolean; p_run_id: string }
         Returns: undefined
       }
       set_video_settings: {
