@@ -1613,6 +1613,39 @@ const respond = node({
   output: [{}],
 });
 
+// ---- a prompt from what is said around a point of a video being edited (Claude, never Higgsfield: nothing is made)
+const writeIt = trigger({
+  type: 'n8n-nodes-base.webhook',
+  version: 2.1,
+  config: {
+    name: 'Write a prompt',
+    parameters: {
+      httpMethod: 'POST',
+      path: 'qgr-video-prompt',
+      authentication: 'headerAuth',
+      responseMode: 'responseNode',
+      options: {},
+    },
+    credentials: { httpHeaderAuth: newCredential('QGR webhook secret') },
+  },
+  output: [{ body: { long_video_id: null, at: 182, seconds: 5, aspect: '16:9', mode: 'cover', idea: '', lines: [{ start: 180, end: 184, text: 'Many of our families send a child to study in the U.S.' }], brand: { company: 'Quantum Global Residency', guardrails: [], look: null } } }],
+});
+${codeNode('buildPrompt', 'Build the prompt request', code('video-prompt-build-request.js'), `{ long_video_id: null, body: { model: 'claude-haiku-5-5', max_tokens: 1200 } }`)}
+${claudeNode('claudePrompt', 'Claude: write the prompt')}
+${codeNode('readPrompt', 'Read the prompt', code('video-prompt-read-answer.js'), `{ ok: true, prompt: 'A student walks across a sunny U.S. campus, seen from behind.', why: 'They talk about studying in the U.S.', long_video_id: null, model: 'claude-haiku-5-5', usage: { input_tokens: 900, output_tokens: 120 } }`)}
+${rpcNode('promptUsed', 'Record what it cost', 'video_prompt_used', '{{ JSON.stringify({ p_long_video_id: $json.long_video_id, p_model: $json.model, p_usage: $json.usage }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${codeNode('promptAnswer', 'The prompt', code('video-prompt-answer.js'), `{ ok: true, prompt: 'A student walks across a sunny U.S. campus, seen from behind.', why: 'They talk about studying in the U.S.' }`)}
+
+const respondPrompt = node({
+  type: 'n8n-nodes-base.respondToWebhook',
+  version: 1.5,
+  config: {
+    name: 'Answer the editor',
+    parameters: { respondWith: 'json', responseBody: expr('{{ JSON.stringify($json) }}'), options: {} },
+  },
+  output: [{}],
+});
+
 // ---- the asks: sent once
 ${rpcNode('takeDue', 'Take the videos asked for', 'video_take_due', '{{ JSON.stringify({ p_limit: 3 }) }}', videoAsk, "\n    executeOnce: true,")}
 ${codeNode('eachAsk', 'One item per video', code('shared-items.js'), videoAsk)}
@@ -1681,6 +1714,7 @@ ${rpcNode('recordReady', 'Record: ready', 'video_finish', '{{ JSON.stringify({ p
 const noteFlow = sticky('## AI video\\nThe team asks on the AI video page. **Price** answers the page with Higgsfield\\'s price for the request (generate_video with **get_cost**, which makes nothing) and the credits left on the plan. Every minute, and at once when someone asks, the asks waiting (**video_take_due**, each sent once) go to Higgsfield, and the jobs being made (**video_take_making**) are checked until their video can be fetched, stored in ai-videos and recorded.', [everyMinute, makeNow, priceIt, takeDue, eachAsk, takeMaking, eachJob], { color: 4 });
 const noteHiggsfield = sticky('## Higgsfield\\nCalled through its MCP (**mcp.higgsfield.ai**) with the **Higgsfield** credential (MCP OAuth2 API), signed in with the team\\'s own Higgsfield account: every video spends the plan\\'s credits, even on an Unlimited plan, and the team\\'s monthly limit in Settings holds them. A first picture is signed for 15 minutes and imported first (**media_import_url**).\\n\\nAn ask is sent once. Not reached at all, it waits for the next minute (three tries). Refused, nothing was made. Any other trouble after sending is **unknown**: never sent again by itself (Higgsfield: do not automatically resubmit), a person checks Higgsfield\\'s history.\\n\\nHiggsfield may offer one of its presets in place of the prompt: nothing is priced or made, so it is declined and the request asked once more as written (**declined_preset_id**). Offered again, nothing was made and the page says so.', [forReal, firstPicture, signPicture, pictureLink, linkMade, importPicture, readMedia, pictureTaken, writeRequest, makeIt, makeDecline, makeAsWritten, makeAgain, readStart, writeRequestPicture, makeItPicture, makePictureDecline, makePictureAsWritten, makePictureAgain, readStartPicture, whatHappened], { color: 5 });
 const noteStandIn = sticky('## Stand-in\\nThe way taken while AI video is not switched on (Settings, AI video). Nothing is sent and nothing is spent: the page says no video was made and where to switch it on.', [standIn, recordStandIn], { color: 3 });
+const notePrompt = sticky('## Write a prompt\\nThe video editor\\'s "Write it from what\\'s said here": the lines said around the playhead (and the team\\'s idea, if any) go to **Haiku 5.5** at low effort, which drafts one shot for an AI video that is inserted there or plays over the talk. People never with a face shown, no words or flags, no promised outcome. Nothing is sent to Higgsfield and nothing is made: the person reads the draft, sees Higgsfield\\'s price and presses Generate. What the call cost is kept (**video_prompt_used**), answered or not.', [writeIt, buildPrompt, claudePrompt, readPrompt, promptUsed, promptAnswer, respondPrompt], { color: 5 });
 
 export default workflow('qgr-ai-video', 'QGR · AI video')
   .add(priceIt)
@@ -1712,9 +1746,17 @@ export default workflow('qgr-ai-video', 'QGR · AI video')
   .to(jobStatus)
   .to(readJob)
   .to(howIsItGoing.onCase(0, download.to(upload).to(uploaded).to(stored.onTrue(recordReady))).onCase(1, recordFailed).onCase(2, recordUnknown))
+  .add(writeIt)
+  .to(buildPrompt)
+  .to(claudePrompt.onError(readPrompt))
+  .to(readPrompt)
+  .to(promptUsed)
+  .to(promptAnswer)
+  .to(respondPrompt)
   .add(noteFlow)
   .add(noteHiggsfield)
-  .add(noteStandIn);
+  .add(noteStandIn)
+  .add(notePrompt);
 `;
 
 mkdirSync(join(here, 'workflows'), { recursive: true });
