@@ -38,6 +38,8 @@ return $input.all().map(function (item) {
     brand: { company: brand.company, offer: brand.offer, audience: brand.audience },
   };
   if (brand.topics && brand.topics.length > 0) material.brand.topics = brand.topics;
+  // What the team says the video is about, only when they said: without it the request is as before.
+  if (v.description) material.video.about = v.description;
   if (v.guidance) material.direction = v.guidance;
 
   const schema = {

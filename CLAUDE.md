@@ -220,7 +220,8 @@ X's ads APIs, which each need their own access.
   `remove_long_video`, `record_moment_run`, `start_run_from_ads`,
   `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
   `judge_leads_again`, `set_post_link`, `video_budget`, `set_video_settings`,
-  `ask_for_video`, `remove_ai_video`, `set_pictures_quality`, `save_long_video_edit`.
+  `ask_for_video`, `remove_ai_video`, `set_pictures_quality`, `save_long_video_edit`,
+  `update_long_video`, `save_moment`, `remove_moment`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
@@ -1014,6 +1015,20 @@ X's ads APIs, which each need their own access.
   `long_video_usage`, on failure too. The app pings `qgr-moments` when a video
   is kept, so the moments come within a minute or two; the page re-reads
   while it waits.
+- A long video's name, description (what it is about) and direction are
+  set on the start card and changed at the top of its page at any time
+  (`update_long_video`; rules in `parseLongVideoDetails`). The Moments agent
+  reads the description as `video.about` (only when there is one: without it
+  the request is as before) and the direction; runs cut from the video carry
+  both in their notes (`aboutVideo`). `create_long_video` takes no
+  description, so the app sets it straight after.
+- Each moment's title, description (`why`) and hook are the team's to change
+  ("Edit title and description", `save_moment`, rules in `parseMoment`); the
+  hook is flagged as the agent's are (`hookWarnings`, rule 6). A moment saved,
+  added from the transcript or nudged and saved ("Save its new start and
+  end") is the team's own and is kept at once, so Pick again keeps it; one
+  ads were made from keeps its lines, and moved, the new lines are another
+  moment. "Take out" (`remove_moment`) only for one no ads were made from.
 - The moments page (`/videos/long/[id]`) plays the file from the computer
   (kept in the tab, `lib/video/local-files.ts`, or picked again and known by
   its size and length), lets the team nudge a moment a line at either end,

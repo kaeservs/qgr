@@ -1369,6 +1369,7 @@ export const sampleLongVideo = (): LongVideoWithTranscript => {
   return {
     id: 'lv-sample',
     title: 'EB-5 investor webinar (sample)',
+    description: 'A 40-minute webinar for families weighing EB-5: how the investment works, the risks, and what the process asks of them.',
     file: { name: 'eb5-webinar-sample.mp4', size: 1_204_224_000, duration: 2400, width: 1920, height: 1080 },
     guidance: null,
     status: 'done',

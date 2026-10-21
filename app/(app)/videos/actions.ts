@@ -1,7 +1,9 @@
 'use server';
 
 import { MIN_VIDEO_PROMPT, parseVideoRequest } from '@/lib/ai-video';
-import { askForVideo, askMomentsAgain, getAiVideos, getAiVideosById, getLongVideo, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo, saveLongVideoEdit, writeVideoPrompt } from '@/lib/data';
+import { askForVideo, askMomentsAgain, getAiVideos, getAiVideosById, getLongVideo, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo, removeMoment, saveLongVideoEdit, saveMoment, updateLongVideo, writeVideoPrompt } from '@/lib/data';
+import { hookWarnings } from '@/lib/guardrails';
+import { parseLongVideoDetails, parseMoment } from '@/lib/long-video';
 import type { Saved } from '@/lib/data';
 import { checkTeam } from '@/lib/session';
 import type { AiVideo, VideoBudget } from '@/lib/types';
@@ -24,6 +26,37 @@ export async function removeLongVideoAction(id: unknown): Promise<Saved> {
   if (!team.ok) return team;
   if (!isId(id)) return { ok: false, status: 400, error: 'That is not a long video.' };
   return removeLongVideo(id);
+}
+
+/** A long video's name, description and direction, checked here (rule 4) and again by update_long_video. */
+export async function updateLongVideoAction(id: unknown, details: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isId(id)) return { ok: false, status: 400, error: 'That is not a long video.' };
+  const parsed = parseLongVideoDetails(details);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return updateLongVideo(id, parsed.value);
+}
+
+/**
+ * A moment's title, description, hook and lines as the team leaves them, or
+ * one of their own, kept at once. The hook is flagged here as the Moments
+ * agent's are (rule 6: flagged, never changed).
+ */
+export async function saveMomentAction(id: unknown, moment: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isId(id)) return { ok: false, status: 400, error: 'That is not a long video.' };
+  const parsed = parseMoment(moment);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return saveMoment(id, parsed.value, hookWarnings(parsed.value.hook));
+}
+
+export async function removeMomentAction(id: unknown, first: unknown, last: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isId(id) || !isLine(first) || !isLine(last)) return { ok: false, status: 400, error: 'That moment is not readable.' };
+  return removeMoment(id, first, last);
 }
 
 /** A run started from a clip cut from a moment: kept on the moment. The database checks the lines and the run again. */

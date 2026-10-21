@@ -56,6 +56,9 @@ export const saveLongVideoEdit: DataSource['saveLongVideoEdit'] = (id, edit) => 
 export const createLongVideo: DataSource['createLongVideo'] = (input) => source().createLongVideo(input);
 export const askMomentsAgain: DataSource['askMomentsAgain'] = (id) => source().askMomentsAgain(id);
 export const removeLongVideo: DataSource['removeLongVideo'] = (id) => source().removeLongVideo(id);
+export const updateLongVideo: DataSource['updateLongVideo'] = (id, details) => source().updateLongVideo(id, details);
+export const saveMoment: DataSource['saveMoment'] = (id, moment, warnings) => source().saveMoment(id, moment, warnings);
+export const removeMoment: DataSource['removeMoment'] = (id, first, last) => source().removeMoment(id, first, last);
 export const recordMomentRun: DataSource['recordMomentRun'] = (id, first, last, title, runId) => source().recordMomentRun(id, first, last, title, runId);
 export const getLeads: DataSource['getLeads'] = () => source().getLeads();
 export const saveLeadCriteria: DataSource['saveLeadCriteria'] = (criteria) => source().saveLeadCriteria(criteria);

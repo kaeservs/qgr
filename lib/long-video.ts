@@ -10,6 +10,11 @@ export const MAX_LONG_SECONDS = 3 * 3600;
 export const MAX_TRANSCRIPT_LINES = 8000;
 export const MAX_LONG_TITLE = 120;
 export const MAX_LONG_GUIDANCE = 2000;
+export const MAX_LONG_DESCRIPTION = 2000;
+/** A moment's title, its description (why it would work) and its hook, as the database keeps them. */
+export const MAX_MOMENT_TITLE = 80;
+export const MAX_MOMENT_WHY = 400;
+export const MAX_MOMENT_HOOK = 200;
 /** A moment worth an ad: from 8 seconds to two and a half minutes. */
 export const MIN_MOMENT_SECONDS = 8;
 export const MAX_MOMENT_SECONDS = 150;
@@ -19,6 +24,7 @@ export interface NewLongVideo {
   file: LongVideoFile;
   transcript: TranscriptLine[];
   guidance?: string;
+  description?: string;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -60,8 +66,69 @@ export function parseLongVideo(raw: unknown): Parsed<NewLongVideo> {
 
   const guidance = tidy(raw.guidance);
   if (guidance.length > MAX_LONG_GUIDANCE) return { ok: false, error: `Keep the direction under ${MAX_LONG_GUIDANCE.toLocaleString('en-US')} characters.` };
-  return { ok: true, value: { title, file, transcript, ...(guidance ? { guidance } : {}) } };
+  const description = tidy(raw.description);
+  if (description.length > MAX_LONG_DESCRIPTION) return { ok: false, error: `Keep the description under ${MAX_LONG_DESCRIPTION.toLocaleString('en-US')} characters.` };
+  return { ok: true, value: { title, file, transcript, ...(guidance ? { guidance } : {}), ...(description ? { description } : {}) } };
 }
+
+export interface LongVideoDetails {
+  title: string;
+  /** What the video is about, for the team and the agents; empty is none. */
+  description: string;
+  /** The direction for the agents; empty is none. */
+  guidance: string;
+}
+
+/** A long video's name, description and direction as the team changes them (update_long_video checks again). */
+export function parseLongVideoDetails(raw: unknown): Parsed<LongVideoDetails> {
+  if (!isRecord(raw)) return { ok: false, error: 'Say what to change.' };
+  const title = tidy(raw.title).replace(/\s+/g, ' ');
+  if (!title) return { ok: false, error: 'Name the video.' };
+  if (title.length > MAX_LONG_TITLE) return { ok: false, error: `Keep the name under ${MAX_LONG_TITLE} characters.` };
+  const description = tidy(raw.description);
+  if (description.length > MAX_LONG_DESCRIPTION) return { ok: false, error: `Keep the description under ${MAX_LONG_DESCRIPTION.toLocaleString('en-US')} characters.` };
+  const guidance = tidy(raw.guidance);
+  if (guidance.length > MAX_LONG_GUIDANCE) return { ok: false, error: `Keep the direction under ${MAX_LONG_GUIDANCE.toLocaleString('en-US')} characters.` };
+  return { ok: true, value: { title, description, guidance } };
+}
+
+export interface MomentInput {
+  /** The lines the moment had when it was last saved; null for one not saved yet. */
+  was: { first: number; last: number } | null;
+  first: number;
+  last: number;
+  title: string;
+  why: string;
+  hook: string;
+}
+
+const isLine = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 100_000;
+
+/**
+ * A moment as the team writes it: its lines, title, description and hook
+ * (save_moment checks the lines against the transcript again).
+ */
+export function parseMoment(raw: unknown): Parsed<MomentInput> {
+  if (!isRecord(raw)) return { ok: false, error: 'That moment is not readable.' };
+  const { first, last } = raw;
+  if (!isLine(first) || !isLine(last) || last < first) return { ok: false, error: 'That moment is not readable.' };
+  let was: MomentInput['was'] = null;
+  if (raw.was !== null && raw.was !== undefined) {
+    if (!isRecord(raw.was) || !isLine(raw.was.first) || !isLine(raw.was.last)) return { ok: false, error: 'That moment is not readable.' };
+    was = { first: raw.was.first, last: raw.was.last };
+  }
+  const title = tidy(raw.title).replace(/\s+/g, ' ');
+  if (!title) return { ok: false, error: 'Give the moment a title.' };
+  if (title.length > MAX_MOMENT_TITLE) return { ok: false, error: `Keep the title under ${MAX_MOMENT_TITLE} characters.` };
+  const why = tidy(raw.why);
+  if (why.length > MAX_MOMENT_WHY) return { ok: false, error: `Keep the description under ${MAX_MOMENT_WHY} characters.` };
+  const hook = tidy(raw.hook).replace(/\s+/g, ' ');
+  if (hook.length > MAX_MOMENT_HOOK) return { ok: false, error: `Keep the hook under ${MAX_MOMENT_HOOK} characters.` };
+  return { ok: true, value: { was, first, last, title, why, hook } };
+}
+
+/** What the agents read of a long video in a run cut from it: its name and, when there is one, what it is about. */
+export const aboutVideo = (video: { title: string; description: string | null }) => `the long video “${video.title}”${video.description ? ` (about: ${video.description})` : ''}`;
 
 /** The same file picked again: the same size to the byte and the same length within a second. */
 export const sameFile = (known: LongVideoFile, picked: { size: number; duration: number }) => known.size === picked.size && Math.abs(known.duration - picked.duration) <= 1;

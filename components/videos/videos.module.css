@@ -475,6 +475,10 @@
   }
 }
 
+.longWide {
+  grid-column: 1 / -1;
+}
+
 .longActions {
   display: flex;
   justify-content: flex-end;
@@ -519,6 +523,14 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.longCardAbout {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .viewsWrap {
@@ -632,9 +644,13 @@
 
 .momentTop {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
+}
+
+.momentTop .momentTitle {
+  flex: 1 1 200px;
 }
 
 .momentTitle {
@@ -836,4 +852,57 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+.details {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  width: 100%;
+}
+
+.detailsActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.detailsShown {
+  display: grid;
+  gap: 6px;
+}
+
+.detailsShown p {
+  margin: 0;
+}
+
+.detailsTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.detailsTitle h1 {
+  margin: 0;
+}
+
+.momentForm {
+  display: grid;
+  gap: 10px;
+}
+
+.momentFormActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.moved {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  flex-basis: auto;
 }

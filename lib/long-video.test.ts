@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { clipTranscript, clock, momentOf, momentText, nudge, parseLongVideo, sameFile, sampleMoments, titleFromFile, transcriptThroughEdit } from './long-video';
+import { hookWarnings } from './guardrails';
+import { aboutVideo, clipTranscript, clock, momentOf, momentText, nudge, parseLongVideo, parseLongVideoDetails, parseMoment, sameFile, sampleMoments, titleFromFile, transcriptThroughEdit } from './long-video';
 
 const TRANSCRIPT = Array.from({ length: 60 }, (_, i) => ({ start: i * 10, end: i * 10 + 9.5, text: `Line ${i}.` }));
 const FILE = { name: 'webinar.mp4', size: 900_000_000, duration: 600, width: 1920, height: 1080 };
@@ -25,6 +26,42 @@ describe('keeping a long video', () => {
     expect(titleFromFile('Q3_webinar_final.mp4')).toBe('Q3 webinar final');
     expect(sameFile(FILE, { size: 900_000_000, duration: 600.4 })).toBe(true);
     expect(sameFile(FILE, { size: 899_999_999, duration: 600 })).toBe(false);
+  });
+});
+
+describe('a long video’s details and its moments, as the team writes them', () => {
+  it('takes a description when the video is kept, and only when there is one', () => {
+    const r = parseLongVideo({ title: 'Webinar', file: FILE, transcript: TRANSCRIPT, description: ' About the Gold Card. ' });
+    expect(r.ok && r.value.description).toBe('About the Gold Card.');
+    const none = parseLongVideo({ title: 'Webinar', file: FILE, transcript: TRANSCRIPT, description: '  ' });
+    expect(none.ok && 'description' in none.value).toBe(false);
+  });
+
+  it('changes the name, the description and the direction; empty is none', () => {
+    expect(parseLongVideoDetails({ title: '  Gold   Card ', description: ' What it is. ', guidance: '' })).toEqual({ ok: true, value: { title: 'Gold Card', description: 'What it is.', guidance: '' } });
+    expect(parseLongVideoDetails({ title: ' ', description: '', guidance: '' })).toMatchObject({ ok: false, error: 'Name the video.' });
+    expect(parseLongVideoDetails({ title: 'x', description: 'd'.repeat(2001), guidance: '' }).ok).toBe(false);
+  });
+
+  it('reads a moment’s lines, the lines it was saved at, its title, description and hook', () => {
+    expect(parseMoment({ was: { first: 3, last: 5 }, first: 3, last: 6, title: ' Our  title ', why: ' Why. ', hook: ' A hook ' })).toEqual({
+      ok: true,
+      value: { was: { first: 3, last: 5 }, first: 3, last: 6, title: 'Our title', why: 'Why.', hook: 'A hook' },
+    });
+    expect(parseMoment({ was: null, first: 3, last: 6, title: 'x', why: '', hook: '' })).toMatchObject({ ok: true, value: { was: null } });
+    expect(parseMoment({ was: null, first: 6, last: 3, title: 'x' }).ok).toBe(false);
+    expect(parseMoment({ was: null, first: 3, last: 6, title: '' })).toMatchObject({ ok: false, error: 'Give the moment a title.' });
+    expect(parseMoment({ was: null, first: 3, last: 6, title: 't'.repeat(81) }).ok).toBe(false);
+  });
+
+  it('flags a hook the team writes as the agent’s are flagged, never changing it', () => {
+    expect(hookWarnings('Your green card, guaranteed in 6 months')).toEqual(['Hook says "guarantee"', 'Hook promises a timeline']);
+    expect(hookWarnings('Plan it together')).toEqual([]);
+  });
+
+  it('tells the agents which video a run came from, and what it is about', () => {
+    expect(aboutVideo({ title: 'Webinar', description: null })).toBe('the long video “Webinar”');
+    expect(aboutVideo({ title: 'Webinar', description: 'The Gold Card.' })).toBe('the long video “Webinar” (about: The Gold Card.)');
   });
 });
 

@@ -1,12 +1,12 @@
 'use client';
 
-import { ArrowRight, Check, ChevronLeft, Clapperboard, ChevronRight, FileVideo, Pause, Play, Plus, RotateCcw, Scissors, Search, Trash2, TriangleAlert } from 'lucide-react';
+import { ArrowRight, Check, ChevronLeft, Clapperboard, ChevronRight, FileVideo, Pause, Pencil, Play, Plus, RotateCcw, Scissors, Search, Trash2, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { askMomentsAgainAction, recordMomentRunAction, removeLongVideoAction } from '@/app/(app)/videos/actions';
+import { askMomentsAgainAction, recordMomentRunAction, removeLongVideoAction, removeMomentAction, saveMomentAction } from '@/app/(app)/videos/actions';
 import { cx } from '@/lib/cx';
-import { clipTranscript, clock, MAX_MOMENT_SECONDS, MIN_MOMENT_SECONDS, momentOf, momentSeconds, momentText, nudge, sameFile } from '@/lib/long-video';
+import { aboutVideo, clipTranscript, clock, MAX_MOMENT_HOOK, MAX_MOMENT_SECONDS, MAX_MOMENT_TITLE, MAX_MOMENT_WHY, MIN_MOMENT_SECONDS, momentOf, momentSeconds, momentText, nudge, sameFile } from '@/lib/long-video';
 import { GOAL_LABEL, PLATFORM_LABEL } from '@/lib/platforms';
 import { GOALS, PLATFORMS } from '@/lib/types';
 import type { Clip, Goal, LongVideoWithTranscript, Moment, Platform } from '@/lib/types';
@@ -24,6 +24,17 @@ const AIM_BYTES = 45 * 1024 * 1024;
 const MAX_CLIP_BYTES = 50 * 1024 * 1024;
 
 const key = (m: Pick<Moment, 'first' | 'last'>) => `${m.first}-${m.last}`;
+const linesOf = (k: string) => {
+  const [first = 0, last = 0] = k.split('-').map(Number);
+  return { first, last };
+};
+
+/** A moment as the board shows it: `savedAt` is the key of the lines it is kept at, so a moment nudged here is saved over the right one. */
+type Shown = Moment & { savedAt: string };
+const shown = (m: Moment): Shown => ({ ...m, savedAt: key(m) });
+
+/** A moment's words being written: its title, description (why it works) and hook. */
+type Draft = { key: string; title: string; why: string; hook: string };
 
 type Making = { key: string; label: string } | null;
 
@@ -46,7 +57,9 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [url, setUrl] = useState<string | null>(null);
-  const [moments, setMoments] = useState<Moment[]>(video.moments);
+  const [moments, setMoments] = useState<Shown[]>(() => video.moments.map(shown));
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [savingMoment, setSavingMoment] = useState<string | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [platforms, setPlatforms] = useState<Platform[]>(['meta', 'linkedin']);
   const [goal, setGoal] = useState<Goal>('consultations');
@@ -65,9 +78,14 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
   const until = useRef<number | null>(null);
   const picker = useRef<HTMLInputElement>(null);
 
-  // The moments the server knows, and the team's own added here and not yet made into ads.
+  // The moments the server keeps; one nudged here and not saved yet keeps its new lines.
   useEffect(() => {
-    setMoments((mine) => [...video.moments, ...mine.filter((m) => m.source === 'team' && m.runIds.length === 0 && !video.moments.some((v) => key(v) === key(m)))]);
+    setMoments((mine) =>
+      video.moments.map((m) => {
+        const moved = mine.find((x) => x.savedAt === key(m) && key(x) !== key(m));
+        return moved ?? shown(m);
+      }),
+    );
   }, [video.moments]);
 
   // The file picked on the page before, if this tab still has it.
@@ -118,9 +136,9 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     v.currentTime = seconds;
   }
 
-  function change(m: Moment, next: Moment) {
+  function change(m: Shown, next: Moment) {
     if (next === m) return;
-    setMoments((list) => list.map((x) => (x === m ? next : x)));
+    setMoments((list) => list.map((x) => (x === m ? { ...next, savedAt: m.savedAt } : x)));
     setPicked((set) => {
       if (!set.has(key(m))) return set;
       const copy = new Set(set);
@@ -139,7 +157,8 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     });
   }
 
-  function addOwn() {
+  /** A moment of the team's own, kept at once with a title from its first words, then opened to be named and described. */
+  async function addOwn() {
     if (own.first === null || own.last === null) return;
     const [a, b] = own.first <= own.last ? [own.first, own.last] : [own.last, own.first];
     const m = momentOf(video.transcript, a, b);
@@ -147,9 +166,44 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     if (momentSeconds(m) > MAX_MOMENT_SECONDS) return setError('Keep a moment to two and a half minutes or less: it becomes an ad.');
     if (moments.some((x) => key(x) === key(m))) return setError('That moment is already in the list.');
     setError(null);
-    setMoments((list) => [...list, m]);
+    setSavingMoment(key(m));
+    const saved = await saveMomentAction(video.id, { was: null, first: m.first, last: m.last, title: m.title, why: '', hook: '' });
+    setSavingMoment(null);
+    if (!saved.ok) return setError(saved.error);
+    setMoments((list) => [...list, shown(m)]);
     setPicked((set) => new Set(set).add(key(m)));
     setOwn({ first: null, last: null });
+    setDraft({ key: key(m), title: m.title, why: '', hook: '' });
+    router.refresh();
+  }
+
+  /** Saves a moment as it stands on the board: its lines (nudged or not) and its words, the draft's when it is being written. */
+  async function saveMoment(m: Shown, words: { title: string; why: string; hook: string } = { title: m.title, why: m.why ?? '', hook: m.hook ?? '' }) {
+    setError(null);
+    setSavingMoment(key(m));
+    const saved = await saveMomentAction(video.id, { was: linesOf(m.savedAt), first: m.first, last: m.last, ...words });
+    setSavingMoment(null);
+    if (!saved.ok) return setError(saved.error);
+    setMoments((list) => list.map((x) => (x === m ? { ...x, title: words.title.replace(/\s+/g, ' ').trim(), why: words.why.trim() || null, hook: words.hook.trim() || null, source: 'team', savedAt: key(m) } : x)));
+    setDraft(null);
+    toast(saved.sample ? 'Saved for this session' : 'Moment saved');
+    router.refresh();
+  }
+
+  async function removeMoment(m: Shown) {
+    if (!window.confirm(`Take “${m.title}” out of the moments?`)) return;
+    setSavingMoment(key(m));
+    const saved = await removeMomentAction(video.id, linesOf(m.savedAt).first, linesOf(m.savedAt).last);
+    setSavingMoment(null);
+    if (!saved.ok) return setError(saved.error);
+    setMoments((list) => list.filter((x) => x !== m));
+    setPicked((set) => {
+      const copy = new Set(set);
+      copy.delete(key(m));
+      return copy;
+    });
+    setDraft(null);
+    router.refresh();
   }
 
   /** One moment cut from the file, uploaded as a clip and started as a run. */
@@ -219,7 +273,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
 
     label('starting the run');
     const words = momentText(video.transcript, m.first, m.last);
-    const notes = `From the long video “${video.title}”, ${clock(m.start)} to ${clock(m.end)}. What is said: ${words}`.slice(0, 20_000);
+    const notes = `From ${aboutVideo(video)}, ${clock(m.start)} to ${clock(m.end)}.${m.why ? ` Why this moment: ${m.why}` : ''} What is said: ${words}`.slice(0, 20_000);
     const direction = [video.guidance, `This clip is the moment “${m.title}” from a longer video.${m.hook ? ` A hook to try: ${m.hook}` : ''}`].filter(Boolean).join('\n\n').slice(0, 2000);
     const res = await fetch('/api/runs', {
       method: 'POST',
@@ -358,7 +412,6 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
         )}
         <p className="muted small">
           {video.file.name} · {clock(video.file.duration)} · {video.lines.toLocaleString('en-US')} lines heard
-          {video.guidance ? ` · Direction: ${video.guidance}` : ''}
         </p>
       </section>
 
@@ -392,6 +445,9 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
         {moments.map((m) => {
           const k = key(m);
           const length = momentSeconds(m);
+          const moved = k !== m.savedAt;
+          const writing = draft?.key === k ? draft : null;
+          const saving = savingMoment === k;
           return (
             <article key={k} className={cx('card', styles.moment, picked.has(k) && styles.momentOn)}>
               <label className={styles.momentTick}>
@@ -399,18 +455,76 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
                 <span className="sr-only">Make an ad from {m.title}</span>
               </label>
               <div className={styles.momentBody}>
-                <div className={styles.momentTop}>
-                  <h3 className={styles.momentTitle}>{m.title}</h3>
-                  {m.source === 'team' && <span className="pill pill-quiet pill-sm">Yours</span>}
-                </div>
+                {writing ? (
+                  <form
+                    className={styles.momentForm}
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      void saveMoment(m, writing);
+                    }}
+                  >
+                    <label className="field">
+                      <span className="label">Title</span>
+                      <input className="input" value={writing.title} maxLength={MAX_MOMENT_TITLE} onChange={(e) => setDraft({ ...writing, title: e.target.value })} autoFocus />
+                    </label>
+                    <label className="field">
+                      <span className="label">Description</span>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        maxLength={MAX_MOMENT_WHY}
+                        value={writing.why}
+                        placeholder="What this moment is and why it would work as an ad."
+                        onChange={(e) => setDraft({ ...writing, why: e.target.value })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="label">Hook (optional)</span>
+                      <input className="input" value={writing.hook} maxLength={MAX_MOMENT_HOOK} placeholder="The opening line for its ad." onChange={(e) => setDraft({ ...writing, hook: e.target.value })} />
+                    </label>
+                    <div className={styles.momentFormActions}>
+                      {m.runIds.length === 0 && (
+                        <button type="button" className="btn btn-quiet btn-sm" onClick={() => void removeMoment(m)} disabled={saving}>
+                          <Trash2 size={15} aria-hidden />
+                          Take out
+                        </button>
+                      )}
+                      <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDraft(null)} disabled={saving}>
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !writing.title.trim()} aria-busy={saving}>
+                        Save
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <div className={styles.momentTop}>
+                      <h3 className={styles.momentTitle}>{m.title}</h3>
+                      {m.source === 'team' && <span className="pill pill-quiet pill-sm">Yours</span>}
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraft({ key: k, title: m.title, why: m.why ?? '', hook: m.hook ?? '' })} disabled={savingMoment !== null}>
+                        <Pencil size={14} aria-hidden />
+                        Edit title and description
+                      </button>
+                    </div>
+                    {m.why ? <p className={styles.momentWhy}>{m.why}</p> : <p className="muted small">No description yet.</p>}
+                    {m.hook && (
+                      <p className={styles.momentHook}>
+                        <span className="muted small">Hook:</span> {m.hook}
+                      </p>
+                    )}
+                  </>
+                )}
                 <p className="muted small">
                   {clock(m.start)} to {clock(m.end)} · {Math.round(length)} s
                   {length < MIN_MOMENT_SECONDS ? ' · very short' : ''}
                 </p>
-                {m.why && <p className={styles.momentWhy}>{m.why}</p>}
-                {m.hook && (
-                  <p className={styles.momentHook}>
-                    <span className="muted small">Hook:</span> {m.hook}
+                {moved && !writing && (
+                  <p className={cx(styles.notice, styles.moved)}>
+                    Moved here, not saved yet.
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => void saveMoment(m)} disabled={saving} aria-busy={saving}>
+                      Save its new start and end
+                    </button>
                   </p>
                 )}
                 {m.warnings.length > 0 && (
@@ -538,7 +652,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
         <p className="muted small">Click a line to watch from there. To make a moment of your own, mark its first and last line, then add it.</p>
         <div className={styles.ownBar}>
           <span className="small">{ownMoment ? `${clock(ownMoment.start)} to ${clock(ownMoment.end)} · ${Math.round(momentSeconds(ownMoment))} s` : own.first !== null ? 'Now mark the last line' : 'Mark a first line'}</span>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={addOwn} disabled={!ownMoment}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void addOwn()} disabled={!ownMoment || savingMoment !== null} aria-busy={savingMoment !== null && ownMoment !== null && savingMoment === key(ownMoment)}>
             <Plus size={15} aria-hidden />
             Add as a moment
           </button>

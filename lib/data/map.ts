@@ -918,6 +918,7 @@ export function toActivity(rows: ActivityRows, now: string): ActivityItem[] {
 export interface LongVideoRow {
   id: string;
   title: string;
+  description: string | null;
   file: Json;
   guidance: string | null;
   status: string;
@@ -968,6 +969,7 @@ export function toLongVideo(row: LongVideoRow): LongVideoWithTranscript {
   return {
     id: row.id,
     title: row.title,
+    description: row.description,
     file: { name: str(f.name) ?? 'video', size: num(f.size), duration: num(f.duration), width: num(f.width), height: num(f.height) },
     guidance: row.guidance,
     status: LONG_STATUS[row.status] ?? 'waiting',

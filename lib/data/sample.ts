@@ -5,7 +5,7 @@
 // left there, and only the sample run's own clip can be played.
 
 import { hostOf } from '../format';
-import { momentOf, sampleMoments } from '../long-video';
+import { MAX_MOMENT_SECONDS, momentOf, momentSeconds, sampleMoments } from '../long-video';
 import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import * as mock from '../mock-data';
 import { initialStages, runStatus, STAGE_INFO, STAGE_ORDER } from '../pipeline';
@@ -222,6 +222,7 @@ export const sampleData: DataSource = {
     longVideos().unshift({
       id,
       title: input.title,
+      description: input.description ?? null,
       file: input.file,
       guidance: input.guidance ?? null,
       status: 'done',
@@ -243,6 +244,38 @@ export const sampleData: DataSource = {
   },
   removeLongVideo: async (id) => {
     store.__qgrLongVideos = longVideos().filter((v) => v.id !== id);
+    return { ok: true, value: null, sample: true };
+  },
+  updateLongVideo: async (id, details) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    video.title = details.title;
+    video.description = details.description || null;
+    video.guidance = details.guidance || null;
+    return { ok: true, value: null, sample: true };
+  },
+  saveMoment: async (id, moment, warnings) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    const at = (m: { first: number; last: number }, first: number, last: number) => m.first === first && m.last === last;
+    const was = moment.was;
+    if (video.moments.some((m) => at(m, moment.first, moment.last) && !(was && at(m, was.first, was.last)))) return { ok: false, status: 400, error: 'That moment is already in the list.' };
+    const made = momentOf(video.transcript, moment.first, moment.last, { title: moment.title, why: moment.why || null, hook: moment.hook || null, warnings, source: 'team' });
+    if (!made || momentSeconds(made) > MAX_MOMENT_SECONDS) return { ok: false, status: 400, error: 'Keep a moment inside the video and to two and a half minutes or less.' };
+    const i = was ? video.moments.findIndex((m) => at(m, was.first, was.last)) : -1;
+    if (was && i < 0) return { ok: false, status: 404, error: 'That moment is gone: reload the page.' };
+    const known = video.moments[i];
+    if (!known) video.moments.push(made);
+    else if (known.runIds.length > 0 && !at(known, moment.first, moment.last)) video.moments.splice(i + 1, 0, made);
+    else video.moments[i] = { ...made, runIds: known.runIds };
+    return { ok: true, value: null, sample: true };
+  },
+  removeMoment: async (id, first, last) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    const m = video.moments.find((x) => x.first === first && x.last === last);
+    if (m && m.runIds.length > 0) return { ok: false, status: 400, error: 'Ads were made from that moment, so it stays with its runs.' };
+    video.moments = video.moments.filter((x) => x !== m);
     return { ok: true, value: null, sample: true };
   },
   saveLongVideoEdit: async (id, edit) => {
