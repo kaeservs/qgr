@@ -814,7 +814,11 @@ X's ads APIs, which each need their own access.
     charged exactly that): the send answers `results[0].id` as the job;
     `job_status` answers `generation.status` (queued for about six minutes,
     then completed) with `results.rawUrl`, the full PNG (1.1 MB), and
-    `minUrl`, a small WebP preview, which is never taken. These answers are the
+    `minUrl`, a small WebP preview, which is never taken. With a reference
+    (2026-10-21, three pictures, about a minute each), `generation.params`
+    echoes the request, the reference's link among its `medias`: links are
+    read from what was made only (`madeLinks`), since the first run took the
+    reference for the picture and stored it three times. These answers are the
     fixtures in `n8n/pictures-higgsfield.test.ts`.
 - The studio shows pictures through links the server signs as the teammate
   for an hour (one `createSignedUrls` call for the ad set, the kept pictures
