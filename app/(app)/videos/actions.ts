@@ -1,9 +1,13 @@
 'use server';
 
 import { MIN_VIDEO_PROMPT, parseVideoRequest } from '@/lib/ai-video';
-import { askForVideo, askMomentsAgain, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo } from '@/lib/data';
+import { askForVideo, askMomentsAgain, getAiVideos, getAiVideosById, getLongVideo, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo, saveLongVideoEdit, writeVideoPrompt } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { checkTeam } from '@/lib/session';
+import type { AiVideo, VideoBudget } from '@/lib/types';
+import { parseVideoEdit } from '@/lib/video/edit';
+import { compactEdit } from '@/lib/video/timeline';
+import { parseVideoPromptRequest } from '@/lib/video-prompt';
 
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64;
 const isLine = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < 100_000;
@@ -66,4 +70,42 @@ export async function removeAiVideoAction(id: unknown): Promise<Saved> {
   if (!team.ok) return team;
   if (!isId(id)) return { ok: false, status: 400, error: 'That is not a video.' };
   return removeAiVideo(id);
+}
+
+/** The team's edit of a whole long video, checked against its length (rule 4) and kept; null takes it back to the video as it is. */
+export async function saveLongVideoEditAction(id: unknown, edit: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isId(id)) return { ok: false, status: 400, error: 'That is not a long video.' };
+  if (edit === null) return saveLongVideoEdit(id, null);
+  const video = await getLongVideo(id);
+  if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+  const parsed = parseVideoEdit(edit, video.file.duration);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return saveLongVideoEdit(id, compactEdit(parsed.value));
+}
+
+/** What the editor offers to put in: the library, and AI video's switch and credits. */
+export async function aiLibraryAction(): Promise<Saved<{ videos: AiVideo[]; budget: VideoBudget }>> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  const [videos, budget] = await Promise.all([getAiVideos(), getVideoBudget()]);
+  return { ok: true, value: { videos, budget }, sample: videos.some((v) => v.sample === true) };
+}
+
+/** The AI videos an edit uses, as they stand now: the editor asks again while one is being made. */
+export async function editAiVideosAction(ids: unknown): Promise<Saved<AiVideo[]>> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!Array.isArray(ids) || ids.length > 60 || !ids.every(isId)) return { ok: false, status: 400, error: 'Those are not AI videos.' };
+  return { ok: true, value: await getAiVideosById(ids), sample: false };
+}
+
+/** Claude's draft of an AI video's prompt from what is said around the point. Nothing is made or spent on Higgsfield. */
+export async function writeVideoPromptAction(raw: unknown): Promise<Saved<{ prompt: string; why: string }>> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  const parsed = parseVideoPromptRequest(raw);
+  if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
+  return writeVideoPrompt(parsed.value);
 }

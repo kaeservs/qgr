@@ -42,6 +42,7 @@ import type {
 } from '../types';
 import type { VideoEdit } from '../video/edit';
 import type { VideoRequest } from '../ai-video';
+import type { VideoPromptRequest } from '../video-prompt';
 import type { CreativeDesign } from '../creative/design';
 
 export type RunWithStatus = Run & { status: RunStatus };
@@ -171,11 +172,17 @@ export interface DataSource {
   createLongVideo(input: NewLongVideo): Promise<Saved<{ id: string }>>;
   askMomentsAgain(id: string): Promise<Saved>;
   removeLongVideo(id: string): Promise<Saved>;
+  /** Keeps the team's edit of the whole long video; null takes it back to the video as it is. */
+  saveLongVideoEdit(id: string, edit: VideoEdit | null): Promise<Saved>;
   /** A run started from a clip cut from these lines: kept on its moment, or on a moment of the team's own. */
   recordMomentRun(id: string, first: number, last: number, title: string, runId: string): Promise<Saved>;
   /** AI videos, newest first, with links to play the ready ones; those taken out of the library are left out. */
   getAiVideos(): Promise<AiVideo[]>;
   getAiVideo(id: string): Promise<AiVideo | null>;
+  /** The AI videos an edit uses, by id, as they stand now (being made, ready with a link, or not made). */
+  getAiVideosById(ids: string[]): Promise<AiVideo[]>;
+  /** Claude's draft of an AI video's prompt from what is said around a point: nothing is made or spent on Higgsfield. */
+  writeVideoPrompt(request: VideoPromptRequest): Promise<Saved<{ prompt: string; why: string }>>;
   /** AI video's switch and this month's credits against the team's limit. */
   getVideoBudget(): Promise<VideoBudget>;
   /** Higgsfield's price for a request (nothing is made), and the credits left on the team's plan. */
@@ -261,7 +268,7 @@ export interface DataSource {
   createEditMediaUpload(extension: EditMediaExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes a file added to an edit that no saved edit uses. */
   deleteEditMedia(path: string): Promise<Saved>;
-  /** Links the browser can read files added to edits from, for a while, by path. */
+  /** Links the browser can read files added to edits from, for a while, by path: AI videos ('ai:<id>') once they are made. */
   signEditMedia(paths: string[]): Promise<Record<string, string>>;
 }
 

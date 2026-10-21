@@ -231,6 +231,7 @@ export const sampleData: DataSource = {
       createdAt: new Date().toISOString(),
       sample: true,
       transcript: input.transcript,
+      edit: null,
     });
     return { ok: true, value: { id }, sample: true };
   },
@@ -242,6 +243,12 @@ export const sampleData: DataSource = {
   },
   removeLongVideo: async (id) => {
     store.__qgrLongVideos = longVideos().filter((v) => v.id !== id);
+    return { ok: true, value: null, sample: true };
+  },
+  saveLongVideoEdit: async (id, edit) => {
+    const video = longVideos().find((v) => v.id === id);
+    if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
+    video.edit = edit;
     return { ok: true, value: null, sample: true };
   },
   recordMomentRun: async (id, first, last, title, runId) => {
@@ -258,6 +265,18 @@ export const sampleData: DataSource = {
   },
   getAiVideos: async () => [mock.SAMPLE_AI_VIDEO],
   getAiVideo: async (id) => (id === mock.SAMPLE_AI_VIDEO.id ? mock.SAMPLE_AI_VIDEO : null),
+  getAiVideosById: async (ids) => (ids.includes(mock.SAMPLE_AI_VIDEO.id) ? [mock.SAMPLE_AI_VIDEO] : []),
+  // No Claude on the sample data: an example, saying so, built from the person's own idea when there is one.
+  writeVideoPrompt: async (request) => ({
+    ok: true,
+    value: {
+      prompt: request.idea
+        ? `${request.idea.replace(/[.\s]+$/, '')}, one continuous shot, golden-hour light with indigo and gold tones, no faces shown, no text, no flags.`
+        : 'A student walks across a sunny American university campus, seen from behind, one continuous shot, golden-hour light with indigo and gold tones, no faces shown, no text, no flags.',
+      why: 'Sample data: an example prompt, not written by Claude from what is said here.',
+    },
+    sample: true,
+  }),
   getVideoBudget: async () => ({ ...videoBudget() }),
   // No Higgsfield to ask: nothing is priced, nothing is made, nothing is spent.
   priceVideo: async () => ({ ok: false, status: 503, error: 'The sample data has no Higgsfield to price it: prices show once the dashboard is connected.' }),
@@ -433,7 +452,8 @@ export const sampleData: DataSource = {
   // The sample data stores nothing: a file added to an edit stays in the tab (lib/video/local-files.ts).
   createEditMediaUpload: async () => ({ ok: true, value: { path: `local:${crypto.randomUUID()}`, url: null }, sample: true }),
   deleteEditMedia: async () => ({ ok: true, value: null, sample: true }),
-  signEditMedia: async () => ({}),
+  // Only the sample AI video has a link: every file the person added lives in this tab.
+  signEditMedia: async (paths) => (paths.includes(`ai:${mock.SAMPLE_AI_VIDEO.id}`) && mock.SAMPLE_AI_VIDEO.url ? { [`ai:${mock.SAMPLE_AI_VIDEO.id}`]: mock.SAMPLE_AI_VIDEO.url } : {}),
   createPostUpload: async (extension) => ({ ok: true, value: { path: `posts/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deletePostMedia: async () => ({ ok: true, value: null, sample: true }),
 };

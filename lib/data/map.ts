@@ -926,6 +926,7 @@ export interface LongVideoRow {
   created_at: string;
   transcript?: Json;
   lines?: number | null;
+  edit?: Json;
 }
 
 const num = (v: unknown, fallback = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
@@ -975,6 +976,11 @@ export function toLongVideo(row: LongVideoRow): LongVideoWithTranscript {
     lines: row.lines ?? transcript.length,
     createdAt: row.created_at,
     transcript,
+    edit: (() => {
+      // An edit that no longer reads is dropped: the video is as it is.
+      const parsed = row.edit !== undefined && row.edit !== null ? parseVideoEdit(row.edit, num(f.duration)) : null;
+      return parsed?.ok ? parsed.value : null;
+    })(),
   };
 }
 

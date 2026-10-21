@@ -1,13 +1,15 @@
 'use client';
 
-import { AudioLines, Download, Film, Image as ImageIcon, Music2, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Trash2, TriangleAlert, Type, Undo2, Upload, X as Close } from 'lucide-react';
+import { AudioLines, Download, Film, Image as ImageIcon, Music2, Pause, Play, Plus, Redo2, RotateCcw, Scissors, Sparkles, Trash2, TriangleAlert, Type, Undo2, Upload, X as Close } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { saveVariantAction, saveVideoEditAction } from '@/app/(app)/content/actions';
+import { editAiVideosAction } from '@/app/(app)/videos/actions';
 import { cx } from '@/lib/cx';
 import { LIMITS } from '@/lib/edit-input';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
-import type { Clip, Platform, Variant } from '@/lib/types';
+import type { AiVideo, Clip, Platform, Variant } from '@/lib/types';
+import { aiStates, shapeForEdit } from '@/lib/video/ai-pieces';
 import { addCaption, captionsFromTranscript, ASPECT_INFO, ASPECTS, clock, CORNERS, defaultEdit, END_CARD, frameSize, isUntouched, length, parseSubtitles, TEXT_LIMITS, TEXT_PLACES } from '@/lib/video/edit';
 import type { Caption, Corner, VideoEdit } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
@@ -19,6 +21,7 @@ import {
   STILL_SECONDS,
   captionClockAt,
   compactEdit,
+  aiVideosOf,
   frameAt,
   insertPiece,
   keepOfSequence,
@@ -36,6 +39,7 @@ import { UploadError, removeEditFile, uploadEditFile } from '@/lib/video/upload'
 import { LOGO, SCALE, WORDS } from '@/lib/spot';
 import { DragLayer } from '../ui/DragLayer';
 import { useToast } from '../ui/Toast';
+import { AiVideoPanel } from './AiVideoPanel';
 import { Choices, EffectsPanel, OverlaysPanel, PiecePanel, SoundPanel } from './EditorPanels';
 import type { Changes } from './EditorPanels';
 import { playableUrl } from './media';
@@ -47,7 +51,7 @@ import { useFilmstrip } from './useFilmstrip';
 import { mediaUrls, useMediaUrls } from './useMediaUrls';
 import styles from './video.module.css';
 
-type Tab = 'piece' | 'effects' | 'text' | 'captions' | 'frame' | 'sound';
+type Tab = 'piece' | 'effects' | 'text' | 'captions' | 'frame' | 'sound' | 'ai';
 const TABS: readonly (readonly [Tab, string])[] = [
   ['piece', 'Piece'],
   ['effects', 'Effects'],
@@ -55,7 +59,10 @@ const TABS: readonly (readonly [Tab, string])[] = [
   ['captions', 'Captions'],
   ['frame', 'Frame'],
   ['sound', 'Sound'],
+  ['ai', 'AI video'],
 ];
+/** While an AI video in the edit is being made, the editor asks how it stands this often. */
+const AI_POLL_MS = 15_000;
 
 const CORNER_LABEL: Record<Corner, string> = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right' };
 const PLACE_LABEL = { top: 'Top', middle: 'Middle', bottom: 'Bottom' } as const;
@@ -107,6 +114,8 @@ export function VideoEditor({
   onClose,
   onSaved,
   onApply,
+  purpose,
+  longVideoId,
 }: {
   /** The ad being edited; absent before the run, while the clip is being uploaded. */
   variant?: Variant | undefined;
@@ -119,6 +128,10 @@ export function VideoEditor({
   onSaved?: (saved: SavedVideo) => void;
   /** Before the run: the edit every ad will start from (null for the clip as it is), handed back rather than saved. */
   onApply?: (edit: VideoEdit | null) => void;
+  /** What the edit is for, when it is not a run's ads (a long video edited whole): the heading, the line under it and the save button. */
+  purpose?: { title: string; about: string; apply: string; applied: string } | undefined;
+  /** The long video being edited, if it is one: what the prompt writer's call is kept against. */
+  longVideoId?: string | undefined;
 }) {
   const toast = useToast();
   const dialog = useRef<HTMLDialogElement>(null);
@@ -132,6 +145,9 @@ export function VideoEditor({
   const [caption, setCaption] = useState<number | null>(null);
   const [overlay, setOverlay] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  const [cutaway, setCutaway] = useState<string | null>(null);
+  // The edit's AI videos as the server last said: null until it has.
+  const [known, setKnown] = useState<Map<string, AiVideo> | null>(null);
   // The words, the logo or a text picked on the preview, to size or put back.
   const [grabbed, setGrabbed] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'exporting' | null>(null);
@@ -155,7 +171,10 @@ export function VideoEditor({
   const previewSize = useMemo(() => frameSize(edit, clip, 720), [edit, clip]);
   // Before the run there are no ad words yet: the preview shows where each ad's own will go.
   const shownWords = variant ? words : WORDS_TO_COME;
-  const { player, total, placed, missing, hits } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand });
+  const aiIds = useMemo(() => aiVideosOf(edit), [edit]);
+  const aiKey = aiIds.join(',');
+  const states = useMemo(() => aiStates(edit, aiIds.length === 0 ? new Map() : known), [edit, aiIds, known]);
+  const { player, total, placed, missing, hits } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand }, states.waiting);
   const t = useTime(player.clock);
   const duration = clip.duration;
   const sequence = useMemo(() => sequenceOf(edit), [edit]);
@@ -163,7 +182,30 @@ export function VideoEditor({
   const frame = frameAt(placed, t);
   const onCard = frame.onEndCard;
   const clipNow = captionClockAt(frame);
-  const urls = useMediaUrls(useMemo(() => mediaOf(edit).map((m) => m.path), [edit]));
+  const urls = useMediaUrls(
+    useMemo(() => mediaOf(edit).map((m) => m.path), [edit]),
+    states.waiting.size,
+  );
+
+  // How the edit's AI videos stand: asked at once, and again while one is being made.
+  const waitingCount = states.waiting.size;
+  useEffect(() => {
+    if (!aiKey) return;
+    let alive = true;
+    const ask = () =>
+      void editAiVideosAction(aiKey.split(',')).then((r) => {
+        if (alive && r.ok) setKnown(new Map(r.value.map((v) => [v.id, v])));
+      });
+    ask();
+    if (known !== null && waitingCount === 0) return () => void (alive = false);
+    const timer = setInterval(ask, AI_POLL_MS);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+    // `known` only says whether the server has answered at all.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiKey, waitingCount, known === null]);
 
   // The piece picked in the strip, or the one under the playhead.
   const piece = placed.find((p) => p.segment.id === picked) ?? frame.current?.placed ?? placed[placed.length - 1] ?? null;
@@ -224,11 +266,11 @@ export function VideoEditor({
 
   async function save() {
     if (!variant) {
-      // Before the run: the edit goes with the clip, and every ad starts from it.
+      // Before the run: the edit goes with the clip, and every ad starts from it (or, for a long video, it is kept with it).
       const next = isUntouched(saving, duration) ? null : saving;
       tidy(next);
       onApply?.(next);
-      toast(next ? 'Every ad from this clip starts from this edit' : 'The ads start from the clip as it is');
+      toast(purpose ? purpose.applied : next ? 'Every ad from this clip starts from this edit' : 'The ads start from the clip as it is');
       return onClose();
     }
     const text = words.trim();
@@ -257,6 +299,8 @@ export function VideoEditor({
 
   async function exportVideo() {
     if (!url) return;
+    if (states.waiting.size > 0) return setProblem('An AI video in the edit is still being made: export once it is ready.');
+    if (states.lost.length > 0) return setProblem('An AI video in the edit was not made: take it out under AI video first.');
     setProblem(null);
     setExported(null);
     setBusy('exporting');
@@ -407,8 +451,8 @@ export function VideoEditor({
     >
       <header className={styles.dialogHead}>
         <div>
-          <h2 id="editor-title">{variant ? `Edit video · Variant ${variant.label}` : 'Edit video'}</h2>
-          <p className="muted small">{variant ? `${variant.angle} · ${clip.name}` : `${clip.name} · every ad made from this clip starts from this edit, and each can still be changed in Content`}</p>
+          <h2 id="editor-title">{variant ? `Edit video · Variant ${variant.label}` : (purpose?.title ?? 'Edit video')}</h2>
+          <p className="muted small">{variant ? `${variant.angle} · ${clip.name}` : (purpose?.about ?? `${clip.name} · every ad made from this clip starts from this edit, and each can still be changed in Content`)}</p>
         </div>
         <button type="button" className="icon-btn icon-btn-plain" aria-label="Close" onClick={close}>
           <Close size={18} aria-hidden />
@@ -546,6 +590,10 @@ export function VideoEditor({
                 <Music2 size={14} aria-hidden />
                 {edit.music ? 'Music ✓' : 'Music'}
               </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={adding !== null} onClick={() => setTab('ai')}>
+                <Sparkles size={14} aria-hidden />
+                AI video
+              </button>
               <input ref={videoPicker} type="file" accept="video/mp4,video/webm,video/quicktime" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'video'); e.target.value = ''; }} />
               <input ref={picturePicker} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'image'); e.target.value = ''; }} />
               <input ref={musicPicker} type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg" hidden onChange={(e) => { void addFile(e.target.files?.[0], 'music'); e.target.value = ''; }} />
@@ -570,7 +618,19 @@ export function VideoEditor({
                 setOverlay(id);
                 setTab('text');
               }}
+              cutaways={edit.cutaways ?? []}
+              selectedCutaway={cutaway}
+              onCutaway={(id) => {
+                setCutaway(id);
+                setTab('ai');
+              }}
+              waiting={states.waiting}
             />
+            {states.waiting.size > 0 && (
+              <p className={styles.hint} aria-live="polite">
+                {states.waiting.size === 1 ? 'An AI video is' : `${states.waiting.size} AI videos are`} being made by Higgsfield: {states.waiting.size === 1 ? 'it plays' : 'they play'} in place once ready, and the video can be exported then.
+              </p>
+            )}
 
             {adding && (
               <div className={styles.footNote} aria-live="polite">
@@ -911,6 +971,27 @@ export function VideoEditor({
               )}
 
               {tab === 'sound' && <SoundPanel c={changes} onPickMusic={() => musicPicker.current?.click()} adding={adding !== null} />}
+
+              {tab === 'ai' && (
+                <AiVideoPanel
+                  c={changes}
+                  t={t}
+                  sequenceEnd={sequenceEnd}
+                  shape={shapeForEdit(edit.aspect, clip)}
+                  transcript={clip.transcript}
+                  clipSecondAt={(at) => captionClockAt(frameAt(placed, at))}
+                  longVideoId={longVideoId}
+                  known={known}
+                  states={states}
+                  selected={cutaway}
+                  onSelect={setCutaway}
+                  onSeek={player.seek}
+                  onAsked={(video) => {
+                    // Followed until it is made: the next answer says how it stands.
+                    setKnown((was) => new Map([...(was ?? []), [video.id, { ...video, prompt: '', model: 'seedance_2_0_mini', sound: false, picture: null, credits: 0, status: 'asked', createdAt: new Date().toISOString() }]]));
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -966,13 +1047,13 @@ export function VideoEditor({
                 Stop
               </button>
             ) : (
-              <button type="button" className="btn btn-ghost" onClick={() => void exportVideo()} disabled={!url || busy !== null || adding !== null}>
+              <button type="button" className="btn btn-ghost" onClick={() => void exportVideo()} disabled={!url || busy !== null || adding !== null || states.waiting.size > 0}>
                 <Download size={16} aria-hidden />
                 Export video
               </button>
             )}
             <button type="button" className="btn btn-primary" onClick={() => void save()} disabled={busy !== null || adding !== null || !changed} aria-busy={busy === 'saving'}>
-              {busy === 'saving' ? 'Saving…' : variant ? 'Save' : 'Use this edit'}
+              {busy === 'saving' ? 'Saving…' : variant ? 'Save' : (purpose?.apply ?? 'Use this edit')}
             </button>
           </>
         )}

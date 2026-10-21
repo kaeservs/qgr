@@ -113,7 +113,7 @@ export function useEditedVideo(
   const placed = useMemo(() => layout(sequence), [sequence]);
   const total = editedSeconds(edit);
   const media = useMemo(() => mediaOf(edit), [edit]);
-  const urls = useMediaUrls(useMemo(() => media.map((m) => m.path), [media]));
+  const urls = useMediaUrls(useMemo(() => media.map((m) => m.path), [media]), waiting?.size ?? 0);
   const clipSrc = useMemo(() => (url ? playableUrl(url) : null), [url]);
   // The clock starts on the cover, once.
   const [clock] = useState(() => createClock(edit.cover));
@@ -396,7 +396,7 @@ export function useEditedVideo(
     };
   }, []);
 
-  const missing = media.filter((m) => !urls[m.path]).length;
+  const missing = media.filter((m) => !urls[m.path] && !waiting?.has(m.path)).length;
   return {
     player: { playing, clock, play, pause, toggle: () => (run.current ? pause() : play()), seek },
     ready: assets.ready,

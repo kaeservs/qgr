@@ -5,14 +5,15 @@ import { copyPlatforms, guardrailWarnings } from '../guardrails';
 import { STAGE_ORDER } from '../pipeline';
 import { pingQueue, startPipeline } from '../pipeline-start';
 import { PHOTO_BUCKET } from '../profile-input';
-import { mediaOf } from '../video/timeline';
+import { aiVideoOf, mediaOf } from '../video/timeline';
 import { getViewer } from '../session';
-import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
+import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig, videoPromptConfig } from '../supabase/config';
 import type { PipelineConfig } from '../supabase/config';
 import type { RunOptions } from '../run-input';
 import { forTheRun, videoPriceRequest } from '../run-media';
 import type { StageKey } from '../types';
 import { askPrice } from '../video-price';
+import { askVideoPrompt } from '../video-prompt';
 import type { Json } from '../supabase/database.types';
 import { getSupabase } from '../supabase/server';
 import type { Supabase } from '../supabase/server';
@@ -426,8 +427,15 @@ export const liveData: DataSource = {
     // An edit made before the run goes with the clip: every file it names must be in edit-media, where the studio reads it.
     const edit = 'clip' in input.source ? input.source.clip.edit : undefined;
     if (edit) {
-      const paths = mediaOf(edit).map((m) => m.path);
-      if (paths.some((p) => p.startsWith('local:'))) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
+      const all = mediaOf(edit).map((m) => m.path);
+      if (all.some((p) => p.startsWith('local:'))) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
+      // An AI video in the edit has to be made before the run's ads are drawn over it.
+      const ai = all.map(aiVideoOf).filter((id): id is string => id !== null);
+      if (ai.length > 0) {
+        const made = await supabase.from('ai_videos').select('id').in('id', ai).eq('status', 'ready').is('removed_at', null);
+        if (made.error || made.data.length < new Set(ai).size) return { ok: false, status: 400, error: 'An AI video in the edit is not made yet: start the run once it is ready.' };
+      }
+      const paths = all.filter((p) => aiVideoOf(p) === null);
       if (paths.length > 0) {
         const found = await supabase.storage.from(EDIT_MEDIA_BUCKET).createSignedUrls(paths, 60);
         if (found.error || found.data.some((f) => f.error)) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
@@ -572,7 +580,7 @@ export const liveData: DataSource = {
     if (!UUID.test(id)) return null;
     const { data, error } = await (await db())
       .from('long_videos')
-      .select('id, title, file, guidance, status, error, moments, created_at, transcript')
+      .select('id, title, file, guidance, status, error, moments, created_at, transcript, edit')
       .eq('id', id)
       .is('removed_at', null)
       .maybeSingle();
@@ -600,6 +608,12 @@ export const liveData: DataSource = {
   removeLongVideo: async (id) => {
     const { error } = await (await db()).rpc('remove_long_video', { p_id: id });
     if (error) return refused(error, 'The video could not be taken away.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  saveLongVideoEdit: async (id, edit) => {
+    const { error } = await (await db()).rpc('save_long_video_edit', { p_id: id, p_edit: edit as unknown as Json });
+    if (error) return refused(error, 'The edit could not be saved.');
     return { ok: true, value: null, sample: false };
   },
 
@@ -682,6 +696,38 @@ export const liveData: DataSource = {
     const { data, error } = await (await db()).from('ai_videos').select(AI_VIDEO).eq('id', id).is('removed_at', null).maybeSingle();
     if (error) readFailed('the AI video', error);
     return data ? ((await aiVideos([data]))[0] ?? null) : null;
+  },
+
+  getAiVideosById: async (ids) => {
+    const wanted = [...new Set(ids)].filter((id) => UUID.test(id)).slice(0, 60);
+    if (wanted.length === 0) return [];
+    const { data, error } = await (await db()).from('ai_videos').select(AI_VIDEO).in('id', wanted).is('removed_at', null);
+    if (error) readFailed('the AI videos in the edit', error);
+    return aiVideos(data);
+  },
+
+  writeVideoPrompt: async (request) => {
+    const config = videoPromptConfig();
+    if (!config) return { ok: false, status: 503, error: 'The prompt writer is in n8n: its webhook is not set on this server.' };
+    const supabase = await db();
+    const { data: brand } = await supabase.from('brand_profile').select('company, offer, audience, guardrails, picture_style').eq('id', 1).maybeSingle();
+    const answer = await askVideoPrompt(config, {
+      long_video_id: request.longVideoId,
+      at: request.at,
+      seconds: request.seconds,
+      aspect: request.aspect,
+      mode: request.mode,
+      idea: request.idea,
+      lines: request.lines,
+      brand: {
+        company: brand?.company ?? 'Quantum Global Residency',
+        offer: brand?.offer ?? '',
+        audience: brand?.audience ?? '',
+        guardrails: brand?.guardrails ?? [],
+        look: brand?.picture_style ?? null,
+      },
+    });
+    return answer.ok ? { ok: true, value: { prompt: answer.prompt, why: answer.why }, sample: false } : { ok: false, status: 502, error: answer.error };
   },
 
   getVideoBudget: async () => {
@@ -1001,12 +1047,31 @@ export const liveData: DataSource = {
 
   signEditMedia: async (paths) => {
     if (paths.length === 0) return {};
-    const { data, error } = await (await db()).storage.from(EDIT_MEDIA_BUCKET).createSignedUrls([...new Set(paths)], PLAY_SECONDS);
+    const supabase = await db();
+    const unique = [...new Set(paths)];
+    const out: Record<string, string> = {};
+    // AI videos are signed in their own bucket once they are made; one being made has no link yet.
+    const ai = unique.map(aiVideoOf).filter((id): id is string => id !== null && UUID.test(id));
+    if (ai.length > 0) {
+      const made = await supabase.from('ai_videos').select('id').in('id', ai).eq('status', 'ready').is('removed_at', null);
+      if (made.error) console.error('Reading the AI videos in an edit failed', made.error);
+      const ids = (made.data ?? []).map((r) => r.id);
+      if (ids.length > 0) {
+        const { data, error } = await supabase.storage.from(AI_VIDEO_BUCKET).createSignedUrls(ids.map((id) => `videos/${id}.mp4`), PLAY_SECONDS);
+        if (error) console.error('Signing AI video links failed', error);
+        for (const item of data ?? []) {
+          const id = item.path?.match(/^videos\/(.+)\.mp4$/)?.[1];
+          if (id && item.signedUrl && !item.error) out[`ai:${id}`] = item.signedUrl;
+        }
+      }
+    }
+    const files = unique.filter((p) => aiVideoOf(p) === null);
+    if (files.length === 0) return out;
+    const { data, error } = await supabase.storage.from(EDIT_MEDIA_BUCKET).createSignedUrls(files, PLAY_SECONDS);
     if (error) {
       console.error('Signing edit file links failed', error);
-      return {};
+      return out;
     }
-    const out: Record<string, string> = {};
     for (const item of data) if (item.path && item.signedUrl && !item.error) out[item.path] = item.signedUrl;
     return out;
   },
