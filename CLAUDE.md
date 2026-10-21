@@ -519,7 +519,9 @@ X's ads APIs, which each need their own access.
   words cut off are left out, and an ad's days running are counted in code
   only from a start date the screenshot shows (Meta's Ad Library's "Started
   running on"); otherwise they are not known (`days_known`), and the
-  dashboard and the agents say nothing in their place. The report says it was
+  dashboard and the agents say nothing in their place. A stopped ad
+  ("Inactive", or an end date shown, `ended_on`) is counted from its start to
+  its end, never to today; with no end date shown its days are not known. The report says it was
   read from screenshots (`data_source: upload`). A competitor known only from
   screenshots has no website to scan: "Add screenshots" starts another run.
 - A screenshot can be any of their marketing, not only a paid ad: Claude
@@ -533,8 +535,9 @@ X's ads APIs, which each need their own access.
   reach, so only the public signs are kept: Apify gives versions ("N ads use
   this creative and text", `collationCount`) and placements
   (`publisherPlatform`); a screenshot gives what it shows, the counts copied
-  as written ("1.2K") and turned into numbers in code (`count` in
-  `tracker-read-answer.js`). `adSignal` in `lib/competitor-signal.ts` (pure,
+  as written ("1.2K", "1,2 Tsd.", "2.5 Mio", "300+ comments") and turned
+  into numbers in code (`count` in `tracker-read-answer.js`, anything it
+  cannot read is null). `adSignal` in `lib/competitor-signal.ts` (pure,
   tested) rates each from days running, versions, placements and visible
   engagement (Strong, Promising, Little sign yet, Too new to tell, Stopped
   early, Not enough shown) with the facts it rests on; the competitor page
@@ -989,8 +992,11 @@ X's ads APIs, which each need their own access.
   `moveCutaway` in `lib/video/timeline.ts`, tested). Its length and size are
   known before it is made (`aiMediaOf`), so it goes in while Higgsfield makes
   it: the preview shows it as on its way, the strip has a lane for cutaways,
-  and the editor asks how the edit's AI videos stand every 15 s while one is
-  being made (`aiStates` in `lib/video/ai-pieces.ts`, tested). One not made
+  and the editor and the studio's preview ask how the edit's AI videos stand
+  every 15 s while one is being made (`useAiStates`, from `aiStates` in
+  `lib/video/ai-pieces.ts`, tested). Cutaways are kept inside the edit: one
+  past its end goes, one running over is trimmed (`fitCutaways`), and an
+  insert moves the cutaways after it on (`shiftCutaways`). One not made
   is named with why and a way to take it out. Nothing is exported, and no run
   starts from an edit (`createRun`), until every AI video in it is made.
 - The tab (`AiVideoPanel`) puts one in from the library or makes one there,
@@ -1006,7 +1012,8 @@ X's ads APIs, which each need their own access.
 - `private.check_video_edit` holds every saved edit (`save_video_edit`,
   `save_long_video_edit`): an `ai:` file must be in the library and asked,
   being made or made. The library keeps a video any edit uses
-  (`remove_ai_video`, `private.edit_uses`), and edit-media keeps a file a
+  (`remove_ai_video`, `private.edit_uses`; a removed long video's edit no
+  longer counts), and edit-media keeps a file a
   long video's or a run's edit uses. Links to made AI videos are signed in
   `ai-videos` by `signEditMedia`.
 - Tested in `supabase/edits.test.ts`, `lib/video/timeline.test.ts`,
@@ -1060,9 +1067,11 @@ X's ads APIs, which each need their own access.
 - "The whole video, edited" (`WholeVideoCard`): the editor opened on the
   whole file on this computer, to cut it down and put AI videos in; only the
   edit is kept (`long_videos.edit`, `save_long_video_edit`, held to the
-  video's length), so the work survives a reload while its AI videos are
-  made. From it the finished video is made in the browser: downloaded at any
-  length, or, up to ten minutes, made under 50 MB (1280 on its long side,
+  video's length plus ten minutes of inserts, `longEditSeconds`), so the work
+  survives a reload while its AI videos are made; a save refused keeps the
+  editor open and says why. From it the finished video is made in the
+  browser: downloaded up to an hour long (past 20 minutes at 1280 on its long
+  side, aimed at 1 GB), or, up to ten minutes, made under 50 MB (1280 on its long side,
   `bitrate` aimed at 45 MB) and uploaded as a clip that starts an ordinary
   run, its transcript carried through the edit (`transcriptThroughEdit` in
   `lib/long-video.ts`, tested) for the captions and notes.

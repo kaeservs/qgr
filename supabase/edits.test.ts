@@ -80,6 +80,17 @@ describe('an AI video in an edit', () => {
     await expect(saveLong(id, edit({ cutaways: [cutaway] }))).rejects.toThrow(/no longer in the library/);
   });
 
+  it('leaves the library free once its long video is taken out of the list', async () => {
+    const id = await createLong();
+    const video = await askVideo();
+    await saveLong(id, edit({ cutaways: [{ id: 'c1', media: media(`ai:${video}`), at: 10, start: 0, end: 5 }] }));
+    await t.db.query(`update public.ai_videos set status = 'ready', path = $2 where id = $1`, [video, `videos/${video}.mp4`]);
+    await t.asUser(member, () => t.db.query(`select public.remove_long_video($1)`, [id]));
+    // Nothing can reach that edit any more, so it no longer holds the video.
+    await t.asUser(member, () => t.db.query(`select public.remove_ai_video($1)`, [video]));
+    expect(await t.value<boolean>(`select removed_at is not null from public.ai_videos where id = $1`, [video])).toBe(true);
+  });
+
   it('is refused once Higgsfield could not make it', async () => {
     const id = await createLong();
     const video = await askVideo();

@@ -514,7 +514,7 @@ describe('a competitor from screenshots of their ads, and a run on a few of them
     expect(material).toMatchObject({ screenshots: 2, competitor: { name_hint: 'Meridian EB-5' } });
     const started = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
     const read = (id: string, n: number, text: string, started_on = '', seen: Json = {}) => ({
-      id, shot: n, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Meridian EB-5', text, headline: 'Talk to us', cta: 'Learn more', started_on,
+      id, shot: n, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Meridian EB-5', text, headline: 'Talk to us', cta: 'Learn more', started_on, ended_on: '',
       active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '', ...seen,
     });
     return {

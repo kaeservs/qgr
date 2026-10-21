@@ -20,7 +20,7 @@ const READ = [
   '- kind: ad for a paid ad (it says Sponsored, or it is in an ad library), post for an organic post, email, or page.',
   '- platform: meta for Facebook and Instagram, linkedin, x, email for an email, web for a web page. format: video, image, carousel, document or text.',
   "- page_name: the advertiser or sender as it shows. text: the main text exactly as written, without its headline or button (an email: its subject, then its opening; a page: its heading, then its opening); where it is cut off (\"See more\"), up to the cut. headline and cta: as written, or an empty string.",
-  "- started_on: the day it started running as YYYY-MM-DD, only when the screenshot shows it (Meta's Ad Library says \"Started running on\"); otherwise an empty string. active: active or inactive when the screenshot says so; otherwise an empty string.",
+  "- started_on: the day it started running as YYYY-MM-DD, only when the screenshot shows it (Meta's Ad Library says \"Started running on\", or a range for an ad that stopped); otherwise an empty string. ended_on: the day it stopped, as YYYY-MM-DD, only when the screenshot shows a range that ends; otherwise an empty string. active: active or inactive when the screenshot says so; otherwise an empty string.",
   "- versions: the number in \"N ads use this creative and text\" when the screenshot shows it, as written; otherwise an empty string. placements: the places the ad library lists it on, from facebook, instagram, messenger, audience_network, threads and whatsapp; otherwise none.",
   '- reactions, comments, shares and views: each count exactly as the screenshot shows it (for example 1.2K or 347); an empty string when it is not shown. Never estimate one.',
   'Never guess words that are cut off or cannot be read.',
@@ -97,7 +97,7 @@ const schema = {
   },
 };
 if (shots.length > 0) {
-  const READ_FIELDS = ['id', 'shot', 'kind', 'platform', 'format', 'page_name', 'text', 'headline', 'cta', 'started_on', 'active', 'versions', 'placements', 'reactions', 'comments', 'shares', 'views'];
+  const READ_FIELDS = ['id', 'shot', 'kind', 'platform', 'format', 'page_name', 'text', 'headline', 'cta', 'started_on', 'ended_on', 'active', 'versions', 'placements', 'reactions', 'comments', 'shares', 'views'];
   schema.required = ['ads_read'].concat(schema.required);
   schema.properties = Object.assign({
     ads_read: {
@@ -117,6 +117,7 @@ if (shots.length > 0) {
           headline: { type: 'string' },
           cta: { type: 'string' },
           started_on: { type: 'string' },
+          ended_on: { type: 'string' },
           active: { type: 'string', enum: ['active', 'inactive', ''] },
           versions: { type: 'string' },
           placements: { type: 'array', items: { type: 'string', enum: ['facebook', 'instagram', 'messenger', 'audience_network', 'threads', 'whatsapp'] } },

@@ -70,6 +70,9 @@ export function adSignal(ad: AdFacts): AdSignal {
   if (days !== null) {
     score += days >= 90 ? 4 : days >= 60 ? 3 : days >= 30 ? 2 : days >= 14 ? 1 : 0;
     reasons.push(ad.active === false ? `Ran ${days} day${days === 1 ? '' : 's'}, now stopped` : days === 0 ? 'Started today' : `${days} day${days === 1 ? '' : 's'} running`);
+  } else if (ad.active === false) {
+    // How long a stopped ad ran shows only with both its dates; that it stopped is still worth saying.
+    reasons.push('Stopped');
   }
   const versions = ad.versions ?? null;
   if (versions !== null) {

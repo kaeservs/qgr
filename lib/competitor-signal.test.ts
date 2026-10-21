@@ -23,6 +23,8 @@ describe('how well a competitor’s ad looks to be doing', () => {
     expect(adSignal({ daysRunning: 4, versions: 8 })).toMatchObject({ level: 'promising' });
     expect(adSignal({ daysRunning: 9, active: false })).toMatchObject({ level: 'ended', reasons: ['Ran 9 days, now stopped'] });
     expect(adSignal({ daysRunning: null })).toEqual({ level: 'unknown', score: 0, reasons: [] });
+    // Stopped, with no dates shown: it says so, and is not rated on days it may not have run.
+    expect(adSignal({ daysRunning: null, active: false, versions: 3 })).toMatchObject({ level: 'little', reasons: ['Stopped', '3 versions'] });
   });
 
   it('puts their best performers first, leaving out what shows little', () => {
