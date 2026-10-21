@@ -786,6 +786,8 @@ export type Database = {
           claimed_at: string | null
           created_at: string
           created_by: string | null
+          edit: Json | null
+          edited_at: string | null
           error: string | null
           file: Json
           finished_at: string | null
@@ -802,6 +804,8 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by?: string | null
+          edit?: Json | null
+          edited_at?: string | null
           error?: string | null
           file: Json
           finished_at?: string | null
@@ -818,6 +822,8 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by?: string | null
+          edit?: Json | null
+          edited_at?: string | null
           error?: string | null
           file?: Json
           finished_at?: string | null
@@ -1436,6 +1442,47 @@ export type Database = {
           },
         ]
       }
+      video_prompt_usage: {
+        Row: {
+          cache_creation_input_tokens: number
+          cache_read_input_tokens: number
+          created_at: string
+          id: number
+          input_tokens: number
+          long_video_id: string | null
+          model: string
+          output_tokens: number
+        }
+        Insert: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          long_video_id?: string | null
+          model: string
+          output_tokens?: number
+        }
+        Update: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
+          created_at?: string
+          id?: never
+          input_tokens?: number
+          long_video_id?: string | null
+          model?: string
+          output_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "video_prompt_usage_long_video_id_fkey"
+            columns: ["long_video_id"]
+            isOneToOne: false
+            referencedRelation: "long_videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1701,6 +1748,10 @@ export type Database = {
         Returns: undefined
       }
       run_of_variant: { Args: { p_variant_id: string }; Returns: string }
+      save_long_video_edit: {
+        Args: { p_edit: Json; p_id: string }
+        Returns: undefined
+      }
       save_variant: {
         Args: {
           p_copy: Json
@@ -1884,6 +1935,10 @@ export type Database = {
       }
       video_finish: {
         Args: { p_id: string; p_path?: string; p_stand_in?: boolean }
+        Returns: undefined
+      }
+      video_prompt_used: {
+        Args: { p_long_video_id: string; p_model: string; p_usage: Json }
         Returns: undefined
       }
       video_release: {
