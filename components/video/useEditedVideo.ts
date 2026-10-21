@@ -7,8 +7,8 @@ import type { Picture } from '@/lib/video/draw';
 import { loadFrameFonts, loadMark } from '@/lib/video/draw';
 import { editedSeconds } from '@/lib/video/edit';
 import type { Size, VideoEdit } from '@/lib/video/edit';
-import { frameAt, layout, mediaOf, musicGainAt, musicSourceAt, pieceGainAt, sequenceOf } from '@/lib/video/timeline';
-import type { Placed, Showing } from '@/lib/video/timeline';
+import { cutawayAt, frameAt, layout, mediaOf, musicGainAt, musicSourceAt, pieceGainAt, sequenceOf } from '@/lib/video/timeline';
+import type { Cutaway, Placed, Showing } from '@/lib/video/timeline';
 import type { Hit } from '@/lib/spot';
 import { playableUrl } from './media';
 import { useMediaUrls } from './useMediaUrls';
@@ -74,6 +74,8 @@ export interface TimelinePlayer {
 
 /** A clip piece plays on one of two elements per file, alternating, so the next piece is ready on the other while this one plays. */
 const elementKey = (s: Placed) => `${s.segment.kind === 'clip' ? (s.segment.media?.path ?? 'clip') : ''}#${s.index % 2}`;
+/** A cutaway plays on an element of its own, always silent: the sequence's sound goes on under it. */
+const cutawayKey = (c: Cutaway) => `cut:${c.id}`;
 /** Further than this from where it should be, a playing video is put right. */
 const DRIFT = 0.25;
 
@@ -84,9 +86,19 @@ const DRIFT = 0.25;
  * drawing the export does. The clock is the edited video's own: it runs on
  * while the pieces' videos follow it, and holds while one is still loading.
  * Clip sound plays from its video, faded as the export fades it; the music
- * from an <audio>, faded and ducked the same way.
+ * from an <audio>, faded and ducked the same way. A cutaway plays silent over
+ * its stretch; an AI video in `waiting` (not made yet) shows as on its way and
+ * never holds the clock.
  */
-export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host: RefObject<HTMLElement | null>, url: string | null, edit: VideoEdit, size: Size, words: FrameWords): {
+export function useEditedVideo(
+  canvas: RefObject<HTMLCanvasElement | null>,
+  host: RefObject<HTMLElement | null>,
+  url: string | null,
+  edit: VideoEdit,
+  size: Size,
+  words: FrameWords,
+  waiting?: ReadonlySet<string>,
+): {
   player: TimelinePlayer;
   ready: boolean;
   total: number;
@@ -112,9 +124,9 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
   const music = useRef<HTMLAudioElement | null>(null);
   const raf = useRef(0);
   const run = useRef<{ from: number; at: number } | null>(null);
-  const live = useRef({ edit, placed, total, size, words, assets, urls, clipSrc });
+  const live = useRef({ edit, placed, total, size, words, assets, urls, clipSrc, waiting });
   useEffect(() => {
-    live.current = { edit, placed, total, size, words, assets, urls, clipSrc };
+    live.current = { edit, placed, total, size, words, assets, urls, clipSrc, waiting };
   });
 
   const srcOf = useCallback((path: string | null): string | null => (path === null ? live.current.clipSrc : (live.current.urls[path] ?? null)), []);
@@ -177,6 +189,11 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
     [image],
   );
 
+  const cutawayOf = useCallback((c: Cutaway): Picture | null => {
+    const v = videos.current.get(cutawayKey(c));
+    return v && v.readyState >= 2 && v.videoWidth > 0 ? { image: v, width: v.videoWidth, height: v.videoHeight } : null;
+  }, []);
+
   // Where the words, the logo and the texts were drawn, for the editor's handles: kept only while paused.
   const [hits, setHits] = useState<Hit[]>([]);
   const lastHits = useRef('');
@@ -184,15 +201,15 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
     (t: number) => {
       const ctx = canvas.current?.getContext('2d');
       if (!ctx) return;
-      const { edit: e, placed: p, total: all, size: s, words: w, assets: a } = live.current;
-      const drawn = drawTimelineFrame(ctx, s, { edit: e, placed: p, total: all, words: w.words, brand: { ...w.brand, mark: a.mark }, time: t }, pictureOf);
+      const { edit: e, placed: p, total: all, size: s, words: w, assets: a, waiting: later } = live.current;
+      const drawn = drawTimelineFrame(ctx, s, { edit: e, placed: p, total: all, words: w.words, brand: { ...w.brand, mark: a.mark }, time: t, ...(later ? { waiting: later } : {}) }, pictureOf, cutawayOf);
       const key = run.current ? '' : JSON.stringify(drawn);
       if (key !== lastHits.current) {
         lastHits.current = key;
         setHits(run.current ? [] : drawn);
       }
     },
-    [canvas, pictureOf],
+    [canvas, pictureOf, cutawayOf],
   );
 
   /** Puts every element where the timeline says at `t`: the pieces on screen at their seconds and volumes, the next one ready, the music. Returns whether one on screen is still loading. */
@@ -231,6 +248,34 @@ export function useEditedVideo(canvas: RefObject<HTMLCanvasElement | null>, host
           used.add(key);
           if (!v.paused) v.pause();
           if (Math.abs(v.currentTime - next.segment.start) > 0.05) v.currentTime = next.segment.start;
+        }
+      }
+      // A cutaway over this second plays silent on its own element; the next one waits at its first frame.
+      const over = cutawayAt(e.cutaways, t);
+      if (over) {
+        const key = cutawayKey(over.cutaway);
+        const v = video(key, srcOf(over.cutaway.media.path));
+        if (v) {
+          used.add(key);
+          v.muted = true;
+          if (v.readyState < 2) waiting = true;
+          if (moving) {
+            if (Math.abs(v.currentTime - over.source) > DRIFT) v.currentTime = over.source;
+            if (v.paused) void v.play().catch(() => undefined);
+          } else {
+            if (!v.paused) v.pause();
+            if (Math.abs(v.currentTime - over.source) > 0.02) v.currentTime = over.source;
+          }
+        }
+      }
+      const coming = (e.cutaways ?? []).find((c) => c.at > t && c.at - t < 2);
+      if (coming && !used.has(cutawayKey(coming))) {
+        const v = video(cutawayKey(coming), srcOf(coming.media.path));
+        if (v) {
+          used.add(cutawayKey(coming));
+          v.muted = true;
+          if (!v.paused) v.pause();
+          if (Math.abs(v.currentTime - coming.start) > 0.05) v.currentTime = coming.start;
         }
       }
       for (const [key, v] of videos.current) if (!used.has(key) && !v.paused) v.pause();

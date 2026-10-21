@@ -70,8 +70,8 @@ export async function makeVariantVideo(job: VideoJob): Promise<{ blob: Blob; tar
     edit: job.edit,
     size: job.size,
     bitrate: videoBitrate(job.size, 30),
-    draw: (ctx, time, pictureOf) => {
-      drawTimelineFrame(ctx, job.size, { edit: job.edit, placed, total, words: job.words, brand, time }, pictureOf);
+    draw: (ctx, time, pictureOf, cutawayOf) => {
+      drawTimelineFrame(ctx, job.size, { edit: job.edit, placed, total, words: job.words, brand, time }, pictureOf, cutawayOf);
       job.onFrame?.(ctx.canvas, time);
     },
     // Every frame reports; the caller hears only of a new whole percent.

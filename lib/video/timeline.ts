@@ -15,6 +15,13 @@
 // in timeline seconds, from the first frame. Captions stay in the run's clip
 // seconds, as before, and show while a piece of that clip plays them.
 //
+// AI videos. A video Higgsfield made (or is making) is a file like any other
+// here, named 'ai:<id>': a piece of the sequence (inserted at a point, so
+// what follows plays later), or a cutaway: over the video for a stretch,
+// while the sequence's sound goes on (B-roll over a talk). Its length and
+// size are known before it is made, so the timeline is laid out at once and
+// the preview shows it as on its way until the file is there.
+//
 // Pure, and tested (timeline.test.ts).
 
 import { clampSpot, LOGO, parseSpot, WORDS } from '../spot';
@@ -86,6 +93,7 @@ export type Place = (typeof PLACES)[number];
 
 export const MAX_SEGMENTS = 40;
 export const MAX_OVERLAYS = 30;
+export const MAX_CUTAWAYS = 20;
 /** An ad, not a film: the edited video runs ten minutes at most. */
 export const MAX_TIMELINE_SECONDS = 600;
 export const MIN_PIECE = 0.3;
@@ -150,6 +158,22 @@ export interface Overlay {
   size: TextSize;
   /** Where it sits once a person drags it, instead of its place, and its size. */
   spot?: Spot;
+}
+
+/**
+ * Another video over the sequence for a stretch, its own sound silent: the
+ * sequence's sound goes on under it (B-roll over a talk). Cutaways never
+ * overlap one another.
+ */
+export interface Cutaway {
+  id: string;
+  /** A video: one the team added, or an AI video. */
+  media: MediaRef;
+  /** The timeline second it comes in at. */
+  at: number;
+  /** The part of its video that plays, in that video's own seconds. */
+  start: number;
+  end: number;
 }
 
 export interface Look {
@@ -295,16 +319,98 @@ export function keepOfSequence(sequence: readonly Segment[]): Part[] {
 }
 
 /** Every file the edit uses besides the run's clip: what has to be signed or downloaded to show or make it. */
-export function mediaOf(edit: { sequence?: Segment[] | undefined; music?: Music | null | undefined }): MediaRef[] {
+export function mediaOf(edit: { sequence?: Segment[] | undefined; cutaways?: Cutaway[] | undefined; music?: Music | null | undefined }): MediaRef[] {
   const out = new Map<string, MediaRef>();
   for (const s of edit.sequence ?? []) if ((s.kind === 'clip' || s.kind === 'image') && s.media) out.set(s.media.path, s.media);
+  for (const c of edit.cutaways ?? []) out.set(c.media.path, c.media);
   if (edit.music) out.set(edit.music.media.path, edit.music.media);
   return [...out.values()];
 }
 
 /** Whether this edit uses anything the timeline added: then it is saved with its sequence. */
-export const isTimeline = (edit: Partial<Pick<VideoEdit, 'sequence' | 'overlays' | 'look' | 'music'>>) =>
-  Boolean((edit.sequence && edit.sequence.length > 0) || (edit.overlays && edit.overlays.length > 0) || edit.look || edit.music);
+export const isTimeline = (edit: Partial<Pick<VideoEdit, 'sequence' | 'overlays' | 'look' | 'music' | 'cutaways'>>) =>
+  Boolean((edit.sequence && edit.sequence.length > 0) || (edit.overlays && edit.overlays.length > 0) || edit.look || edit.music || (edit.cutaways && edit.cutaways.length > 0));
+
+// ---------------------------------------------------------------- AI videos
+
+const AI = /^ai:([0-9a-z-]{1,36})$/;
+/** An AI video's path in an edit. */
+export const aiPath = (id: string) => `ai:${id}`;
+/** The AI video a path names, or null for any other file. */
+export const aiVideoOf = (path: string): string | null => AI.exec(path)?.[1] ?? null;
+/** The AI videos an edit uses, by id. */
+export const aiVideosOf = (edit: Parameters<typeof mediaOf>[0]): string[] =>
+  mediaOf(edit)
+    .map((m) => aiVideoOf(m.path))
+    .filter((id): id is string => id !== null);
+
+// ---------------------------------------------------------------- cutaways
+
+export const cutawaySeconds = (c: Pick<Cutaway, 'start' | 'end'>) => c.end - c.start;
+
+/** The cutaway over timeline second `t`, and the second of its own video showing, or null. */
+export function cutawayAt(cutaways: readonly Cutaway[] | undefined, t: number): { cutaway: Cutaway; source: number } | null {
+  for (const c of cutaways ?? []) {
+    if (t >= c.at && t < c.at + cutawaySeconds(c)) return { cutaway: c, source: Math.min(c.end - 0.001, c.start + (t - c.at)) };
+  }
+  return null;
+}
+
+/**
+ * Puts a cutaway in at `at`, as much of it as fits before the next one and
+ * the end of the video (at least MIN_PIECE), the list kept in order. The list
+ * unchanged when there is no room.
+ */
+export function addCutaway(cutaways: readonly Cutaway[], next: Cutaway, total: number): Cutaway[] {
+  if (cutaways.length >= MAX_CUTAWAYS) return [...cutaways];
+  const at = ms(clamp(next.at, 0, total));
+  if (cutawayAt(cutaways, at)) return [...cutaways];
+  const after = cutaways.filter((c) => c.at > at).reduce((min, c) => Math.min(min, c.at), total);
+  const room = after - at;
+  if (room < MIN_PIECE) return [...cutaways];
+  const end = ms(Math.min(next.end, next.start + room));
+  return [...cutaways, { ...next, at, end }].sort((a, b) => a.at - b.at);
+}
+
+/** Changes one cutaway, keeping it inside its video, the video and clear of the others. */
+export function moveCutaway(cutaways: readonly Cutaway[], id: string, change: Partial<Pick<Cutaway, 'at' | 'start' | 'end'>>, total: number): Cutaway[] {
+  const c = cutaways.find((x) => x.id === id);
+  if (!c) return [...cutaways];
+  const others = cutaways.filter((x) => x.id !== id);
+  const length = c.media.duration ?? cutawaySeconds(c);
+  const start = ms(clamp(change.start ?? c.start, 0, length - MIN_PIECE));
+  let end = ms(clamp(change.end ?? c.end, start + MIN_PIECE, length));
+  const before = others.filter((x) => x.at + cutawaySeconds(x) <= c.at + 0.001).reduce((max, x) => Math.max(max, x.at + cutawaySeconds(x)), 0);
+  const after = others.filter((x) => x.at >= c.at).reduce((min, x) => Math.min(min, x.at), total);
+  // Moved, it keeps its length and stops at its neighbours.
+  const at = change.at === undefined ? c.at : ms(clamp(change.at, before, Math.max(before, after - (end - start))));
+  end = ms(Math.min(end, start + (after - at)));
+  if (end - start < MIN_PIECE - 0.001) return [...cutaways];
+  return [...others, { ...c, at, start, end }].sort((a, b) => a.at - b.at);
+}
+
+export const removeCutaway = (cutaways: readonly Cutaway[], id: string): Cutaway[] => cutaways.filter((c) => c.id !== id);
+
+/**
+ * Puts a piece in at timeline second `t`: between two pieces when `t` is at
+ * (or near) a join, otherwise the piece under it is split there and the new
+ * one goes between its halves. What follows plays later by the new piece's
+ * length.
+ */
+export function insertAt(sequence: readonly Segment[], piece: Segment, t: number): Segment[] {
+  if (sequence.length >= MAX_SEGMENTS) return [...sequence];
+  const placed = layout(sequence);
+  const under = placed.find((p) => t >= p.at && t < p.until);
+  if (!under) return [...sequence, piece];
+  const local = t - under.at;
+  const id = under.segment.id;
+  if (local < MIN_PIECE) {
+    const i = under.index;
+    return [...sequence.slice(0, i), piece, ...sequence.slice(i)];
+  }
+  if (under.until - t < MIN_PIECE || sequence.length + 1 >= MAX_SEGMENTS) return insertPiece(sequence, piece, id);
+  return insertPiece(splitPiece(sequence, id, local), piece, id);
+}
 
 // ---------------------------------------------------------------- changing a sequence
 
@@ -439,13 +545,15 @@ const isOneOf = <T extends string>(list: readonly T[], v: unknown): v is T => ty
 const words = (v: unknown, max: number) => (typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '');
 const ID = /^[a-z0-9]{1,24}$/i;
 /** Where an added file can be: the team's own folder in edit-media, or (sample data) this tab. */
-export const MEDIA_PATH = /^(media\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp|mp4|webm|mov|mp3|m4a|aac|wav|ogg)|local:[0-9a-f-]{36})$/;
+export const MEDIA_PATH = /^(media\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(jpg|png|webp|mp4|webm|mov|mp3|m4a|aac|wav|ogg)|local:[0-9a-f-]{36}|ai:[0-9a-z-]{1,36})$/;
 
 function mediaOfRaw(raw: unknown, kind: 'video' | 'image' | 'audio'): MediaRef | string {
   if (!isRecord(raw) || typeof raw.path !== 'string' || !MEDIA_PATH.test(raw.path)) return 'A file in the edit was not added here.';
   const ext = raw.path.split('.').pop() ?? '';
   const isLocal = raw.path.startsWith('local:');
-  if (!isLocal) {
+  const isAi = aiVideoOf(raw.path) !== null;
+  if (isAi && kind !== 'video') return 'An AI video can only be a video in the edit.';
+  if (!isLocal && !isAi) {
     const ok = kind === 'image' ? ['jpg', 'png', 'webp'] : kind === 'video' ? ['mp4', 'webm', 'mov'] : ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'mp4', 'webm'];
     if (!ok.includes(ext)) return `That file isn’t ${kind === 'image' ? 'a picture' : kind === 'video' ? 'a video' : 'music'}.`;
   }
@@ -547,6 +655,33 @@ export function parseOverlays(raw: unknown, total: number): Overlay[] | string {
     });
   }
   return out.sort((a, b) => a.start - b.start);
+}
+
+/** The cutaways as the studio sends them: readable, inside their videos and the video, never overlapping. */
+export function parseCutaways(raw: unknown, total: number): Cutaway[] | string {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) return 'The videos over the video are not readable.';
+  if (raw.length > MAX_CUTAWAYS) return `Up to ${MAX_CUTAWAYS} videos over the video.`;
+  const out: Cutaway[] = [];
+  const ids = new Set<string>();
+  for (const r of raw) {
+    if (!isRecord(r) || typeof r.id !== 'string' || !ID.test(r.id) || ids.has(r.id) || !isNumber(r.at) || !isNumber(r.start) || !isNumber(r.end)) return 'A video over the video is not readable.';
+    ids.add(r.id);
+    const media = mediaOfRaw(r.media, 'video');
+    if (typeof media === 'string') return media;
+    const length = media.duration ?? 0;
+    if (r.start < 0 || r.end > length + 0.5 || r.end - r.start < MIN_PIECE - 0.001) return 'A video over the video is outside it.';
+    if (r.at < 0 || r.at > total - MIN_PIECE + 0.5) return 'A video over the video starts past its end.';
+    const at = ms(r.at);
+    const end = ms(Math.min(r.end, length, r.start + (total - at)));
+    out.push({ id: r.id, media, at, start: ms(r.start), end });
+  }
+  out.sort((a, b) => a.at - b.at);
+  for (let i = 1; i < out.length; i++) {
+    const before = out[i - 1]!;
+    if (out[i]!.at < before.at + cutawaySeconds(before) - 0.01) return 'Two videos over the video overlap: move one.';
+  }
+  return out;
 }
 
 export function parseLook(raw: unknown): Look | undefined {
@@ -713,7 +848,7 @@ const plainEffects = (e: Effects) => JSON.stringify(e) === JSON.stringify(DEFAUL
  * still compares equal to the whole clip.
  */
 export function compactEdit(edit: VideoEdit): VideoEdit {
-  const { sequence, overlays, look, music, ...rest } = edit;
+  const { sequence, overlays, look, music, cutaways, ...rest } = edit;
   const out: VideoEdit = { ...rest };
   if (sequence && sequence.length > 0) {
     const plain = sequence.every(
@@ -738,6 +873,7 @@ export function compactEdit(edit: VideoEdit): VideoEdit {
   if (overlays && overlays.length > 0) out.overlays = overlays;
   if (look && JSON.stringify(look) !== JSON.stringify(DEFAULT_LOOK)) out.look = look;
   if (music) out.music = music;
+  if (cutaways && cutaways.length > 0) out.cutaways = cutaways;
   return out;
 }
 

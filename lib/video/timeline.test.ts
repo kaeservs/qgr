@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  addCutaway,
+  aiPath,
+  aiVideoOf,
+  aiVideosOf,
   animate,
   captionClockAt,
+  compactEdit,
   CUT,
+  cutawayAt,
   DEFAULT_EFFECTS,
   filterOf,
   frameAt,
+  insertAt,
   insertPiece,
   keepOfSequence,
   layout,
   mediaOf,
   motionAt,
+  moveCutaway,
   movePiece,
   parseMusic,
   parseOverlays,
@@ -26,7 +34,7 @@ import {
   trimPiece,
   wordAt,
 } from './timeline';
-import type { Segment } from './timeline';
+import type { Cutaway, Segment } from './timeline';
 import { defaultEdit, parseVideoEdit } from './edit';
 
 const clip = (id: string, start: number, end: number, extra: Partial<Extract<Segment, { kind: 'clip' }>> = {}): Segment => ({ id, kind: 'clip', media: null, start, end, speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT, ...extra });
@@ -253,5 +261,93 @@ describe('what a person drags on the video', () => {
     expect(read.ok && read.value.overlays?.[0]?.spot).toEqual({ x: 0.3, y: 0.6, scale: 2 });
     const hidden = parseVideoEdit(JSON.parse(JSON.stringify({ ...edit, logo: null })), 20);
     expect(hidden.ok && hidden.value).not.toHaveProperty('logoSpot');
+  });
+});
+
+describe('AI videos in an edit', () => {
+  const VIDEO = '7104c8e0-5a0b-44f7-94fb-2cc144d960c0';
+  const AI = { path: aiPath(VIDEO), name: 'A student on campus', width: 854, height: 480, duration: 5 };
+  const ai = (id: string): Segment => ({ id, kind: 'clip', media: AI, start: 0, end: 5, speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT });
+  const cut = (id: string, at: number, start = 0, end = 5): Cutaway => ({ id, media: AI, at, start, end });
+
+  it('names one by its id, and no other file', () => {
+    expect(aiVideoOf(AI.path)).toBe(VIDEO);
+    expect(aiVideoOf(OTHER.path)).toBeNull();
+    expect(aiVideoOf('ai:../videos/x')).toBeNull();
+    expect(aiVideosOf({ sequence: [clip('k0', 0, 10), ai('a1')], cutaways: [cut('c1', 2)] })).toEqual([VIDEO]);
+  });
+
+  it('goes in at the playhead: the piece under it splits, and what follows plays later', () => {
+    // A 7-minute cut of a talk: 0:00-3:00, then 5:00-9:00.
+    const talk = [clip('k0', 0, 180), clip('k1', 300, 540)];
+    const at3 = insertAt(talk, ai('a1'), 90);
+    expect(at3.map((s) => [s.id === 'a1' ? 'ai' : s.kind, s.kind === 'clip' ? s.start : 0, s.kind === 'clip' ? s.end : 0])).toEqual([
+      ['clip', 0, 90],
+      ['ai', 0, 5],
+      ['clip', 90, 180],
+      ['clip', 300, 540],
+    ]);
+    expect(sequenceSeconds(layout(at3))).toBe(425);
+    // At a join it goes between the two pieces, splitting nothing.
+    expect(insertAt(talk, ai('a2'), 180).map((s) => s.id)).toEqual(['k0', 'a2', 'k1']);
+    expect(insertAt(talk, ai('a3'), 0).map((s) => s.id)).toEqual(['a3', 'k0', 'k1']);
+    // Past the end, it is the last piece.
+    expect(insertAt(talk, ai('a4'), 900).map((s) => s.id)).toEqual(['k0', 'k1', 'a4']);
+  });
+
+  it('reads as a piece of the sequence, unchecked by extension, and never as music or a picture', () => {
+    const edit = parseVideoEdit({ ...defaultEdit(600), sequence: [clip('k0', 0, 180), ai('a1')] }, 600);
+    expect(edit.ok && edit.value.sequence?.[1]).toMatchObject({ media: { path: AI.path, duration: 5 } });
+    expect(parseMusic({ media: AI })).toBe('An AI video can only be a video in the edit.');
+    expect(parseSequence([clip('k0', 0, 10), { ...image('i1', 3), media: AI }], 600)).toBe('An AI video can only be a video in the edit.');
+  });
+});
+
+describe('cutaways: another video over the sequence while its sound goes on', () => {
+  const B_ROLL = { ...OTHER, duration: 12 };
+  const c = (id: string, at: number, start = 0, end = 5): Cutaway => ({ id, media: B_ROLL, at, start, end });
+
+  it('show over their stretch, from their own second', () => {
+    const list = [c('c1', 10, 2, 7), c('c2', 30)];
+    expect(cutawayAt(list, 9.9)).toBeNull();
+    expect(cutawayAt(list, 10)).toMatchObject({ cutaway: { id: 'c1' }, source: 2 });
+    expect(cutawayAt(list, 12.5)?.source).toBe(4.5);
+    expect(cutawayAt(list, 15)).toBeNull();
+    expect(cutawayAt(list, 34)?.cutaway.id).toBe('c2');
+  });
+
+  it('go in where there is room, as much as fits, in order', () => {
+    const list = [c('c1', 20)];
+    // Up to the next one.
+    expect(addCutaway(list, c('c2', 17), 60)).toEqual([c('c2', 17, 0, 3), c('c1', 20)]);
+    // Never over another, or past the end.
+    expect(addCutaway(list, c('c3', 22), 60)).toEqual(list);
+    expect(addCutaway([], c('c4', 58), 60)).toEqual([c('c4', 58, 0, 2)]);
+    expect(addCutaway([], c('c5', 59.9), 60)).toEqual([]);
+  });
+
+  it('move and trim inside their video, the video and clear of the others', () => {
+    const list = [c('c1', 10), c('c2', 20)];
+    expect(moveCutaway(list, 'c1', { at: 18 }, 60)).toEqual([c('c1', 15), c('c2', 20)]);
+    expect(moveCutaway(list, 'c1', { end: 12 }, 60)).toEqual([c('c1', 10, 0, 10), c('c2', 20)]);
+    expect(moveCutaway(list, 'c2', { at: 2 }, 60)).toEqual([c('c1', 10), c('c2', 15)]);
+  });
+
+  it('are checked as the studio sends them, and kept when the edit is saved', () => {
+    const base = { ...defaultEdit(60), keep: [{ start: 0, end: 60 }] };
+    const ok = parseVideoEdit({ ...base, cutaways: [c('c2', 30), c('c1', 10, 2, 7)] }, 60);
+    expect(ok.ok && ok.value.cutaways?.map((x) => x.id)).toEqual(['c1', 'c2']);
+    expect(ok.ok && compactEdit(ok.value).cutaways).toHaveLength(2);
+    expect(parseVideoEdit({ ...base, cutaways: [c('c1', 10), c('c2', 12)] }, 60)).toEqual({ ok: false, error: 'Two videos over the video overlap: move one.' });
+    expect(parseVideoEdit({ ...base, cutaways: [c('c1', 10, 0, 20)] }, 60)).toEqual({ ok: false, error: 'A video over the video is outside it.' });
+    expect(parseVideoEdit({ ...base, cutaways: [c('c1', 70)] }, 60)).toEqual({ ok: false, error: 'A video over the video starts past its end.' });
+    // Near the end it is cut to fit.
+    const tail = parseVideoEdit({ ...base, cutaways: [c('c1', 58)] }, 60);
+    expect(tail.ok && tail.value.cutaways?.[0]?.end).toBe(2);
+    // Its file is one the edit uses.
+    expect(mediaOf({ cutaways: [c('c1', 10)] }).map((m) => m.path)).toEqual([B_ROLL.path]);
+    // None is the same edit as before.
+    const none = parseVideoEdit({ ...base, cutaways: [] }, 60);
+    expect(none.ok && 'cutaways' in compactEdit(none.value)).toBe(false);
   });
 });
