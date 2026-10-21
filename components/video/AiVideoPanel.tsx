@@ -10,8 +10,9 @@ import { cx } from '@/lib/cx';
 import type { AiVideo, TranscriptLine, VideoBudget } from '@/lib/types';
 import { aiMediaOf, withoutFile } from '@/lib/video/ai-pieces';
 import type { AiStates } from '@/lib/video/ai-pieces';
-import { length } from '@/lib/video/edit';
-import { addCutaway, CUT, cutawaySeconds, DEFAULT_EFFECTS, insertAt, keepOfSequence, moveCutaway, newId, removeCutaway } from '@/lib/video/timeline';
+import { cutawayRoom, length } from '@/lib/video/edit';
+import type { VideoEdit } from '@/lib/video/edit';
+import { addCutaway, CUT, cutawaySeconds, DEFAULT_EFFECTS, insertAt, keepOfSequence, moveCutaway, newId, removeCutaway, sequenceOf, shiftCutaways } from '@/lib/video/timeline';
 import type { Segment } from '@/lib/video/timeline';
 import { linesAround } from '@/lib/video-prompt';
 import type { PromptMode } from '@/lib/video-prompt';
@@ -125,28 +126,38 @@ export function AiVideoPanel({
     setQuality(next.qualities.some((q) => q.key === quality) ? quality : next.qualities[0]!.key);
   }
 
-  /** Puts a video into the edit at the playhead, as the chosen way says. False when there is no room. */
-  function putIn(video: Made): boolean {
-    setProblem(null);
+  /**
+   * The edit `from` with a video put in at the playhead, as the chosen way
+   * says, or why there is no room. Inserted, it plays where it goes in and
+   * the videos over the talk after it move with that talk.
+   */
+  function withVideo(video: Pick<Made, 'id' | 'title' | 'seconds' | 'aspect' | 'quality'>, from: VideoEdit): VideoEdit | string {
     const media = aiMediaOf(video);
     if (mode === 'insert') {
+      const sequence = sequenceOf(from);
       const piece: Segment = { id: newId(), kind: 'clip', media, start: 0, end: video.seconds, speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT };
-      const next = insertAt(c.sequence, piece, t);
-      if (next.length === c.sequence.length) {
-        setProblem('Up to 40 pieces in a video: take one out first.');
-        return false;
-      }
-      c.setSequence(next);
-    } else {
-      const next = addCutaway(cutaways, { id: newId('c'), media, at: t, start: 0, end: video.seconds }, sequenceEnd);
-      if (next.length === cutaways.length) {
-        setProblem('No room for it here: another video is already over the video at the playhead, or this is the end. Move the playhead.');
-        return false;
-      }
-      c.set({ cutaways: next });
-      const added = next.find((x) => !cutaways.some((y) => y.id === x.id));
-      if (added) onSelect(added.id);
+      const next = insertAt(sequence, piece, t);
+      if (next.length === sequence.length) return 'Up to 40 pieces in a video: take one out first.';
+      return { ...from, sequence: next, keep: keepOfSequence(next), ...(from.cutaways ? { cutaways: shiftCutaways(from.cutaways, t, video.seconds) } : {}) };
     }
+    const list = from.cutaways ?? [];
+    const next = addCutaway(list, { id: newId('c'), media, at: t, start: 0, end: video.seconds }, cutawayRoom(from));
+    if (next.length === list.length) return 'No room for it here: another video is already over the video at the playhead, or this is the end. Move the playhead.';
+    return { ...from, cutaways: next };
+  }
+
+  /** Puts a video into the edit as it is now (not as it was when it was asked for). False when there is no room. */
+  function putIn(video: Made): boolean {
+    setProblem(null);
+    const from = c.latest();
+    const next = withVideo(video, from);
+    if (typeof next === 'string') {
+      setProblem(next);
+      return false;
+    }
+    c.replace(next);
+    const added = (next.cutaways ?? []).find((x) => !(from.cutaways ?? []).some((y) => y.id === x.id));
+    if (added) onSelect(added.id);
     onAsked(video);
     return true;
   }
@@ -168,6 +179,9 @@ export function AiVideoPanel({
     setProblem(null);
     const text = prompt.trim();
     if (text.length < MIN_VIDEO_PROMPT) return setProblem(`Describe the video in at least ${MIN_VIDEO_PROMPT} characters: what is seen, how it moves, the light.`);
+    // Where it goes is checked before anything is spent: with no room, no credits go on it.
+    const room = withVideo({ id: 'room', title: '', seconds, aspect: shape, quality }, c.latest());
+    if (typeof room === 'string') return setProblem(room);
     setBusy('asking');
     const r = await askForVideoAction({ prompt: text, model, seconds, aspect: shape, quality, sound: false, picture: null });
     setBusy(null);

@@ -9,7 +9,7 @@ import { editedSeconds } from '@/lib/video/edit';
 import type { Size, VideoEdit } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
 import type { Target } from '@/lib/video/render';
-import { layout, mediaOf, sequenceOf } from '@/lib/video/timeline';
+import { aiVideoOf, layout, mediaOf, sequenceOf } from '@/lib/video/timeline';
 
 export interface VideoJob {
   /** The clip, downloaded whole (see downloadClip). */
@@ -52,7 +52,11 @@ export async function fetchEditMedia(edit: VideoEdit, urlOf: (path: string) => s
   await Promise.all(
     mediaOf(edit).map(async (m) => {
       const url = urlOf(m.path);
-      if (!url) throw new RenderError(`${m.name} can’t be found. Add it to the video again.`);
+      // An AI video has no link until Higgsfield has made it: say to wait, not to put it in again.
+      if (!url)
+        throw new RenderError(
+          aiVideoOf(m.path) !== null ? `The AI video “${m.name}” isn’t made yet, or wasn’t made: open the video’s edit to see where it stands.` : `${m.name} can’t be found. Add it to the video again.`,
+        );
       files.set(m.path, await downloadClip(url, signal, m.name));
     }),
   );

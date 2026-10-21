@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   addCutaway,
+  fitCutaways,
+  longEditSeconds,
+  shiftCutaways,
   aiPath,
   aiVideoOf,
   aiVideosOf,
@@ -35,7 +38,7 @@ import {
   wordAt,
 } from './timeline';
 import type { Cutaway, Segment } from './timeline';
-import { defaultEdit, parseVideoEdit } from './edit';
+import { defaultEdit, parseVideoEdit, withCutawaysFitted } from './edit';
 
 const clip = (id: string, start: number, end: number, extra: Partial<Extract<Segment, { kind: 'clip' }>> = {}): Segment => ({ id, kind: 'clip', media: null, start, end, speed: 1, volume: 1, effects: DEFAULT_EFFECTS, transition: CUT, ...extra });
 const PICTURE = { path: 'media/00000000-0000-4000-8000-000000000001/00000000-0000-4000-8000-000000000002.jpg', name: 'office.jpg', width: 1600, height: 900 };
@@ -307,6 +310,20 @@ describe('cutaways: another video over the sequence while its sound goes on', ()
   const B_ROLL = { ...OTHER, duration: 12 };
   const c = (id: string, at: number, start = 0, end = 5): Cutaway => ({ id, media: B_ROLL, at, start, end });
 
+  it('stay inside the video when it gets shorter, and move with the talk when a piece goes in before them', () => {
+    const list = [c('c1', 5), c('c2', 25, 0, 10)];
+    // Cut down to 28 s: the second is trimmed to the end; too near the end, it no longer fits at all.
+    expect(fitCutaways(list, 28)).toEqual([c('c1', 5), c('c2', 25, 0, 3)]);
+    expect(fitCutaways(list, 25.2)).toEqual([c('c1', 5)]);
+    expect(shiftCutaways(list, 10, 4)).toEqual([c('c1', 5), c('c2', 29, 0, 10)]);
+    // The editor fits them on every change, so the edit always saves.
+    const edit = { ...defaultEdit(10), cutaways: [c('c1', 2), c('c2', 11)] };
+    const fitted = withCutawaysFitted(edit);
+    expect(fitted.cutaways).toEqual([c('c1', 2)]);
+    expect(parseVideoEdit(fitted, 10).ok).toBe(true);
+    expect(parseVideoEdit(edit, 10)).toMatchObject({ ok: false });
+  });
+
   it('show over their stretch, from their own second', () => {
     const list = [c('c1', 10, 2, 7), c('c2', 30)];
     expect(cutawayAt(list, 9.9)).toBeNull();
@@ -349,5 +366,15 @@ describe('cutaways: another video over the sequence while its sound goes on', ()
     // None is the same edit as before.
     const none = parseVideoEdit({ ...base, cutaways: [] }, 60);
     expect(none.ok && 'cutaways' in compactEdit(none.value)).toBe(false);
+  });
+});
+
+describe('a whole long video’s edit', () => {
+  it('may be as long as the video, with room for what goes in it; an ad stays at ten minutes', () => {
+    const hour = 3600;
+    const edit = { ...defaultEdit(hour), sequence: [clip('k0', 0, hour), clip('k1', 0, 5, { media: { ...OTHER, duration: 5 } })] };
+    expect(parseVideoEdit(edit, hour)).toMatchObject({ ok: false, error: 'Keep the video to ten minutes.' });
+    expect(parseVideoEdit(edit, hour, longEditSeconds(hour)).ok).toBe(true);
+    expect(longEditSeconds(120)).toBe(720);
   });
 });

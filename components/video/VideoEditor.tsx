@@ -4,13 +4,12 @@ import { AudioLines, Download, Film, Image as ImageIcon, Music2, Pause, Play, Pl
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
 import { saveVariantAction, saveVideoEditAction } from '@/app/(app)/content/actions';
-import { editAiVideosAction } from '@/app/(app)/videos/actions';
 import { cx } from '@/lib/cx';
 import { LIMITS } from '@/lib/edit-input';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
-import type { AiVideo, Clip, Platform, Variant } from '@/lib/types';
-import { aiStates, shapeForEdit } from '@/lib/video/ai-pieces';
-import { addCaption, captionsFromTranscript, ASPECT_INFO, ASPECTS, clock, CORNERS, defaultEdit, END_CARD, frameSize, isUntouched, length, parseSubtitles, TEXT_LIMITS, TEXT_PLACES } from '@/lib/video/edit';
+import type { Clip, Platform, Variant } from '@/lib/types';
+import { shapeForEdit } from '@/lib/video/ai-pieces';
+import { addCaption, captionsFromTranscript, ASPECT_INFO, ASPECTS, clock, CORNERS, defaultEdit, END_CARD, frameSize, isUntouched, length, parseSubtitles, TEXT_LIMITS, TEXT_PLACES, withCutawaysFitted } from '@/lib/video/edit';
 import type { Caption, Corner, VideoEdit } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
 import {
@@ -21,7 +20,6 @@ import {
   STILL_SECONDS,
   captionClockAt,
   compactEdit,
-  aiVideosOf,
   frameAt,
   insertPiece,
   keepOfSequence,
@@ -46,6 +44,7 @@ import { playableUrl } from './media';
 import { useUndoable } from './player';
 import { downloadClip, fetchEditMedia, makeVariantVideo } from './makeVideo';
 import { Sequence } from './Sequence';
+import { useAiStates } from './useAiStates';
 import { useEditedVideo, useTime } from './useEditedVideo';
 import { useFilmstrip } from './useFilmstrip';
 import { mediaUrls, useMediaUrls } from './useMediaUrls';
@@ -62,7 +61,6 @@ const TABS: readonly (readonly [Tab, string])[] = [
   ['ai', 'AI video'],
 ];
 /** While an AI video in the edit is being made, the editor asks how it stands this often. */
-const AI_POLL_MS = 15_000;
 
 const CORNER_LABEL: Record<Corner, string> = { 'top-left': 'Top left', 'top-right': 'Top right', 'bottom-left': 'Bottom left', 'bottom-right': 'Bottom right' };
 const PLACE_LABEL = { top: 'Top', middle: 'Middle', bottom: 'Bottom' } as const;
@@ -127,7 +125,8 @@ export function VideoEditor({
   onClose: () => void;
   onSaved?: (saved: SavedVideo) => void;
   /** Before the run: the edit every ad will start from (null for the clip as it is), handed back rather than saved. */
-  onApply?: (edit: VideoEdit | null) => void;
+  /** Before a run the edit is handed back; one that is saved by the caller (a whole long video) answers with why it was not, and the editor stays open with the work. */
+  onApply?: (edit: VideoEdit | null) => void | Promise<string | null>;
   /** What the edit is for, when it is not a run's ads (a long video edited whole): the heading, the line under it and the save button. */
   purpose?: { title: string; about: string; apply: string; applied: string } | undefined;
   /** The long video being edited, if it is one: what the prompt writer's call is kept against. */
@@ -147,7 +146,6 @@ export function VideoEditor({
   const [picked, setPicked] = useState<string | null>(null);
   const [cutaway, setCutaway] = useState<string | null>(null);
   // The edit's AI videos as the server last said: null until it has.
-  const [known, setKnown] = useState<Map<string, AiVideo> | null>(null);
   // The words, the logo or a text picked on the preview, to size or put back.
   const [grabbed, setGrabbed] = useState<string | null>(null);
   const [busy, setBusy] = useState<'saving' | 'exporting' | null>(null);
@@ -172,9 +170,7 @@ export function VideoEditor({
   // Before the run there are no ad words yet: the preview shows where each ad's own will go.
   // A video edited for itself (a long video whole) carries no ad's words.
   const shownWords = variant ? words : purpose ? '' : WORDS_TO_COME;
-  const aiIds = useMemo(() => aiVideosOf(edit), [edit]);
-  const aiKey = aiIds.join(',');
-  const states = useMemo(() => aiStates(edit, aiIds.length === 0 ? new Map() : known), [edit, aiIds, known]);
+  const { states, known, follow } = useAiStates(edit);
   const { player, total, placed, missing, hits } = useEditedVideo(canvas, host, url, edit, previewSize, { words: shownWords, brand }, states.waiting);
   const t = useTime(player.clock);
   const duration = clip.duration;
@@ -188,25 +184,6 @@ export function VideoEditor({
     states.waiting.size,
   );
 
-  // How the edit's AI videos stand: asked at once, and again while one is being made.
-  const waitingCount = states.waiting.size;
-  useEffect(() => {
-    if (!aiKey) return;
-    let alive = true;
-    const ask = () =>
-      void editAiVideosAction(aiKey.split(',')).then((r) => {
-        if (alive && r.ok) setKnown(new Map(r.value.map((v) => [v.id, v])));
-      });
-    ask();
-    if (known !== null && waitingCount === 0) return () => void (alive = false);
-    const timer = setInterval(ask, AI_POLL_MS);
-    return () => {
-      alive = false;
-      clearInterval(timer);
-    };
-    // `known` only says whether the server has answered at all.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aiKey, waitingCount, known === null]);
 
   // The piece picked in the strip, or the one under the playhead.
   const piece = placed.find((p) => p.segment.id === picked) ?? frame.current?.placed ?? placed[placed.length - 1] ?? null;
@@ -223,14 +200,19 @@ export function VideoEditor({
   const clipSrc = useMemo(() => (url ? playableUrl(url) : null), [url]);
   const frames = useFilmstrip(clipSrc, duration);
 
-  const change = (next: Partial<VideoEdit>) => history.set({ ...edit, ...next });
-  const withSequence = (next: Segment[]): VideoEdit => ({ ...edit, sequence: next, keep: keepOfSequence(next) });
+  // Every change keeps the videos over the video inside it: a cut, a piece taken out or an end card can leave one past the end.
+  const change = (next: Partial<VideoEdit>) => history.set(withCutawaysFitted({ ...edit, ...next }));
+  const withSequence = (next: Segment[], base: VideoEdit = edit): VideoEdit => withCutawaysFitted({ ...base, sequence: next, keep: keepOfSequence(next) });
+  // The edit as it is now, for work that finishes later (Generate waits on Higgsfield) and must not undo what was done meanwhile.
+  const latest = useRef(edit);
+  latest.current = edit;
   const changes: Changes = {
     edit,
     sequence,
     placed,
     set: change,
-    replace: (next) => history.set(next),
+    replace: (next) => history.set(withCutawaysFitted(next)),
+    latest: () => latest.current,
     preview: (next) => history.preview({ ...edit, ...next }),
     settle: () => history.settle(edit),
     setSequence: (next) => history.set(withSequence(next)),
@@ -269,8 +251,12 @@ export function VideoEditor({
     if (!variant) {
       // Before the run: the edit goes with the clip, and every ad starts from it (or, for a long video, it is kept with it).
       const next = isUntouched(saving, duration) ? null : saving;
+      setProblem(null);
+      setBusy('saving');
+      const refused = await onApply?.(next);
+      setBusy(null);
+      if (typeof refused === 'string') return setProblem(refused);
       tidy(next);
-      onApply?.(next);
       toast(purpose ? purpose.applied : next ? 'Every ad from this clip starts from this edit' : 'The ads start from the clip as it is');
       return onClose();
     }
@@ -989,7 +975,7 @@ export function VideoEditor({
                   onSeek={player.seek}
                   onAsked={(video) => {
                     // Followed until it is made: the next answer says how it stands.
-                    setKnown((was) => new Map([...(was ?? []), [video.id, { ...video, prompt: '', model: 'seedance_2_0_mini', sound: false, picture: null, credits: 0, status: 'asked', createdAt: new Date().toISOString() }]]));
+                    follow({ ...video, prompt: '', model: 'seedance_2_0_mini', sound: false, picture: null, credits: 0, status: 'asked', createdAt: new Date().toISOString() });
                   }}
                 />
               )}

@@ -19,6 +19,14 @@ import styles from './videos.module.css';
 /** Room under Storage's 50 MB a clip: a file never comes out exactly the size it was aimed at. */
 const AIM_BYTES = 45 * 1024 * 1024;
 const MAX_CLIP_BYTES = 50 * 1024 * 1024;
+/**
+ * A download is made in the browser's memory before it is saved, so a long
+ * one is made smaller: past twenty minutes, 1280 on its long side and aimed
+ * at about a gigabyte, and an hour at most.
+ */
+const DOWNLOAD_MAX_SECONDS = 3600;
+const LONG_DOWNLOAD_SECONDS = 20 * 60;
+const DOWNLOAD_AIM_BYTES = 1024 * 1024 * 1024;
 
 const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -65,11 +73,13 @@ export function WholeVideoCard({
   const aiCount = aiVideosOf(shown).length;
   const tooLong = seconds > MAX_CLIP_SECONDS + 0.5;
 
-  async function save(next: VideoEdit | null) {
+  /** Keeps the edit; why not when it cannot be kept, which the editor shows while it stays open with the work. */
+  async function save(next: VideoEdit | null): Promise<string | null> {
     const saved = await saveLongVideoEditAction(video.id, next);
-    if (!saved.ok) return setError(saved.error);
+    if (!saved.ok) return saved.error;
     setError(null);
     setEdit(next);
+    return null;
   }
 
   /** The edited video made on this computer: at full size to download, or under 50 MB to start a run. */
@@ -94,9 +104,10 @@ export function WholeVideoCard({
     setWorking('Fetching the AI videos and files…');
     const links = await mediaUrls(mediaOf(shown).map((m) => m.path));
     const media = await fetchEditMedia(shown, (path) => links[path] ?? null);
-    const size = frameSize(shown, video.file, forRun ? 1280 : 1920);
+    const long = !forRun && seconds > LONG_DOWNLOAD_SECONDS;
+    const size = frameSize(shown, video.file, forRun || long ? 1280 : 1920);
     const { bitrateToFit } = await import('@/lib/video/render');
-    let bitrate = forRun ? bitrateToFit(size, 30, seconds, AIM_BYTES, true) : undefined;
+    let bitrate = forRun ? bitrateToFit(size, 30, seconds, AIM_BYTES, true) : long ? bitrateToFit(size, 30, seconds, DOWNLOAD_AIM_BYTES, true) : undefined;
     const once = () =>
       makeVariantVideo({ clip: file, media, edit: shown, words: '', brand, size, ...(bitrate ? { bitrate } : {}), onProgress: (share) => setWorking(`Making the video… ${Math.round(share * 100)}%`) });
     let made = await once();
@@ -110,6 +121,7 @@ export function WholeVideoCard({
 
   async function download() {
     setError(null);
+    if (seconds > DOWNLOAD_MAX_SECONDS + 0.5) return setError(`Downloads are made on this computer, up to an hour: cut the edit to ${length(DOWNLOAD_MAX_SECONDS)} or less to download it. It is ${length(seconds)}.`);
     try {
       const made = await make(false);
       if (!made) return;
@@ -175,7 +187,7 @@ export function WholeVideoCard({
           <Film size={16} aria-hidden /> The whole video, edited
         </h2>
         {edit && (
-          <button type="button" className="btn btn-quiet btn-sm" disabled={working !== null} onClick={() => window.confirm('Go back to the video as it is? The edit is taken away; AI videos stay in the library.') && void save(null)}>
+          <button type="button" className="btn btn-quiet btn-sm" disabled={working !== null} onClick={() => window.confirm('Go back to the video as it is? The edit is taken away; AI videos stay in the library.') && void save(null).then((why) => why && setError(why))}>
             <RotateCcw size={15} aria-hidden />
             As it is
           </button>
@@ -186,7 +198,7 @@ export function WholeVideoCard({
           ? `${length(seconds)} of ${clock(video.file.duration)} kept · ${sequenceOf(shown).length} piece${sequenceOf(shown).length === 1 ? '' : 's'}${aiCount > 0 ? ` · ${aiCount} AI video${aiCount === 1 ? '' : 's'}` : ''}${(shown.cutaways?.length ?? 0) > 0 ? ` (${shown.cutaways?.length} over the video)` : ''}`
           : 'Cut it down and put AI videos in at any point: inserted (what follows plays later) or over the video while the talk goes on. Only the edit is kept here; the file stays on this computer.'}
       </p>
-      {tooLong && edit && <p className="muted small">Ads are made from up to {length(MAX_CLIP_SECONDS)}: cut it further to make ads from it. It can be downloaded at any length.</p>}
+      {tooLong && edit && <p className="muted small">Ads are made from up to {length(MAX_CLIP_SECONDS)}: cut it further to make ads from it. It can be downloaded up to an hour long.</p>}
       <div className={styles.momentActions}>
         <button type="button" className="btn btn-primary btn-sm" disabled={!url || working !== null} onClick={() => setEditing(true)}>
           <Scissors size={15} aria-hidden />
@@ -234,7 +246,7 @@ export function WholeVideoCard({
             applied: 'Edit saved',
           }}
           onClose={() => setEditing(false)}
-          onApply={(next) => void save(next)}
+          onApply={save}
         />
       )}
     </section>

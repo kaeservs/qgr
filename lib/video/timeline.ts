@@ -96,6 +96,12 @@ export const MAX_OVERLAYS = 30;
 export const MAX_CUTAWAYS = 20;
 /** An ad, not a film: the edited video runs ten minutes at most. */
 export const MAX_TIMELINE_SECONDS = 600;
+/**
+ * A whole long video's edit is the video itself, up to three hours, so its
+ * cap is its own length with room for what is put in it (40 pieces of at
+ * most 15 s are ten minutes more).
+ */
+export const longEditSeconds = (videoSeconds: number) => Math.max(MAX_TIMELINE_SECONDS, Math.ceil(videoSeconds) + MAX_TIMELINE_SECONDS);
 export const MIN_PIECE = 0.3;
 export const STILL_SECONDS = { min: 0.5, max: 30, default: 3 } as const;
 export const TRANSITION_SECONDS = { min: 0.2, max: 2, default: 0.5 } as const;
@@ -389,6 +395,22 @@ export function moveCutaway(cutaways: readonly Cutaway[], id: string, change: Pa
   return [...others, { ...c, at, start, end }].sort((a, b) => a.at - b.at);
 }
 
+/**
+ * The cutaways kept inside a video `total` seconds long, as it is after a
+ * cut: one starting too near the end (or past it) goes, one running past it
+ * is trimmed there.
+ */
+export function fitCutaways(cutaways: readonly Cutaway[], total: number): Cutaway[] {
+  return cutaways.flatMap((c) => {
+    if (c.at > total - MIN_PIECE + 0.001) return [];
+    const end = ms(Math.min(c.end, c.start + (total - c.at)));
+    return [end === c.end ? c : { ...c, end }];
+  });
+}
+
+/** The cutaways at or after second `from` played `by` seconds later, as the talk under them is when a piece goes in before them. */
+export const shiftCutaways = (cutaways: readonly Cutaway[], from: number, by: number): Cutaway[] => cutaways.map((c) => (c.at >= from - 0.001 ? { ...c, at: ms(c.at + by) } : c));
+
 export const removeCutaway = (cutaways: readonly Cutaway[], id: string): Cutaway[] => cutaways.filter((c) => c.id !== id);
 
 /**
@@ -590,9 +612,10 @@ function transitionOf(raw: unknown): Transition {
 /**
  * The sequence as the studio sends it, checked: every piece readable and
  * inside its source, at least one piece of the run's clip, and the whole no
- * longer than MAX_TIMELINE_SECONDS. A reason when it is not.
+ * longer than `maxSeconds` (ten minutes for an ad; longEditSeconds for a
+ * whole long video). A reason when it is not.
  */
-export function parseSequence(raw: unknown, clipSeconds: number): Segment[] | string {
+export function parseSequence(raw: unknown, clipSeconds: number, maxSeconds: number = MAX_TIMELINE_SECONDS): Segment[] | string {
   if (!Array.isArray(raw) || raw.length === 0) return 'The video needs at least one piece.';
   if (raw.length > MAX_SEGMENTS) return `Up to ${MAX_SEGMENTS} pieces in a video.`;
   const out: Segment[] = [];
@@ -628,7 +651,7 @@ export function parseSequence(raw: unknown, clipSeconds: number): Segment[] | st
     }
   }
   if (!out.some((s) => s.kind === 'clip' && s.media === null)) return 'Keep at least one piece of the run’s clip.';
-  if (sequenceSeconds(layout(out)) > MAX_TIMELINE_SECONDS + 0.5) return 'Keep the video to ten minutes.';
+  if (sequenceSeconds(layout(out)) > maxSeconds + 0.5) return maxSeconds === MAX_TIMELINE_SECONDS ? 'Keep the video to ten minutes.' : `Keep the edit to ${Math.round(maxSeconds / 60)} minutes.`;
   return out;
 }
 

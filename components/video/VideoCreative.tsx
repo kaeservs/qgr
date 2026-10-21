@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Clip } from '@/lib/types';
 import { ASPECT_INFO, frameSize, length } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
+import { useAiStates } from './useAiStates';
 import { useEditedVideo } from './useEditedVideo';
 import styles from './video.module.css';
 
@@ -28,7 +29,9 @@ export function VideoCreative({ video, words, label }: { video: CreativeVideo; w
   const { clip, url, edit, brand } = video;
   // Up to 720p: sharp in a preview, light enough for three side by side.
   const size = useMemo(() => frameSize(edit, clip, 720), [edit, clip]);
-  const { player, total } = useEditedVideo(canvas, host, url, edit, size, { words, brand });
+  // An AI video in the edit shows as on its way, then plays once it is made, without a reload.
+  const { states } = useAiStates(edit);
+  const { player, total } = useEditedVideo(canvas, host, url, edit, size, { words, brand }, states.waiting);
   const { seek } = player;
 
   // The cover again whenever the edit moves it.
