@@ -898,6 +898,19 @@
   background: var(--gold);
 }
 
+/* Videos over the video (B-roll): a lane of their own under the texts. */
+.cutawayLane {
+  background: var(--gold-50);
+}
+
+.cutawayMark {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--indigo-strong);
+  color: #fff;
+}
+
 .addRow {
   display: flex;
   flex-wrap: wrap;
@@ -968,6 +981,9 @@
 }
 
 .sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   font-size: 13px;
   font-weight: 600;
@@ -984,6 +1000,23 @@
 .overlayItemOn {
   border-color: var(--indigo);
   box-shadow: inset 0 0 0 1px var(--indigo);
+}
+
+/* An AI video in the editor's library: its first frame, what it is, and Insert or Put over. */
+.aiItem {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.aiThumb {
+  display: block;
+  width: 64px;
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--indigo-50);
 }
 
 .pieceHead {

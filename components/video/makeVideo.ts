@@ -21,6 +21,8 @@ export interface VideoJob {
   words: string;
   brand: { name: string; website: string };
   size: Size;
+  /** Bits a second for the picture; by default the size's usual. Set to keep a long video under an upload's limit. */
+  bitrate?: number;
   /** From 0 to 1, a new value only for a new whole percent. */
   onProgress?: (share: number) => void;
   signal?: AbortSignal;
@@ -69,9 +71,9 @@ export async function makeVariantVideo(job: VideoJob): Promise<{ blob: Blob; tar
     media: job.media ?? new Map(),
     edit: job.edit,
     size: job.size,
-    bitrate: videoBitrate(job.size, 30),
-    draw: (ctx, time, pictureOf) => {
-      drawTimelineFrame(ctx, job.size, { edit: job.edit, placed, total, words: job.words, brand, time }, pictureOf);
+    bitrate: job.bitrate ?? videoBitrate(job.size, 30),
+    draw: (ctx, time, pictureOf, cutawayOf) => {
+      drawTimelineFrame(ctx, job.size, { edit: job.edit, placed, total, words: job.words, brand, time }, pictureOf, cutawayOf);
       job.onFrame?.(ctx.canvas, time);
     },
     // Every frame reports; the caller hears only of a new whole percent.

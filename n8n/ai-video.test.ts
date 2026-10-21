@@ -23,6 +23,9 @@ const HELPERS: Record<string, string[]> = {
   'video-stand-in.js': [],
   'video-picture-link.js': [],
   'video-uploaded.js': [],
+  'video-prompt-build-request.js': [],
+  'video-prompt-read-answer.js': [],
+  'video-prompt-answer.js': [],
 };
 /** A script with its helpers, and the names swapped in as build-workflows.mjs swaps them for a step. */
 const script = (file: string, swap: Record<string, string> = {}) =>
@@ -329,5 +332,59 @@ describe('through the database', () => {
     expect(retry).toMatchObject({ kind: 'retry', id });
     await rpc(`select public.video_release($1, $2)`, [retry!.id, retry!.error]);
     expect((await t.asService(() => t.value<Json[]>(`select public.video_take_due()`))).map((d) => d.id)).toEqual([id]);
+  });
+});
+
+describe('the prompt writer: an AI video’s prompt from what is said around a point', () => {
+  const page = (over: Json = {}): Json => ({
+    body: {
+      long_video_id: '7104c8e0-5a0b-44f7-94fb-2cc144d960c0',
+      at: 182,
+      seconds: 5,
+      aspect: '16:9',
+      mode: 'cover',
+      idea: '',
+      lines: [{ start: 180, end: 184, text: 'Many of our families send a child to study in the U.S.' }],
+      brand: { company: 'Quantum Global Residency', offer: 'EB-5', audience: 'Families', guardrails: ['No promises of a green card'], look: null },
+      ...over,
+    },
+  });
+  const built = (over: Json = {}) => runAll('video-prompt-build-request.js', [page(over)])[0] as { long_video_id: string | null; body: { model: string; system: string; messages: { content: string }[]; output_config: Json } };
+  const claude = (body: Json, usage = { input_tokens: 900, output_tokens: 120 }) => ({ model: 'claude-haiku-5-5', stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(body) }], usage });
+  const read = (res: Json) => runAll('video-prompt-read-answer.js', [res], { 'Build the prompt request': [{ long_video_id: 'lv-1' }] })[0]!;
+
+  it('asks Haiku for one shot of the video’s length and shape, from the lines and the team’s idea', () => {
+    const req = built({ idea: 'a student on campus' });
+    expect(req.long_video_id).toBe('7104c8e0-5a0b-44f7-94fb-2cc144d960c0');
+    expect(req.body.model).toBe('claude-haiku-5-5');
+    expect(req.body).not.toHaveProperty('temperature');
+    expect(req.body.output_config).toMatchObject({ effort: 'low', format: { type: 'json_schema' } });
+    expect(req.body.system).toMatch(/plays over the video while the speaker goes on talking/);
+    expect(req.body.system).toMatch(/5 seconds, wide \(16:9\)/);
+    expect(req.body.system).toMatch(/never an identifiable face/);
+    expect(req.body.system).toMatch(/No promises of a green card/);
+    expect(req.body.messages[0]!.content).toMatch(/\[3:00\] Many of our families send a child to study in the U\.S\./);
+    expect(req.body.messages[0]!.content).toMatch(/"idea":"a student on campus"/);
+    // Inserted, it carries the thought on instead.
+    expect(built({ mode: 'insert' }).body.system).toMatch(/inserted at that point/);
+  });
+
+  it('reads the draft, or says why there is none, with what it cost either way', () => {
+    expect(read(claude({ prompt: 'A student walks across a sunny U.S. campus, seen from behind, golden hour, camera following slowly.', why: 'They talk about studying in the U.S.' }))).toEqual({
+      ok: true,
+      prompt: 'A student walks across a sunny U.S. campus, seen from behind, golden hour, camera following slowly.',
+      why: 'They talk about studying in the U.S.',
+      long_video_id: 'lv-1',
+      model: 'claude-haiku-5-5',
+      usage: { input_tokens: 900, output_tokens: 120, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
+    });
+    expect(read(claude({ prompt: 'Too short', why: '' }))).toMatchObject({ ok: false, error: 'Claude wrote no prompt: write it yourself.', usage: { input_tokens: 900 } });
+    expect(read({ stop_reason: 'refusal', content: [], usage: { input_tokens: 10 } })).toMatchObject({ ok: false, error: expect.stringMatching(/declined/) });
+    expect(read({ error: { message: 'overloaded' } })).toMatchObject({ ok: false, error: expect.stringMatching(/overloaded/) });
+  });
+
+  it('tells the page only the prompt and why, or the reason', () => {
+    expect(runAll('video-prompt-answer.js', [{}], { 'Read the prompt': [{ ok: true, prompt: 'A prompt long enough to use.', why: 'w', usage: {} }] })).toEqual([{ ok: true, prompt: 'A prompt long enough to use.', why: 'w' }]);
+    expect(runAll('video-prompt-answer.js', [{}], { 'Read the prompt': [{ ok: false, error: 'No.', usage: {} }] })).toEqual([{ ok: false, error: 'No.' }]);
   });
 });

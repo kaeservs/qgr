@@ -13,6 +13,7 @@ import type { Clip, Goal, LongVideoWithTranscript, Moment, Platform } from '@/li
 import { frameSize } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
 import { VideoEditor } from '../video/VideoEditor';
+import { WholeVideoCard } from './WholeVideoCard';
 import { keepLocalFile, localFile } from '@/lib/video/local-files';
 import { LiveRefresh } from '../ui/LiveRefresh';
 import { useToast } from '../ui/Toast';
@@ -360,6 +361,8 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
           {video.guidance ? ` · Direction: ${video.guidance}` : ''}
         </p>
       </section>
+
+      {!video.example && <WholeVideoCard video={video} file={file} url={url} brand={brand} platforms={platforms} goal={goal} />}
 
       <section className={styles.moments} aria-labelledby="moments-title">
         <div className={styles.momentsHead}>

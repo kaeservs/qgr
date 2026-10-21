@@ -8,7 +8,9 @@
 //
 // The caller decodes: `pictureOf` hands over the frame a piece shows (from a
 // <video> while previewing, from the decoder while exporting), or null while it
-// is not ready, which draws the brand's indigo in its place.
+// is not ready, which draws the brand's indigo in its place. A cutaway (another
+// video over the sequence for a stretch) comes from `cutawayOf` the same way,
+// and an AI video still being made shows as on its way.
 
 import { WORDS } from '../spot';
 import type { Hit } from '../spot';
@@ -16,8 +18,8 @@ import { captionAt, placePicture } from './edit';
 import type { Caption, Size, VideoEdit } from './edit';
 import { BRAND_COLORS, DISPLAY, TEXT, arcs, background, block, endCard, logo, roundedRect, wrap } from './draw';
 import type { Block, Ctx, FrameBrand, Picture } from './draw';
-import { animate, captionClockAt, ease, filterOf, frameAt, lookOf, motionAt, wordAt } from './timeline';
-import type { CaptionStyle, Look, Overlay, OverlayStyle, Placed, Segment, Showing, TextSize, TransitionType } from './timeline';
+import { animate, captionClockAt, cutawayAt, ease, filterOf, frameAt, lookOf, motionAt, wordAt } from './timeline';
+import type { CaptionStyle, Cutaway, Look, Overlay, OverlayStyle, Placed, Segment, Showing, TextSize, TransitionType } from './timeline';
 
 export interface TimelineScene {
   edit: VideoEdit;
@@ -30,9 +32,27 @@ export interface TimelineScene {
   brand: FrameBrand;
   /** The edited video's second this frame is at. */
   time: number;
+  /** Files the edit names that are not made yet (AI videos Higgsfield is making): shown as on their way. */
+  waiting?: ReadonlySet<string>;
 }
 
 export type PictureOf = (showing: Showing) => Picture | null;
+/** The frame a cutaway shows at `source`, a second of its own video, or null while it is not ready. */
+export type CutawayOf = (cutaway: Cutaway, source: number) => Picture | null;
+
+/** In place of an AI video not made yet: the brand's indigo, saying so. */
+function onItsWay(ctx: Ctx, size: Size, unit: number) {
+  background(ctx, size);
+  const fontSize = unit * 4.2;
+  ctx.font = `600 ${fontSize}px ${TEXT}`;
+  ctx.fillStyle = 'rgb(255 255 255 / 0.9)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('AI video on its way', size.width / 2, size.height / 2 - fontSize * 0.7);
+  ctx.font = `400 ${fontSize * 0.7}px ${TEXT}`;
+  ctx.fillStyle = 'rgb(255 255 255 / 0.7)';
+  ctx.fillText('Higgsfield is making it: it shows here once it is ready', size.width / 2, size.height / 2 + fontSize * 0.6);
+}
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -144,8 +164,14 @@ function titleCard(ctx: Ctx, size: Size, unit: number, seg: Extract<Segment, { k
 }
 
 /** One piece as its effects make it, filling the frame. `blur` is a transition's, in pixels. */
-function drawPiece(ctx: Ctx, size: Size, unit: number, edit: VideoEdit, look: Look, s: Showing, picture: Picture | null, blur = 0) {
+function drawPiece(ctx: Ctx, size: Size, unit: number, edit: VideoEdit, look: Look, s: Showing, picture: Picture | null, blur = 0, waiting?: ReadonlySet<string>) {
   const seg = s.placed.segment;
+  if (!picture && seg.kind === 'clip' && seg.media && waiting?.has(seg.media.path)) {
+    ctx.save();
+    onItsWay(ctx, size, unit);
+    ctx.restore();
+    return;
+  }
   const fx = seg.effects;
   const length = s.placed.until - s.placed.at;
   ctx.save();
@@ -437,7 +463,7 @@ function captions(ctx: Ctx, size: Size, unit: number, list: readonly Caption[], 
  * Draws the frame of `scene` onto `ctx`, which is `size` large. Returns where
  * it drew what a person can drag: the words, the logo and the texts showing.
  */
-export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pictureOf: PictureOf): Hit[] {
+export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pictureOf: PictureOf, cutawayOf?: CutawayOf): Hit[] {
   const hits: Hit[] = [];
   const { edit, placed, time } = scene;
   const look = lookOf(edit);
@@ -455,13 +481,28 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
   }
 
   const current = frame.current;
-  const into = (blur?: number) => drawPiece(ctx, size, unit, edit, look, current, pictureOf(current), blur);
+  const into = (blur?: number) => drawPiece(ctx, size, unit, edit, look, current, pictureOf(current), blur, scene.waiting);
   if (frame.previous) {
     const previous = frame.previous;
-    const out = (blur?: number) => drawPiece(ctx, size, unit, edit, look, previous, pictureOf(previous), blur);
+    const out = (blur?: number) => drawPiece(ctx, size, unit, edit, look, previous, pictureOf(previous), blur, scene.waiting);
     drawTransition(ctx, size, unit, current.placed.segment.transition.type, ease(frame.progress), out, into);
   } else {
     into();
+  }
+
+  // A cutaway covers the sequence's picture for its stretch; its sound stays the sequence's.
+  const over = cutawayAt(edit.cutaways, time);
+  if (over) {
+    const picture = cutawayOf?.(over.cutaway, over.source) ?? null;
+    ctx.save();
+    if (picture) {
+      background(ctx, size);
+      const p = placePicture({ fit: edit.fit, focus: { x: 0.5, y: 0.5 } }, picture, size);
+      ctx.drawImage(picture.image, p.sx, p.sy, p.sw, p.sh, p.dx, p.dy, p.dw, p.dh);
+    } else if (scene.waiting?.has(over.cutaway.media.path)) {
+      onItsWay(ctx, size, unit);
+    }
+    ctx.restore();
   }
 
   const margin = unit * 5;

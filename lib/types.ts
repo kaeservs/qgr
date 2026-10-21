@@ -636,6 +636,8 @@ export interface LongVideo {
 
 export interface LongVideoWithTranscript extends LongVideo {
   transcript: TranscriptLine[];
+  /** The team's edit of the whole video, cut down and with AI videos put in; null while it is the video as it is. */
+  edit: VideoEdit | null;
 }
 
 // ---------------------------------------------------------------- leads

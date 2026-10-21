@@ -102,6 +102,9 @@ X's ads APIs, which each need their own access.
             ── POST /api/video-refs → a signed upload link for an AI video's first picture
             ── AI video → server actions → Higgsfield's price from n8n's Price webhook,
                ask_for_video() then the Make now webhook, remove_ai_video(), set_video_settings()
+            ── the video editor's AI video tab → the same price and ask, the edit's AI videos
+               as they stand (getAiVideosById), Claude's prompt from n8n's Prompt webhook;
+               a long video's whole edit → save_long_video_edit()
             ── GET /api/activity → what is at work now, for the top bar's Working list
             ── studio, posts, runs, competitors, settings → server actions →
                save_variant_words(), approve_variant(), save_video_edit(), save_variant_design(),
@@ -140,7 +143,9 @@ X's ads APIs, which each need their own access.
         video_take_due() → each ask, through its stand-in or Higgsfield's MCP → video_started(),
         video_release(), video_unknown() or video_fail(); video_take_making() → each job →
         its file into ai-videos → video_finish() or video_fail();
-        and POST /webhook/qgr-video-price → Higgsfield's price (get_cost: nothing is made)
+        and POST /webhook/qgr-video-price → Higgsfield's price (get_cost: nothing is made);
+        POST /webhook/qgr-video-prompt → Claude drafts an AI video's prompt from the
+        transcript around a point → video_prompt_used()
     each agent → agent_begin() → Claude → agent_finish_*() or agent_fail()
     pages that show a moving run or post re-read it every 5 s (LiveRefresh)
 
@@ -215,14 +220,14 @@ X's ads APIs, which each need their own access.
   `remove_long_video`, `record_moment_run`, `start_run_from_ads`,
   `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
   `judge_leads_again`, `set_post_link`, `video_budget`, `set_video_settings`,
-  `ask_for_video`, `remove_ai_video`, `set_pictures_quality`.
+  `ask_for_video`, `remove_ai_video`, `set_pictures_quality`, `save_long_video_edit`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
   `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`,
   `video_take_due`, `video_started`, `video_release`, `video_unknown`,
-  `video_fail`, `video_take_making`, `video_finish`, `reference_*`; the picture ones include
+  `video_fail`, `video_take_making`, `video_finish`, `video_prompt_used`, `reference_*`; the picture ones include
   `picture_release`, `picture_in_flight`, `picture_not_made`,
   `picture_higgsfield_*` and `picture_take_making`) is granted to the service
   role alone. The service role has no use of the private schema, so a helper
@@ -315,8 +320,8 @@ X's ads APIs, which each need their own access.
   `POST /webhook/qgr-picture-price`),
   Moments (`V0z80vJq8ZJ7YLXE`, every five minutes and webhook `POST /webhook/qgr-moments`),
   Leads (`bE0n6UONyx22rYxs`, every fifteen minutes and webhook `POST /webhook/qgr-leads`),
-  AI video (`tsZjQUQ0TEajMs3h`, every minute and webhooks `POST /webhook/qgr-video`
-  and `POST /webhook/qgr-video-price`).
+  AI video (`tsZjQUQ0TEajMs3h`, every minute and webhooks `POST /webhook/qgr-video`,
+  `POST /webhook/qgr-video-price` and `POST /webhook/qgr-video-prompt`).
 - The agents' logic is `n8n/code/*.js`, tested by `n8n/code.test.ts` and
   `n8n/publisher.test.ts`. `node n8n/build-workflows.mjs
   --ids=tracker=…,strategist=…,content=…,pipeline=…` embeds it into SDK source
@@ -954,6 +959,41 @@ X's ads APIs, which each need their own access.
   (Shift for further), with the picked thing's size and "back in its place"
   beside the picture.
 
+### AI videos in an edit (`ai:<id>`, cutaways, the editor's AI video tab)
+
+- Any video edit (an ad's, a clip's before its run, a moment's, a long video
+  whole) can take an AI video from the library, named `ai:<id>` in the edit
+  and linked, never copied: inserted at the playhead (`insertAt`: the piece
+  under it splits, what follows plays later) or over the video for a stretch
+  (a cutaway, `edit.cutaways`, up to 20, never overlapping: silent, the
+  sequence's sound goes on under it, B-roll over a talk; `addCutaway`,
+  `moveCutaway` in `lib/video/timeline.ts`, tested). Its length and size are
+  known before it is made (`aiMediaOf`), so it goes in while Higgsfield makes
+  it: the preview shows it as on its way, the strip has a lane for cutaways,
+  and the editor asks how the edit's AI videos stand every 15 s while one is
+  being made (`aiStates` in `lib/video/ai-pieces.ts`, tested). One not made
+  is named with why and a way to take it out. Nothing is exported, and no run
+  starts from an edit (`createRun`), until every AI video in it is made.
+- The tab (`AiVideoPanel`) puts one in from the library or makes one there,
+  in the edit's shape near enough (`shapeForEdit`), silent, priced by
+  Higgsfield first and held to the month's limit, made only on Generate
+  (rule 12). "Write it from what's said here" sends the transcript lines
+  within 45 s of the playhead (`linesAround` in `lib/video-prompt.ts`) and the
+  person's idea to n8n's Prompt webhook: Haiku 5.5 at low effort drafts one
+  shot (no face shown, no words or flags, no promised outcome), the person
+  edits it; nothing goes to Higgsfield, and what the call cost is kept
+  (`video_prompt_usage`, on failure too). Checked with one real call
+  (2026-10-21: 797 tokens in, 224 out).
+- `private.check_video_edit` holds every saved edit (`save_video_edit`,
+  `save_long_video_edit`): an `ai:` file must be in the library and asked,
+  being made or made. The library keeps a video any edit uses
+  (`remove_ai_video`, `private.edit_uses`), and edit-media keeps a file a
+  long video's or a run's edit uses. Links to made AI videos are signed in
+  `ai-videos` by `signEditMedia`.
+- Tested in `supabase/edits.test.ts`, `lib/video/timeline.test.ts`,
+  `lib/video/ai-pieces.test.ts`, `lib/video-prompt.test.ts` and
+  `n8n/ai-video.test.ts`.
+
 ### Long videos (`/videos`, `long_videos`, "QGR · Moments")
 
 - A long recording (a webinar, a talk: up to three hours) is turned into
@@ -984,8 +1024,20 @@ X's ads APIs, which each need their own access.
   team's plus the moment's hook), then `record_moment_run` keeps the run on
   its moment (a nudged one becomes the team's own). Re-asking keeps the
   moments ads were made from and the team's own.
+- "The whole video, edited" (`WholeVideoCard`): the editor opened on the
+  whole file on this computer, to cut it down and put AI videos in; only the
+  edit is kept (`long_videos.edit`, `save_long_video_edit`, held to the
+  video's length), so the work survives a reload while its AI videos are
+  made. From it the finished video is made in the browser: downloaded at any
+  length, or, up to ten minutes, made under 50 MB (1280 on its long side,
+  `bitrate` aimed at 45 MB) and uploaded as a clip that starts an ordinary
+  run, its transcript carried through the edit (`transcriptThroughEdit` in
+  `lib/long-video.ts`, tested) for the captions and notes.
 - The sample data has one long video (a 40-minute webinar transcript) and
   picks moments by their place in the video (`sampleMoments`), saying so.
+  Its example has no file, so the whole-video edit shows on a long video
+  started on the sample data; the prompt writer gives an example there and
+  says so, and the sample AI video can be put in.
 
 ### AI video (`/videos?view=ai`, `ai_videos`, "QGR · AI video")
 

@@ -32,8 +32,8 @@ import {
 import type { InputAudioTrack, InputVideoTrack } from 'mediabunny';
 import { clipTimeAt, editedSeconds, keptSeconds } from './edit';
 import type { Part, Size, VideoEdit } from './edit';
-import { frameAt, hasSound, layout, musicGainAt, pieceGainAt, sequenceOf } from './timeline';
-import type { Placed, Showing } from './timeline';
+import { cutawayAt, frameAt, hasSound, layout, musicGainAt, pieceGainAt, sequenceOf } from './timeline';
+import type { Cutaway, Placed, Showing } from './timeline';
 import type { Picture } from './draw';
 import { RenderError } from './errors';
 
@@ -352,8 +352,8 @@ export interface TimelineJob {
   edit: VideoEdit;
   size: Size;
   bitrate: number;
-  /** Draws the frame at the edited video's second `time`, asking `pictureOf` for what each piece on screen shows. */
-  draw: (ctx: CanvasRenderingContext2D, time: number, pictureOf: (showing: Showing) => Picture | null) => void;
+  /** Draws the frame at the edited video's second `time`, asking `pictureOf` for what each piece on screen shows, and `cutawayOf` for a cutaway over it. */
+  draw: (ctx: CanvasRenderingContext2D, time: number, pictureOf: (showing: Showing) => Picture | null, cutawayOf: (cutaway: Cutaway, source: number) => Picture | null) => void;
   onProgress?: (share: number) => void;
   signal?: AbortSignal;
   maxFrameRate?: number;
@@ -444,6 +444,15 @@ export async function renderTimeline(job: TimelineJob): Promise<{ blob: Blob; ta
         bitmaps.set(s.media.path, await createImageBitmap(blob).catch(() => Promise.reject(new RenderError(`${s.media.name} can’t be read as a picture.`))));
       }
     }
+    const cutaways = job.edit.cutaways ?? [];
+    for (const c of cutaways) {
+      if (opened.has(c.media.path)) continue;
+      const blob = job.media.get(c.media.path);
+      if (!blob) throw new RenderError(`${c.media.name} could not be fetched. Reload the page to try again.`);
+      const file = await open(blob, c.media.name);
+      if (!file.video) throw new RenderError(`${c.media.name} has no video in it.`);
+      opened.set(c.media.path, file);
+    }
     const music = job.edit.music ?? null;
     let musicTrack: InputAudioTrack | null = null;
     if (music) {
@@ -485,7 +494,11 @@ export async function renderTimeline(job: TimelineJob): Promise<{ blob: Blob; ta
     const count = Math.max(1, Math.round(total * frameRate));
     const at = (i: number) => (i + 0.5) / frameRate;
     const times = new Map<number, number[]>();
+    // And which second of its video each cutaway shows on the frames it covers.
+    const cutTimes = new Map<string, number[]>();
     for (let i = 0; i < count; i++) {
+      const over = cutawayAt(cutaways, at(i));
+      if (over) cutTimes.set(over.cutaway.id, [...(cutTimes.get(over.cutaway.id) ?? []), over.source]);
       const f = frameAt(placed, at(i));
       for (const s of [f.current, f.previous]) {
         if (!s || s.placed.segment.kind !== 'clip' || s.source === null) continue;
@@ -523,6 +536,32 @@ export async function renderTimeline(job: TimelineJob): Promise<{ blob: Blob; ta
       return piece.last;
     };
 
+    // A decoder per cutaway too, opened as it comes on and closed after it.
+    const covering = new Map<string, { frames: AsyncGenerator<{ canvas: HTMLCanvasElement | OffscreenCanvas } | null>; last: Picture | null; left: number }>();
+    const pullCut = async (c: Cutaway): Promise<Picture | null> => {
+      let piece = covering.get(c.id);
+      if (!piece) {
+        const file = opened.get(c.media.path);
+        const list = cutTimes.get(c.id) ?? [];
+        if (!file?.video) return null;
+        const w = await file.video.getDisplayWidth();
+        const h = await file.video.getDisplayHeight();
+        const scale = Math.min(1, 1920 / Math.max(w, h));
+        const sink = new CanvasSink(file.video, { width: Math.round(w * scale), height: Math.round(h * scale), fit: 'fill', poolSize: 2 });
+        const first = file.first;
+        piece = { frames: sink.canvasesAtTimestamps(list.map((t) => Math.max(first, t))), last: null, left: list.length };
+        covering.set(c.id, piece);
+      }
+      const next = await piece.frames.next();
+      piece.left -= 1;
+      if (!next.done && next.value) piece.last = { image: next.value.canvas, width: next.value.canvas.width, height: next.value.canvas.height };
+      if (piece.left <= 0) {
+        await piece.frames.return(undefined);
+        covering.delete(c.id);
+      }
+      return piece.last;
+    };
+
     const pictures = async () => {
       for (let i = 0; i < count; i++) {
         if (job.signal?.aborted) throw aborted();
@@ -538,7 +577,9 @@ export async function renderTimeline(job: TimelineJob): Promise<{ blob: Blob; ta
             shown.set(s.placed.index, bitmap ? { image: bitmap, width: bitmap.width, height: bitmap.height } : null);
           }
         }
-        job.draw(ctx, t, (s) => shown.get(s.placed.index) ?? null);
+        const over = cutawayAt(cutaways, t);
+        const cut = over ? await pullCut(over.cutaway) : null;
+        job.draw(ctx, t, (s) => shown.get(s.placed.index) ?? null, (c) => (over && c.id === over.cutaway.id ? cut : null));
         await frames.add(i / frameRate, 1 / frameRate);
         job.onProgress?.((i + 1) / count);
       }

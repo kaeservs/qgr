@@ -6,7 +6,8 @@ import type { KeyboardEvent, PointerEvent } from 'react';
 import { cx } from '@/lib/cx';
 import { clock } from '@/lib/video/edit';
 import { TRANSITION_LABEL, pieceName, pieceSeconds } from '@/lib/video/timeline';
-import type { Overlay, Placed } from '@/lib/video/timeline';
+import { cutawaySeconds } from '@/lib/video/timeline';
+import type { Cutaway, Overlay, Placed } from '@/lib/video/timeline';
 import { useTime } from './useEditedVideo';
 import type { TimeClock } from './useEditedVideo';
 import styles from './video.module.css';
@@ -17,7 +18,8 @@ const percent = (t: number, total: number) => `${(Math.min(Math.max(t, 0), total
  * The edited video from end to end: every piece in order at its length (a
  * part of the clip shows a frame of it, a picture itself, a title card its
  * words), a mark where one cross-fades or slides into the next, the end card,
- * the texts laid over the video in a lane beneath, and the playhead. Clicking
+ * the texts laid over the video in a lane beneath, the videos over it (B-roll)
+ * in another, and the playhead. Clicking
  * moves the playhead and picks the piece there; the panel beside it changes
  * what is picked.
  */
@@ -35,6 +37,10 @@ export function Sequence({
   overlays,
   selectedOverlay,
   onOverlay,
+  cutaways = [],
+  selectedCutaway = null,
+  onCutaway,
+  waiting,
 }: {
   placed: readonly Placed[];
   total: number;
@@ -53,6 +59,11 @@ export function Sequence({
   overlays: readonly Overlay[];
   selectedOverlay: string | null;
   onOverlay: (id: string) => void;
+  cutaways?: readonly Cutaway[];
+  selectedCutaway?: string | null;
+  onCutaway?: (id: string) => void;
+  /** AI videos not made yet, by path: marked as on their way. */
+  waiting?: ReadonlySet<string>;
 }) {
   const track = useRef<HTMLDivElement>(null);
   const t = useTime(timeClock);
@@ -163,6 +174,25 @@ export function Sequence({
               title={o.text}
             >
               {o.text}
+            </button>
+          ))}
+        </div>
+      )}
+      {cutaways.length > 0 && (
+        <div className={cx(styles.overlayLane, styles.cutawayLane)} aria-label="Videos over the video">
+          {cutaways.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={cx(styles.overlayMark, styles.cutawayMark, selectedCutaway === c.id && styles.overlayMarkOn)}
+              style={{ left: percent(c.at, total), width: percent(cutawaySeconds(c), total) }}
+              onClick={() => {
+                onCutaway?.(c.id);
+                onSeek(c.at);
+              }}
+              title={`${c.media.name}${waiting?.has(c.media.path) ? ' (on its way)' : ''}: over the video, its sound goes on`}
+            >
+              <Film size={11} aria-hidden /> {c.media.name}
             </button>
           ))}
         </div>

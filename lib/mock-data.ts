@@ -1379,6 +1379,7 @@ export const sampleLongVideo = (): LongVideoWithTranscript => {
     sample: true,
     example: true,
     transcript,
+    edit: null,
   };
 };
 

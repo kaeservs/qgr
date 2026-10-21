@@ -52,6 +52,7 @@ export const saveVideoEdit: DataSource['saveVideoEdit'] = (id, edit) => source()
 export const saveDesign: DataSource['saveDesign'] = (id, design) => source().saveDesign(id, design);
 export const getLongVideos: DataSource['getLongVideos'] = () => source().getLongVideos();
 export const getLongVideo: DataSource['getLongVideo'] = (id) => source().getLongVideo(id);
+export const saveLongVideoEdit: DataSource['saveLongVideoEdit'] = (id, edit) => source().saveLongVideoEdit(id, edit);
 export const createLongVideo: DataSource['createLongVideo'] = (input) => source().createLongVideo(input);
 export const askMomentsAgain: DataSource['askMomentsAgain'] = (id) => source().askMomentsAgain(id);
 export const removeLongVideo: DataSource['removeLongVideo'] = (id) => source().removeLongVideo(id);
@@ -65,6 +66,8 @@ export const readLeadsNow: DataSource['readLeadsNow'] = () => source().readLeads
 export const savePostLink: DataSource['savePostLink'] = (link) => source().savePostLink(link);
 export const getAiVideos: DataSource['getAiVideos'] = () => source().getAiVideos();
 export const getAiVideo: DataSource['getAiVideo'] = (id) => source().getAiVideo(id);
+export const getAiVideosById: DataSource['getAiVideosById'] = (ids) => source().getAiVideosById(ids);
+export const writeVideoPrompt: DataSource['writeVideoPrompt'] = (request) => source().writeVideoPrompt(request);
 export const getVideoBudget: DataSource['getVideoBudget'] = () => source().getVideoBudget();
 export const priceVideo: DataSource['priceVideo'] = (request) => source().priceVideo(request);
 export const pricePicture: DataSource['pricePicture'] = (quality) => source().pricePicture(quality);

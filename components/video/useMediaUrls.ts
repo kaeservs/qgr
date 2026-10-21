@@ -50,7 +50,7 @@ export async function mediaUrls(paths: readonly string[]): Promise<Record<string
 }
 
 /** The links for `paths`, filled in as they arrive. */
-export function useMediaUrls(paths: readonly string[]): Record<string, string> {
+export function useMediaUrls(paths: readonly string[], again = 0): Record<string, string> {
   const key = useMemo(() => [...new Set(paths)].sort().join('\n'), [paths]);
   const [urls, setUrls] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -60,6 +60,7 @@ export function useMediaUrls(paths: readonly string[]): Record<string, string> {
     return () => {
       live = false;
     };
-  }, [key]);
+    // `again` changes when a file not ready before (an AI video being made) may be ready now: those not known are asked for again.
+  }, [key, again]);
   return urls;
 }

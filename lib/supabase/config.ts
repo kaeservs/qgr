@@ -58,6 +58,8 @@ export const videoPriceConfig = (): PipelineConfig | null => siblingWebhook('N8N
 
 /** "QGR · Pictures"' price webhook: what one Higgsfield picture costs at a quality, answered at once (nothing is made). */
 export const picturePriceConfig = (): PipelineConfig | null => siblingWebhook('N8N_PICTURE_PRICE_WEBHOOK_URL', 'qgr-picture-price');
+/** "QGR · AI video"'s Prompt webhook: Claude drafts an AI video's prompt from what is said around a point. */
+export const videoPromptConfig = (): PipelineConfig | null => siblingWebhook('N8N_VIDEO_PROMPT_WEBHOOK_URL', 'qgr-video-prompt');
 
 /** A webhook beside the run pipeline's: its own setting, or the run webhook's address with its path in place of qgr-run. */
 function siblingWebhook(setting: string, path: string): PipelineConfig | null {

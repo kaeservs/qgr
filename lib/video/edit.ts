@@ -11,8 +11,8 @@
 import { parseSpot } from '../spot';
 import type { Spot } from '../spot';
 import type { ParseResult } from '../run-input';
-import { keepOfSequence, layout, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
-import type { Look, Music, Overlay, Segment } from './timeline';
+import { keepOfSequence, layout, parseCutaways, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
+import type { Cutaway, Look, Music, Overlay, Segment } from './timeline';
 
 /** The longest clip a run takes: ten minutes. The database holds the same limit. */
 export const MAX_CLIP_SECONDS = 600;
@@ -89,6 +89,8 @@ export interface VideoEdit {
   overlays?: Overlay[];
   look?: Look;
   music?: Music;
+  /** Other videos over the sequence for a stretch, the sequence's sound going on under them (B-roll). */
+  cutaways?: Cutaway[];
 }
 
 export interface Size {
@@ -432,6 +434,10 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
   const music = parseMusic(raw.music);
   if (typeof music === 'string') return fail(music);
   if (music) edit.music = music;
+  // Over the video itself, never the end card.
+  const cutaways = parseCutaways(raw.cutaways, total - (endCard?.seconds ?? 0));
+  if (typeof cutaways === 'string') return fail(cutaways);
+  if (cutaways.length > 0) edit.cutaways = cutaways;
   // The cover is a frame of the video, so it can't be past its end.
   edit.cover = ms(clamp(cover, 0, Math.max(0, total - 0.05)));
   return { ok: true, value: edit };
