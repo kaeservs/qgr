@@ -786,6 +786,7 @@ export type Database = {
           claimed_at: string | null
           created_at: string
           created_by: string | null
+          description: string | null
           edit: Json | null
           edited_at: string | null
           error: string | null
@@ -804,6 +805,7 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by?: string | null
+          description?: string | null
           edit?: Json | null
           edited_at?: string | null
           error?: string | null
@@ -822,6 +824,7 @@ export type Database = {
           claimed_at?: string | null
           created_at?: string
           created_by?: string | null
+          description?: string | null
           edit?: Json | null
           edited_at?: string | null
           error?: string | null
@@ -1720,6 +1723,10 @@ export type Database = {
       remove_ai_video: { Args: { p_id: string }; Returns: undefined }
       remove_brand_example: { Args: { p_id: string }; Returns: undefined }
       remove_long_video: { Args: { p_id: string }; Returns: undefined }
+      remove_moment: {
+        Args: { p_first: number; p_id: string; p_last: number }
+        Returns: undefined
+      }
       remove_picture: { Args: { p_variant_id: string }; Returns: string }
       report_continue_failure: {
         Args: { p_error: string; p_run_id: string; p_stage: string }
@@ -1750,6 +1757,20 @@ export type Database = {
       run_of_variant: { Args: { p_variant_id: string }; Returns: string }
       save_long_video_edit: {
         Args: { p_edit: Json; p_id: string }
+        Returns: undefined
+      }
+      save_moment: {
+        Args: {
+          p_first: number
+          p_hook: string
+          p_id: string
+          p_last: number
+          p_title: string
+          p_warnings: Json
+          p_was_first: number
+          p_was_last: number
+          p_why: string
+        }
         Returns: undefined
       }
       save_variant: {
@@ -1913,6 +1934,15 @@ export type Database = {
         Returns: undefined
       }
       update_lead_criteria: { Args: { p_criteria: string }; Returns: undefined }
+      update_long_video: {
+        Args: {
+          p_description: string
+          p_guidance: string
+          p_id: string
+          p_title: string
+        }
+        Returns: undefined
+      }
       update_publishing_settings: {
         Args: {
           p_facebook_page_id: string

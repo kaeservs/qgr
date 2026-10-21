@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { cx } from '@/lib/cx';
 import { formatBytes } from '@/lib/format';
-import { clock, MAX_LONG_GUIDANCE, MAX_LONG_TITLE, titleFromFile } from '@/lib/long-video';
+import { clock, MAX_LONG_DESCRIPTION, MAX_LONG_GUIDANCE, MAX_LONG_TITLE, titleFromFile } from '@/lib/long-video';
 import type { LongFile, LongHearing } from '@/lib/speech-long';
 import type { TranscriptLine } from '@/lib/types';
 import { keepLocalFile } from '@/lib/video/local-files';
@@ -40,6 +40,7 @@ export function LongVideoStart() {
   const [step, setStep] = useState<Step>({ step: 'empty' });
   const [title, setTitle] = useState('');
   const [guidance, setGuidance] = useState('');
+  const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [retry, setRetry] = useState(false);
   const running = useRef<AbortController | null>(null);
@@ -107,7 +108,7 @@ export function LongVideoStart() {
       const res = await fetch('/api/long-videos', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), file: info, transcript: lines, ...(guidance.trim() ? { guidance: guidance.trim() } : {}) }),
+        body: JSON.stringify({ title: title.trim(), file: info, transcript: lines, ...(guidance.trim() ? { guidance: guidance.trim() } : {}), ...(description.trim() ? { description: description.trim() } : {}) }),
       });
       const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
       if (!res.ok || !body?.id) throw new Error(body?.error ?? 'The video could not be kept.');
@@ -214,6 +215,17 @@ export function LongVideoStart() {
             <input className="input" value={title} maxLength={MAX_LONG_TITLE} onChange={(e) => setTitle(e.target.value)} />
           </label>
           <label className="field">
+            <span className="label">Description (optional)</span>
+            <textarea
+              className="textarea"
+              rows={2}
+              maxLength={MAX_LONG_DESCRIPTION}
+              value={description}
+              placeholder="What the video is about: e.g. Our Q4 webinar on the Gold Card and EB-5, for families in India."
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </label>
+          <label className={`field ${styles.longWide}`}>
             <span className="label">Direction for the agent (optional)</span>
             <textarea
               className="textarea"

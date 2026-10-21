@@ -94,6 +94,11 @@ export function designWarnings(design: { texts: readonly { text: string }[] } | 
   return warnings;
 }
 
+/** The same checks on a long video's moment's hook, worded as the Moments agent's script words them (moments-read-answer.js). */
+export function hookWarnings(hook: string): string[] {
+  return RULES.filter(([rule]) => rule.test(hook)).map(([, says]) => `Hook ${says}`);
+}
+
 /** The platforms a copy object covers, in the dashboard's order. */
 export const copyPlatforms = (copy: Partial<Record<Platform, PlatformCopy>>): Platform[] => PLATFORMS.filter((p) => copy[p] !== undefined);
 

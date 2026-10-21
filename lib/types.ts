@@ -620,6 +620,8 @@ export interface LongVideoFile {
 export interface LongVideo {
   id: string;
   title: string;
+  /** What the video is about, written by the team; the agents read it too. */
+  description: string | null;
   file: LongVideoFile;
   guidance: string | null;
   /** Waiting for the Moments agent, being looked at, done, or failed (with why). */

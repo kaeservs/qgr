@@ -3,7 +3,7 @@
 // through `lib/data.ts`, which picks one, and never know which it was.
 
 import { STAGE_INFO } from '../pipeline';
-import type { NewLongVideo } from '../long-video';
+import type { LongVideoDetails, MomentInput, NewLongVideo } from '../long-video';
 import type { NewAdsRun, NewRunInput } from '../run-input';
 import type {
   ActivityItem,
@@ -172,6 +172,12 @@ export interface DataSource {
   createLongVideo(input: NewLongVideo): Promise<Saved<{ id: string }>>;
   askMomentsAgain(id: string): Promise<Saved>;
   removeLongVideo(id: string): Promise<Saved>;
+  /** A long video's name, description and direction, as the team changes them. */
+  updateLongVideo(id: string, details: LongVideoDetails): Promise<Saved>;
+  /** A moment as the team leaves it (its title, description, hook and lines), or one of their own; kept at once. */
+  saveMoment(id: string, moment: MomentInput, warnings: string[]): Promise<Saved>;
+  /** Takes a moment out of the list; one ads were made from stays. */
+  removeMoment(id: string, first: number, last: number): Promise<Saved>;
   /** Keeps the team's edit of the whole long video; null takes it back to the video as it is. */
   saveLongVideoEdit(id: string, edit: VideoEdit | null): Promise<Saved>;
   /** A run started from a clip cut from these lines: kept on its moment, or on a moment of the team's own. */

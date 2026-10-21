@@ -104,4 +104,80 @@ describe('long videos', () => {
     expect(await row(id)).toMatchObject({ status: 'failed', error: 'Claude declined' });
     expect(await t.value<number>(`select count(*)::int from public.long_video_usage where long_video_id = $1`, [id])).toBe(1);
   });
+
+  it('takes a new name, a description and a direction, from the team only', async () => {
+    const id = await create(member);
+    const update = (user: string, title: string, description: string, guidance: string) =>
+      t.asUser(user, () => t.db.query(`select public.update_long_video($1, $2, $3, $4)`, [id, title, description, guidance]));
+    await update(member, '  Gold Card   explained ', 'A 10-minute talk on the Gold Card and EB-5.', '');
+    expect(await t.value(`select jsonb_build_object('title', title, 'description', description, 'guidance', guidance) from public.long_videos where id = $1`, [id])).toEqual({
+      title: 'Gold Card explained',
+      description: 'A 10-minute talk on the Gold Card and EB-5.',
+      guidance: null,
+    });
+    await expect(update(member, ' ', '', '')).rejects.toThrow(/Name the video/);
+    await expect(update(member, 'Fine', 'x'.repeat(2001), '')).rejects.toThrow(/description/);
+    await expect(update(outsider, 'Mine now', '', '')).rejects.toThrow(/Only the QGR team/);
+    // The Moments agent reads the description.
+    const due = (await takeDue()).find((d) => d.long_video_id === id) as unknown as { description: string };
+    expect(due.description).toBe('A 10-minute talk on the Gold Card and EB-5.');
+  });
+
+  it('saves a moment’s title, description and hook, and keeps it when the moments are asked for again', async () => {
+    const id = await create(member);
+    await takeDue();
+    await finish(id, [
+      { first: 10, last: 14, title: 'The agent’s title', why: 'w', hook: 'h' },
+      { first: 40, last: 42, title: 'Another', why: 'w', hook: 'h' },
+    ]);
+    const save = (was: [number, number] | null, at: [number, number], title: string, why = '', hook = '', warnings: unknown = []) =>
+      t.asUser(member, () =>
+        t.db.query(`select public.save_moment($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`, [id, was?.[0] ?? null, was?.[1] ?? null, at[0], at[1], title, why, hook, JSON.stringify(warnings)]),
+      );
+    await save([10, 14], [10, 15], 'Our title', 'Why we like it', 'A hook that guarantees', ['Hook says "guarantee"']);
+    // A moment of the team's own is kept as soon as it is added.
+    await save(null, [100, 103], 'Our own');
+    let saved = await row(id);
+    expect(saved.moments.map((m) => [m.first, m.last, m.title, m.source])).toEqual([
+      [10, 15, 'Our title', 'team'],
+      [40, 42, 'Another', 'agent'],
+      [100, 103, 'Our own', 'team'],
+    ]);
+    expect(saved.moments[0]).toMatchObject({ why: 'Why we like it', hook: 'A hook that guarantees', warnings: ['Hook says "guarantee"'], start: 100, end: 159.5 });
+
+    await expect(save(null, [40, 42], 'Same lines')).rejects.toThrow(/already in the list/);
+    await expect(save(null, [100, 130], 'Too long')).rejects.toThrow(/two and a half minutes/);
+    await expect(save([7, 8], [7, 8], 'Gone')).rejects.toThrow(/gone/);
+    await expect(save(null, [200, 201], '')).rejects.toThrow(/title/);
+    await expect(t.asUser(outsider, () => t.db.query(`select public.save_moment($1, null, null, 1, 2, 'x', '', '', '[]')`, [id]))).rejects.toThrow(/Only the QGR team/);
+
+    // Moved after ads were made from it, a moment stays as it was and the new lines are another.
+    const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom', 'text', 'From the webinar', array['meta'], 'consultations', p_excerpt => $1)`, ['What the clip says, long enough to be a run of its own.']));
+    await t.asUser(member, () => t.db.query(`select public.record_moment_run($1, 100, 103, 'Our own', $2)`, [id, runId]));
+    await save([100, 103], [100, 104], 'Our own, longer');
+    saved = await row(id);
+    expect(saved.moments.slice(2).map((m) => [m.last, m.title, m.run_ids])).toEqual([
+      [103, 'Our own', [runId]],
+      [104, 'Our own, longer', []],
+    ]);
+    // Renamed in place, it keeps its runs.
+    await save([100, 103], [100, 103], 'Renamed');
+    expect((await row(id)).moments[2]).toMatchObject({ title: 'Renamed', run_ids: [runId] });
+
+    // Taken out: only one no ads were made from.
+    await t.asUser(member, () => t.db.query(`select public.remove_moment($1, 40, 42)`, [id]));
+    await expect(t.asUser(member, () => t.db.query(`select public.remove_moment($1, 100, 103)`, [id]))).rejects.toThrow(/stays with its runs/);
+    expect((await row(id)).moments.map((m) => m.first)).toEqual([10, 100, 100]);
+
+    // Asked for again, the team's saved moments stay.
+    await t.asUser(member, () => t.db.query(`select public.ask_moments_again($1)`, [id]));
+    await takeDue();
+    await finish(id, [{ first: 10, last: 15, title: 'Agent again', why: 'w', hook: 'h' }, { first: 60, last: 62, title: 'Fresh', why: 'w', hook: 'h' }]);
+    expect((await row(id)).moments.map((m) => [m.first, m.title])).toEqual([
+      [60, 'Fresh'],
+      [10, 'Our title'],
+      [100, 'Renamed'],
+      [100, 'Our own, longer'],
+    ]);
+  });
 });

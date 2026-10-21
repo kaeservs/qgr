@@ -565,7 +565,7 @@ export const liveData: DataSource = {
   getLongVideos: async () => {
     const { data, error } = await (await db())
       .from('long_videos')
-      .select('id, title, file, guidance, status, error, moments, created_at')
+      .select('id, title, description, file, guidance, status, error, moments, created_at')
       .is('removed_at', null)
       .order('created_at', { ascending: false })
       .limit(RECENT);
@@ -580,7 +580,7 @@ export const liveData: DataSource = {
     if (!UUID.test(id)) return null;
     const { data, error } = await (await db())
       .from('long_videos')
-      .select('id, title, file, guidance, status, error, moments, created_at, transcript, edit')
+      .select('id, title, description, file, guidance, status, error, moments, created_at, transcript, edit')
       .eq('id', id)
       .is('removed_at', null)
       .maybeSingle();
@@ -591,6 +591,11 @@ export const liveData: DataSource = {
   createLongVideo: async (input) => {
     const { data, error } = await (await db()).rpc('create_long_video', toCreateLongVideoArgs(input));
     if (error) return refused(error, 'The video could not be kept.');
+    // create_long_video takes no description (a new argument would be a new function): it is set straight after.
+    if (input.description) {
+      const described = await (await db()).rpc('update_long_video', { p_id: data, p_title: input.title, p_description: input.description, p_guidance: input.guidance ?? '' });
+      if (described.error) return refused(described.error, 'The video was kept, but not its description.');
+    }
     // The Moments agent looks at once rather than at its next five minutes.
     const moments = momentsConfig();
     if (moments) await pingQueue(moments);
@@ -608,6 +613,35 @@ export const liveData: DataSource = {
   removeLongVideo: async (id) => {
     const { error } = await (await db()).rpc('remove_long_video', { p_id: id });
     if (error) return refused(error, 'The video could not be taken away.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  updateLongVideo: async (id, details) => {
+    const { error } = await (await db()).rpc('update_long_video', { p_id: id, p_title: details.title, p_description: details.description, p_guidance: details.guidance });
+    if (error) return refused(error, 'The video’s details could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  saveMoment: async (id, moment, warnings) => {
+    const { error } = await (await db()).rpc('save_moment', {
+      p_id: id,
+      // A moment not saved yet has no lines it was at: save_moment takes null for both, which the generated types cannot say.
+      p_was_first: moment.was?.first ?? (null as unknown as number),
+      p_was_last: moment.was?.last ?? (null as unknown as number),
+      p_first: moment.first,
+      p_last: moment.last,
+      p_title: moment.title,
+      p_why: moment.why,
+      p_hook: moment.hook,
+      p_warnings: warnings,
+    });
+    if (error) return refused(error, 'The moment could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  removeMoment: async (id, first, last) => {
+    const { error } = await (await db()).rpc('remove_moment', { p_id: id, p_first: first, p_last: last });
+    if (error) return refused(error, 'The moment could not be taken out.');
     return { ok: true, value: null, sample: false };
   },
 

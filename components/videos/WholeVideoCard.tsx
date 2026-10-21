@@ -4,7 +4,7 @@ import { Download, Film, RotateCcw, Scissors, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { editAiVideosAction, saveLongVideoEditAction } from '@/app/(app)/videos/actions';
-import { clock, transcriptThroughEdit } from '@/lib/long-video';
+import { aboutVideo, clock, transcriptThroughEdit } from '@/lib/long-video';
 import type { Clip, Goal, LongVideoWithTranscript, Platform } from '@/lib/types';
 import { defaultEdit, editedSeconds, frameSize, length, MAX_CLIP_SECONDS } from '@/lib/video/edit';
 import type { VideoEdit } from '@/lib/video/edit';
@@ -19,6 +19,8 @@ import styles from './videos.module.css';
 /** Room under Storage's 50 MB a clip: a file never comes out exactly the size it was aimed at. */
 const AIM_BYTES = 45 * 1024 * 1024;
 const MAX_CLIP_BYTES = 50 * 1024 * 1024;
+
+const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const slug = (s: string) =>
   s
@@ -147,7 +149,7 @@ export function WholeVideoCard({
             kind: 'custom',
             type: 'video',
             clip: { path: up.path, name: `${video.title} (edited).${made.extension}`, duration: seconds, width: made.width, height: made.height, size: made.blob.size, transcript },
-            notes: `The long video “${video.title}”, edited down to ${length(seconds)}${aiCount > 0 ? `, with ${aiCount} AI video${aiCount === 1 ? '' : 's'} in it` : ''}. What is said: ${said}`.slice(0, 20_000),
+            notes: `${upperFirst(aboutVideo(video))}, edited down to ${length(seconds)}${aiCount > 0 ? `, with ${aiCount} AI video${aiCount === 1 ? '' : 's'} in it` : ''}. What is said: ${said}`.slice(0, 20_000),
           },
           platforms,
           goal,

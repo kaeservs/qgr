@@ -67,6 +67,12 @@ describe('the Moments request', () => {
     expect(String(body.system)).toContain("direction is the QGR team's brief");
     expect(JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n')[1]!)).toMatchObject({ video: { length: '1:02:05' }, direction: 'Find the moments about families.' });
   });
+
+  it('reads what the team says the video is about, when they said', () => {
+    const [out] = runAll('moments-build-request.js', [video({ description: 'Our Q4 webinar on the Gold Card and EB-5.' })]);
+    const material = JSON.parse(String(((out!.body as Json).messages as { content: string }[])[0]!.content).split('\n')[1]!);
+    expect(material.video).toEqual({ title: 'EB-5 webinar', length: '30:00', lines: 180, about: 'Our Q4 webinar on the Gold Card and EB-5.' });
+  });
 });
 
 describe('reading the moments', () => {

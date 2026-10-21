@@ -66,6 +66,7 @@ function LongVideos({ videos }: { videos: LongVideo[] }) {
                     <h3 className={styles.longCardTitle}>{v.title}</h3>
                     <span className={`pill pill-sm ${STATUS[v.status].tone}`}>{STATUS[v.status].label}</span>
                   </div>
+                  {v.description && <p className={`small ${styles.longCardAbout}`}>{v.description}</p>}
                   <p className="muted small">
                     {clock(v.file.duration)} · {dayLabel(v.createdAt.slice(0, 10))}
                     {v.sample ? ' · sample' : ''}
