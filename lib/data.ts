@@ -39,6 +39,8 @@ export const createRun: DataSource['createRun'] = (input, page) => source().crea
 export const startRunFromAds: DataSource['startRunFromAds'] = (input) => source().startRunFromAds(input);
 export const createShotUpload: DataSource['createShotUpload'] = (extension) => source().createShotUpload(extension);
 export const deleteShot: DataSource['deleteShot'] = (path) => source().deleteShot(path);
+export const createReferenceUpload: DataSource['createReferenceUpload'] = (extension) => source().createReferenceUpload(extension);
+export const deleteReference: DataSource['deleteReference'] = (path) => source().deleteReference(path);
 export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().saveVariant(id, edit);
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);

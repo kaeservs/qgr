@@ -52,8 +52,8 @@ export default async function AdSetPage({ params }: Props) {
 
   // The run's platforms decide which previews show; failing that, whatever copy the set holds.
   const platforms = run?.platforms ?? PLATFORMS.filter((p) => set.variants.some((v) => v.copy[p]));
-  // While a picture is being made, the page follows it.
-  const making = !usingSampleData() && set.variants.some((v) => v.picture?.status === 'making');
+  // While a picture or an ad's video is being made, the page follows it.
+  const making = !usingSampleData() && set.variants.some((v) => v.picture?.status === 'making' || v.aiVideo?.status === 'asked' || v.aiVideo?.status === 'making');
   return (
     <>
       <LiveRefresh active={making} />

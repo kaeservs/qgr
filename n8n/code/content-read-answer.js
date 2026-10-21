@@ -105,5 +105,7 @@ for (let i = 0; i < labels.length; i += 1) {
     posts: posts,
     warnings: warnings,
   });
+  // A video run's ad keeps the prompt its AI video is made from.
+  if (run.ai_media === 'video') variants[variants.length - 1].video_prompt = String(v.video_prompt || '').trim().slice(0, 1200);
 }
 return [{ json: { ok: true, p_run_id: run.id, p_ad_set: { title: ctx.strategy.title, variants: variants }, p_usage: usage } }];

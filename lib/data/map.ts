@@ -10,7 +10,7 @@ import type { NewLongVideo } from '../long-video';
 import type { NewRunInput } from '../run-input';
 import type { TeamRole, Viewer } from '../session';
 import type { Database, Json } from '../supabase/database.types';
-import { EXAMPLE_PLACES, GOALS, PICTURE_MODELS, PICTURE_QUALITIES, PLACES, PLATFORMS } from '../types';
+import { EXAMPLE_PLACES, GOALS, PICTURE_MODELS, PICTURE_QUALITIES, PLACES, PLATFORMS, RUN_MEDIA } from '../types';
 import { PLACE_LABEL } from '../post-input';
 import type {
   ActivityItem,
@@ -50,6 +50,8 @@ import type {
   PostStatus,
   PostTarget,
   Run,
+  RunMedia,
+  RunReference,
   RunSource,
   ScanEvery,
   Stage,
@@ -58,6 +60,7 @@ import type {
   Strategy,
   TeamSettings,
   TranscriptLine,
+  VariantVideo,
   User,
   Variant,
   VariantPicture,
@@ -115,6 +118,9 @@ export interface RunRow {
   source_report_id?: string | null;
   pick_first?: boolean;
   chosen_angle_ids?: string[] | null;
+  ai_media?: string | null;
+  ai_video?: Json | null;
+  run_references?: { position: number; path: string; note: string | null; status: string; error: string | null }[];
   run_stages: StageRow[];
   strategies: One<{ id: string; strategy_angles: { id: string }[] }>;
   ad_sets: One<{ id: string; ad_variants: { id: string }[] }>;
@@ -196,6 +202,8 @@ export interface AdSetRow {
     design?: Json | null;
     /** Read for the studio only: the pictures made for it, marked once past the eight kept. */
     variant_pictures?: { id: string; path: string; prompt: string | null; created_at: string; removed_at: string | null }[];
+    /** The AI videos asked for it, on a run that asked for one per ad. */
+    ai_videos?: { id: string; status: string; seconds: number; aspect: string; quality: string; path: string | null; error: string | null; asked_at: string }[];
   }[];
   runs: One<{ media_path: string | null; media: Json | null }>;
 }
@@ -351,7 +359,8 @@ function stagesOf(rows: StageRow[]): Record<StageKey, Stage> {
   return { tracker: stage('tracker'), strategist: stage('strategist'), content: stage('content') };
 }
 
-export function toRun(row: RunRow): RunWithStatus {
+export function toRun(row: RunRow, referenceUrl?: (path: string) => string | undefined): RunWithStatus {
+  const media = runMediaOf(row, referenceUrl);
   const strategy = one(row.strategies);
   const adSet = one(row.ad_sets);
   const report = one(row.competitor_reports);
@@ -383,8 +392,39 @@ export function toRun(row: RunRow): RunWithStatus {
     ...(row.chosen_ad_ids && row.chosen_ad_ids.length > 0 && row.source_report_id ? { chosenAds: row.chosen_ad_ids.length } : {}),
     ...(row.pick_first ? { pickFirst: true } : {}),
     ...(picked ? { picked } : {}),
+    ...(media ? { media } : {}),
   };
   return { ...run, status: runStatus(run) };
+}
+
+const REFERENCE_STATUSES = ['waiting', 'ready', 'failed'] as const;
+const VIDEO_QUALITIES = ['480p', '720p'] as const;
+
+/**
+ * What a run's ads are made of, as asked at Start run, with its references in
+ * their order. `referenceUrl` gives a reference's link where the page shows
+ * them. Null for a run nobody asked.
+ */
+export function runMediaOf(row: Pick<RunRow, 'ai_media' | 'ai_video' | 'run_references'>, referenceUrl: (path: string) => string | undefined = () => undefined): RunMedia | null {
+  if (!isOneOf(RUN_MEDIA, row.ai_media)) return null;
+  const v = row.ai_video;
+  const video =
+    row.ai_media === 'video' && isRecord(v) && typeof v.seconds === 'number' && isOneOf(VIDEO_QUALITIES, v.quality) && isOneOf(VIDEO_ASPECT_KEYS, v.aspect)
+      ? { seconds: v.seconds, quality: v.quality, aspect: v.aspect, credits: typeof v.credits === 'number' ? v.credits : null }
+      : null;
+  const references = [...(row.run_references ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .map((r): RunReference => {
+      const url = referenceUrl(r.path);
+      return {
+        path: r.path,
+        ...(r.note ? { note: r.note } : {}),
+        status: isOneOf(REFERENCE_STATUSES, r.status) ? r.status : 'waiting',
+        ...(r.error ? { error: r.error } : {}),
+        ...(url ? { url } : {}),
+      };
+    });
+  return { kind: row.ai_media, ...(video ? { video } : {}), references };
 }
 
 /** What the team picked while the run waited: ads from its own report, angles from its strategy. */
@@ -544,15 +584,36 @@ function picturesOf(v: AdSetRow['ad_variants'][number], pictureUrl: (path: strin
  * An ad set as the studio shows it. `pictureUrl` turns a picture's path in
  * Storage into a link the viewer may open; the bucket is private.
  */
-export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | undefined = () => undefined): AdSet {
+/** An ad's own AI video: the newest asked for it. */
+function variantVideoOf(v: AdSetRow['ad_variants'][number], videoUrl: (path: string) => string | undefined): VariantVideo | null {
+  const row = [...(v.ai_videos ?? [])].sort((a, b) => b.asked_at.localeCompare(a.asked_at))[0];
+  if (!row) return null;
+  const status = isOneOf(VIDEO_STATUSES, row.status) ? row.status : 'asked';
+  const url = status === 'ready' && row.path ? videoUrl(row.path) : undefined;
+  return {
+    id: row.id,
+    status,
+    seconds: row.seconds,
+    aspect: isOneOf(VIDEO_ASPECT_KEYS, row.aspect) ? row.aspect : '9:16',
+    quality: row.quality,
+    ...(status === 'ready' && row.path ? { path: row.path } : {}),
+    ...(url ? { url } : {}),
+    ...(row.error ? { error: row.error } : {}),
+  };
+}
+
+export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | undefined = () => undefined, videoUrl: (path: string) => string | undefined = () => undefined): AdSet {
   const run = one(row.runs);
   const clip = run ? clipOf(run.media_path, run.media) : null;
   const variants = [...row.ad_variants]
     .sort((a, b) => a.label.localeCompare(b.label))
     .flatMap((v): Variant[] => {
       if (v.label !== 'A' && v.label !== 'B' && v.label !== 'C') return [];
-      // An edit that no longer fits the clip is dropped: the variant shows the whole clip again.
-      const edit = clip && v.video_edit !== null ? parseVideoEdit(v.video_edit, clip.duration) : null;
+      const aiVideo = variantVideoOf(v, videoUrl);
+      // The variant's clip is its run's, or its own AI video once made. An edit that no longer
+      // fits the clip is dropped: the variant shows the whole clip again.
+      const length = clip ? clip.duration : aiVideo?.status === 'ready' ? aiVideo.seconds : null;
+      const edit = length !== null && v.video_edit !== null ? parseVideoEdit(v.video_edit, length) : null;
       // A layout that no longer reads is dropped: the picture goes back to the style's.
       const design = !clip && v.design ? parseDesign(v.design) : null;
       const imageUrl = v.picture_path ? pictureUrl(v.picture_path) : undefined;
@@ -575,6 +636,7 @@ export function toAdSet(row: AdSetRow, pictureUrl: (path: string) => string | un
           // Without its own edit, an ad starts from the one made as the clip was uploaded.
           ...(edit?.ok ? { videoEdit: edit.value } : clip?.edit ? { videoEdit: clip.edit } : {}),
           ...(design?.ok && design.value ? { design: design.value } : {}),
+          ...(aiVideo ? { aiVideo } : {}),
         },
       ];
     });

@@ -1,4 +1,6 @@
 import { hostOf } from './format';
+import { parseRunMedia } from './run-media';
+import type { RunMediaInput } from './run-media';
 import { MAX_LINE, MAX_LINES } from './transcribe';
 import { CUSTOM_SOURCES, GOALS, PLATFORMS } from './types';
 import type { Clip, Goal, Platform, RunSource, TranscriptLine } from './types';
@@ -16,6 +18,8 @@ export interface RunOptions {
   guidance?: string;
   /** The run waits after each agent for the team to pick the ads and the angles the next one works from. */
   pickFirst?: boolean;
+  /** What the ads are made of, and the team's reference pictures. Absent: the team's picture switch decides. */
+  media?: RunMediaInput;
 }
 
 export interface NewRunInput extends RunOptions {
@@ -188,6 +192,10 @@ export function parseNewRun(body: unknown): ParseResult<NewRunInput> {
   if (!source.ok) return source;
   const options = parseRunOptions(body);
   if (!options.ok) return options;
+  // A clip's ads are made from the clip.
+  if ('clip' in source.value && options.value.media && options.value.media.kind !== 'design') {
+    return { ok: false, error: 'A run from a clip makes its ads from the clip: AI pictures and AI video are for the other runs.' };
+  }
   return { ok: true, value: { source: source.value, ...options.value } };
 }
 
@@ -220,6 +228,9 @@ function parseRunOptions(body: Record<string, unknown>): ParseResult<RunOptions>
   const guidance = typeof body.guidance === 'string' ? body.guidance.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').trim() : '';
   if (guidance.length > MAX_GUIDANCE) return { ok: false, error: `Keep the direction for the agents under ${MAX_GUIDANCE.toLocaleString('en-US')} characters.` };
 
+  const media = body.media === undefined || body.media === null ? null : parseRunMedia(body.media);
+  if (media && !media.ok) return media;
+
   return {
     ok: true,
     value: {
@@ -228,6 +239,7 @@ function parseRunOptions(body: Record<string, unknown>): ParseResult<RunOptions>
       ...(title ? { title } : {}),
       ...(guidance ? { guidance } : {}),
       ...(body.pickFirst === true ? { pickFirst: true } : {}),
+      ...(media ? { media: media.value } : {}),
     },
   };
 }

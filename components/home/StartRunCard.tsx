@@ -16,8 +16,11 @@ import { PlatformIcon } from '../ui/PlatformIcon';
 import { ClipEditButton } from '../video/ClipEditButton';
 import type { FrameBrandWords } from '../video/ClipEditButton';
 import { ClipField } from '../video/ClipField';
+import { firstDraft } from '../runs/MediaChoice';
+import type { MediaDraft } from '../runs/MediaChoice';
 import { RunQuestions } from '../runs/RunQuestions';
 import type { RunAnswers } from '../runs/RunQuestions';
+import type { MediaSetup } from '@/lib/run-media';
 import { ShotsField } from './ShotsField';
 import type { ShotsStatus } from './ShotsField';
 import type { ClipStatus } from '../video/ClipField';
@@ -62,6 +65,7 @@ export function StartRunCard({
   fromVideo,
   shotsFor,
   brand,
+  mediaSetup,
 }: {
   initialTab?: StartTab;
   initialUrl?: string;
@@ -71,6 +75,8 @@ export function StartRunCard({
   fromVideo?: StartFromVideo | undefined;
   /** The page's name and site, drawn on the video as the editor previews it. */
   brand: FrameBrandWords;
+  /** What the question after Start run needs: the team's picture switch and model, AI video's switch and credits. */
+  mediaSetup: MediaSetup;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -89,6 +95,8 @@ export function StartRunCard({
   const [busy, setBusy] = useState(false);
   /** The run as built, while the questions after Start run are open. */
   const [asking, setAsking] = useState<RunSource | null>(null);
+  // What the ads are made of, kept here so Back (or a start that fails) keeps the answer and its uploads.
+  const [mediaDraft, setMediaDraft] = useState<MediaDraft>(() => firstDraft(mediaSetup));
   // A video is a link to read, or a clip uploaded from here.
   const [videoFrom, setVideoFrom] = useState<'link' | 'upload'>(fromVideo ? 'upload' : 'link');
   const [clipStatus, setClipStatus] = useState<ClipStatus>({ state: 'empty' });
@@ -186,6 +194,7 @@ export function StartRunCard({
           ...(title.trim() ? { title: title.trim() } : {}),
           ...(guidance.trim() ? { guidance: guidance.trim() } : {}),
           ...(answers.pickFirst ? { pickFirst: true } : {}),
+          ...(answers.media ? { media: answers.media } : {}),
         }),
       });
       const body = (await res.json().catch(() => null)) as { id?: string; error?: string } | null;
@@ -478,6 +487,7 @@ export function StartRunCard({
         {asking && (
           <RunQuestions
             skipsTracker={asking.kind === 'custom'}
+            media={'clip' in asking ? undefined : { setup: mediaSetup, draft: mediaDraft, setDraft: setMediaDraft }}
             busy={busy}
             busyLabel={readsLink && !adLibrary ? 'Reading the page…' : 'Starting…'}
             onStart={(answers) => void start(asking, answers)}

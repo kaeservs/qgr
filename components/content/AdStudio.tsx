@@ -10,6 +10,7 @@ import { describeWarning, designWarnings, guardrailWarnings, videoWarnings } fro
 import { PLATFORM_LABEL, PLATFORM_OF, postText } from '@/lib/platforms';
 import { PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone } from '@/lib/schedule';
+import { clipOfVideo } from '@/lib/run-media';
 import { PLACES } from '@/lib/types';
 import type { AdSet, Clip, PictureModel, PictureQuality, Place, Platform, PlatformCopy, Post, PostPages, Strategy, StrategyAngle, Variant } from '@/lib/types';
 import { defaultEdit } from '@/lib/video/edit';
@@ -64,20 +65,41 @@ function postState(posts: readonly Post[], variantId: string): { waiting: Post |
   return { waiting: waiting ?? null, posted: mine.some((p) => p.targets.some((t) => t.status === 'posted')) };
 }
 
-/** What a fresh read can move on: the picture, an ask's progress, the pictures kept, and the approval a new picture takes back. */
-const serverPart = (v: Variant): string =>
-  JSON.stringify([v.imageUrl ?? null, v.picture ?? null, v.picturePrompt ?? null, (v.pictures ?? []).map((p) => [p.id, p.shown]), !!v.approved]);
+/** A variant's clip and a link to play it: its run's, or its own AI video once made. */
+type VariantClip = { clip: Clip; url: string | null; whole: VideoEdit };
 
-/** The server's word on a variant's picture, and on its approval, which a new picture takes back. */
+/** What an ad's own AI video is doing, while it is not its clip yet. */
+function videoNote(v: Variant): { making: boolean; text: string } | null {
+  const video = v.aiVideo;
+  if (!video || video.status === 'ready') return null;
+  switch (video.status) {
+    case 'asked':
+    case 'making':
+      return { making: true, text: 'Higgsfield is making this ad’s video. It shows here when it is done; until then the ad is the drawn design.' };
+    case 'failed':
+      return { making: false, text: `The video could not be made: ${video.error ?? 'Higgsfield did not make it.'} The ad stays the drawn design.` };
+    case 'unknown':
+      return { making: false, text: `It is not known whether Higgsfield made this ad’s video: ${video.error ?? 'its answer was lost.'} Check Higgsfield’s history before asking for another.` };
+    case 'stand_in':
+      return { making: false, text: 'AI video was off when this ad was written, so no video was made. The ad stays the drawn design.' };
+  }
+}
+
+/** What a fresh read can move on: the picture, an ask's progress, the pictures kept, the ad's own video, and the approval a new picture takes back. */
+const serverPart = (v: Variant): string =>
+  JSON.stringify([v.imageUrl ?? null, v.picture ?? null, v.picturePrompt ?? null, (v.pictures ?? []).map((p) => [p.id, p.shown]), v.aiVideo?.status ?? null, !!v.approved]);
+
+/** The server's word on a variant's picture and its own video, and on its approval, which a new picture takes back. */
 function withServerPicture(v: Variant, server: Variant | undefined): Variant {
   if (!server) return v;
-  const { imageUrl: _image, picture: _picture, picturePrompt: _prompt, pictures: _pictures, approved: _approved, ...rest } = v;
+  const { imageUrl: _image, picture: _picture, picturePrompt: _prompt, pictures: _pictures, aiVideo: _video, approved: _approved, ...rest } = v;
   return {
     ...rest,
     ...(server.imageUrl ? { imageUrl: server.imageUrl } : {}),
     ...(server.picture ? { picture: server.picture } : {}),
     ...(server.picturePrompt ? { picturePrompt: server.picturePrompt } : {}),
     ...(server.pictures ? { pictures: server.pictures } : {}),
+    ...(server.aiVideo ? { aiVideo: server.aiVideo } : {}),
     ...(server.approved ? { approved: true } : {}),
   };
 }
@@ -115,7 +137,9 @@ function asText(copy: PlatformCopy): string {
  * are, for comparison. Edits are saved when the variant is left (Done, Escape,
  * or picking another) and before it is approved. Guardrail flags are worked
  * out from the words on screen as they change. When the run started from a
- * clip, each variant is a video made from it, edited in the video editor.
+ * clip, each variant is a video made from it, edited in the video editor; on
+ * a run that asked for AI video, each is its own video once Higgsfield has
+ * made it.
  */
 export function AdStudio({
   adSet,
@@ -162,8 +186,21 @@ export function AdStudio({
   const designing = variants.find((v) => v.id === designOf);
   // A variant waiting to post can't change: what goes out is what was approved.
   const locked = selected ? postState(posts, selected.id).waiting : null;
-  // One object for every variant with no edit, so previews don't redraw for nothing.
-  const wholeClip = useMemo(() => (clip ? defaultEdit(clip.clip.duration) : null), [clip]);
+  // Each variant's clip: the run's, or its own AI video once Higgsfield has made it. One object
+  // a variant, read from the server's set, so previews don't redraw for every key typed.
+  const clips = useMemo(() => {
+    const whole = clip ? defaultEdit(clip.clip.duration) : null;
+    return new Map(
+      adSet.variants.flatMap((v): [string, VariantClip][] => {
+        if (clip && whole) return [[v.id, { clip: clip.clip, url: clip.url, whole }]];
+        const own = v.aiVideo ? clipOfVideo(v.aiVideo, v.label) : null;
+        return own ? [[v.id, { clip: own, url: v.aiVideo?.url ?? null, whole: defaultEdit(own.duration) }]] : [];
+      }),
+    );
+  }, [adSet, clip]);
+  const clipFor = (v: Variant | undefined): VariantClip | undefined => (v ? clips.get(v.id) : undefined);
+  const selectedClip = clipFor(selected);
+  const editingClip = clipFor(editingVideo);
   const frameBrand = useMemo(() => ({ name: brand.name, website: brand.domain }), [brand.name, brand.domain]);
 
   function videoSaved(id: string, saved: SavedVideo) {
@@ -399,7 +436,7 @@ export function AdStudio({
                 <Copy size={15} aria-hidden />
                 Copy
               </button>
-              {clip && (
+              {selectedClip && (
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
@@ -413,7 +450,7 @@ export function AdStudio({
                   Edit video
                 </button>
               )}
-              {!clip && (
+              {!selectedClip && (
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
@@ -427,7 +464,7 @@ export function AdStudio({
                   Design…
                 </button>
               )}
-              {!clip && (
+              {!selectedClip && (
                 <button type="button" className="btn btn-ghost btn-sm" disabled={busy !== null} onClick={() => setPictureOf(selected.id)}>
                   {selected.picture?.status === 'making' ? <LoaderCircle size={15} className="spin" aria-hidden /> : <ImagePlus size={15} aria-hidden />}
                   {selected.picture?.status === 'making' ? 'Making a picture…' : 'Picture…'}
@@ -471,11 +508,13 @@ export function AdStudio({
           const Preview = PREVIEW[platform];
           const PostPreview = view.kind === 'post' ? POST_PREVIEW[view.place] : null;
           const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts), ...videoWarnings(v.videoEdit), ...designWarnings(v.design)];
-          const design = v.design && !clip ? { layout: v.design, brandName: frameBrand.name } : undefined;
+          const own = clipFor(v);
+          const design = v.design && !own ? { layout: v.design, brandName: frameBrand.name } : undefined;
           const state = postState(posts, v.id);
           const angle = angleOf(strategy, v);
           const editable = isSelected && busy === null && !state.waiting;
-          const video = clip && wholeClip ? { clip: clip.clip, url: clip.url, edit: v.videoEdit ?? wholeClip, brand: frameBrand, label: `Variant ${v.label}` } : undefined;
+          const video = own ? { clip: own.clip, url: own.url, edit: v.videoEdit ?? own.whole, brand: frameBrand, label: `Variant ${v.label}` } : undefined;
+          const making = videoNote(v);
           return (
             <section key={v.id} className={cx(styles.variant, isSelected && styles.variantSelected)} aria-label={`Variant ${v.label}: ${v.angle}`}>
               <div className={styles.variantHead}>
@@ -502,6 +541,12 @@ export function AdStudio({
                     Making a picture
                   </span>
                 )}
+                {making?.making && (
+                  <span className={cx('pill pill-sm', styles.picturePill)}>
+                    <LoaderCircle size={13} className="spin" aria-hidden />
+                    Making its video
+                  </span>
+                )}
               </div>
               {angle && (
                 <div className={styles.chain}>
@@ -525,6 +570,15 @@ export function AdStudio({
                 </div>
               )}
               {v.picture?.status === 'none' && v.picture.note && <p className={cx('muted small', styles.pictureNote)}>{v.picture.note}</p>}
+              {making &&
+                (making.making ? (
+                  <p className={cx('muted small', styles.pictureNote)}>{making.text}</p>
+                ) : (
+                  <div className={styles.flags} role="note">
+                    <TriangleAlert size={15} aria-hidden />
+                    <p>{making.text}</p>
+                  </div>
+                ))}
               {flags.length > 0 && (
                 <div className={styles.flags} role="note">
                   <TriangleAlert size={15} aria-hidden />
@@ -590,7 +644,7 @@ export function AdStudio({
         <PublishDialog
           variant={posting}
           adSetTitle={adSet.title}
-          clip={clip ?? null}
+          clip={clipFor(posting) ?? null}
           brand={frameBrand}
           timeZone={publishing.timeZone}
           pages={publishing.pages}
@@ -617,7 +671,7 @@ export function AdStudio({
         />
       )}
 
-      {designing && !clip && (
+      {designing && !clipFor(designing) && (
         <DesignEditor
           variant={designing}
           brandName={frameBrand.name}
@@ -627,11 +681,11 @@ export function AdStudio({
         />
       )}
 
-      {editingVideo && clip && (
+      {editingVideo && editingClip && (
         <VideoEditor
           variant={editingVideo}
-          clip={clip.clip}
-          url={clip.url}
+          clip={editingClip.clip}
+          url={editingClip.url}
           brand={frameBrand}
           setTitle={adSet.title}
           platforms={platforms}

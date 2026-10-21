@@ -144,6 +144,10 @@ export interface DataSource {
   createShotUpload(extension: ShotExtension): Promise<Saved<{ path: string; url: string | null }>>;
   /** Removes a screenshot taken away before its run started. Storage refuses one a run uses. */
   deleteShot(path: string): Promise<Saved>;
+  /** Where the browser uploads a reference picture for Higgsfield: a fresh path in the teammate's own folder of run-refs. */
+  createReferenceUpload(extension: ShotExtension): Promise<Saved<{ path: string; url: string | null }>>;
+  /** Removes a reference picture taken away before its run started. Storage refuses one a run uses. */
+  deleteReference(path: string): Promise<Saved>;
   /** Saves an edit and returns the guardrail flags for the new words. */
   saveVariant(variantId: string, edit: VariantEdit): Promise<Saved<{ warnings: string[] }>>;
   approveVariant(variantId: string): Promise<Saved>;

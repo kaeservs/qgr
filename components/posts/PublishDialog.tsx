@@ -106,7 +106,7 @@ export function PublishDialog({
 }: {
   variant: Variant;
   adSetTitle: string;
-  /** The run's clip and a link to it, when every variant is a video made from it. */
+  /** The variant's clip and a link to it, when it is a video: its run's clip, or its own AI video. */
   clip: { clip: Clip; url: string | null } | null;
   brand: { name: string; website: string };
   timeZone: string;

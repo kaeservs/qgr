@@ -10,6 +10,7 @@ import { getViewer } from '../session';
 import { leadsConfig, momentsConfig, picturePriceConfig, picturesConfig, pipelineConfig, publisherConfig, videoConfig, videoPriceConfig } from '../supabase/config';
 import type { PipelineConfig } from '../supabase/config';
 import type { RunOptions } from '../run-input';
+import { forTheRun, videoPriceRequest } from '../run-media';
 import type { StageKey } from '../types';
 import { askPrice } from '../video-price';
 import type { Json } from '../supabase/database.types';
@@ -52,17 +53,19 @@ import type { DataSource, Saved } from './source';
 
 // The page's text stays in the database for the agents: lists read only what the dashboard shows of it.
 const RUN =
-  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, source_report_id, pick_first, chosen_angle_ids, run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
+  'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, source_report_id, pick_first, chosen_angle_ids, ai_media, ai_video, run_references!run_references_run_id_fkey(position, path, note, status, error), run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
   'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit, design';
-const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}), runs!ad_sets_run_id_fkey(media_path, media)` as const;
+/** An ad's own AI video, on a run that asked for one per ad. */
+const VARIANT_VIDEO = 'ai_videos!ai_videos_variant_id_fkey(id, status, seconds, aspect, quality, path, error, asked_at)';
+const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}), runs!ad_sets_run_id_fkey(media_path, media)` as const;
 /** The studio's ad set: each variant with the pictures made for it, to choose again. */
 const AD_SET_STUDIO =
-  `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, variant_pictures!variant_pictures_variant_id_fkey(id, path, prompt, created_at, removed_at)), runs!ad_sets_run_id_fkey(media_path, media)` as const;
+  `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}, variant_pictures!variant_pictures_variant_id_fkey(id, path, prompt, created_at, removed_at)), runs!ad_sets_run_id_fkey(media_path, media)` as const;
 const POST =
   'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title)), brand_examples!brand_examples_post_id_fkey(place, removed_at)';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
@@ -77,6 +80,8 @@ const PICTURE_BUCKET = 'ad-pictures';
 /** Made AI videos, uploaded by n8n, and the first pictures they were asked from. */
 const AI_VIDEO_BUCKET = 'ai-videos';
 const VIDEO_REFS_BUCKET = 'video-refs';
+/** Reference pictures the team gives Higgsfield for a run's pictures and videos. */
+const RUN_REFS_BUCKET = 'run-refs';
 const AI_VIDEO = 'id, prompt, model, seconds, aspect, quality, sound, picture_path, credits, status, path, error, asked_at';
 /** The library shows the newest; older ones stay in the table, and in the month's credits. */
 const AI_VIDEOS = 60;
@@ -121,7 +126,7 @@ function refused(error: PostgrestError, fallback: string): Saved<never> {
  * picks. One that cannot be saved stops the run with the reason, as a start
  * that fails does.
  */
-async function saveRunOptions(supabase: Supabase, id: string, input: RunOptions): Promise<Saved<never> | null> {
+async function saveRunOptions(supabase: Supabase, id: string, input: RunOptions, credits: number | null = null): Promise<Saved<never> | null> {
   const unsaved = async (error: PostgrestError, what: string): Promise<Saved<never>> => {
     const { error: reportError } = await supabase.rpc('report_start_failure', { p_run_id: id, p_error: `${what} could not be saved, so the run did not start.` });
     if (reportError) console.error('Recording that the run could not start failed', reportError);
@@ -135,7 +140,38 @@ async function saveRunOptions(supabase: Supabase, id: string, input: RunOptions)
     const { error } = await supabase.rpc('set_run_pick_first', { p_run_id: id, p_on: true });
     if (error) return unsaved(error, 'That the run waits for your picks');
   }
+  if (input.media) {
+    const { media } = input;
+    const { error } = await supabase.rpc('set_run_media', {
+      p_run_id: id,
+      p_kind: media.kind,
+      p_references: media.references.map((r) => ({ path: r.path, ...(r.note ? { note: r.note } : {}) })),
+      ...(media.video && credits !== null ? { p_video: { ...media.video, credits } } : {}),
+    });
+    if (error) return unsaved(error, 'What the ads are made of');
+    // Higgsfield takes the references at once, so the run's first pictures need not wait a minute for them.
+    const pictures = media.references.length > 0 ? picturesConfig() : null;
+    if (pictures) await pingQueue(pictures);
+  }
   return null;
+}
+
+/**
+ * Higgsfield's price for one of a video run's videos, asked again here rather
+ * than taken from the page, before the run is recorded: a run it cannot price
+ * is not started. Null for a run that makes no video.
+ */
+async function runVideoCredits(input: RunOptions): Promise<Saved<number | null>> {
+  const video = input.media?.kind === 'video' ? input.media.video : undefined;
+  if (!video) return { ok: true, value: null, sample: false };
+  const price = await liveData.priceVideo(videoPriceRequest(video));
+  if (!price.ok) return { ok: false, status: price.status, error: `Higgsfield could not price the videos, so the run did not start: ${price.error}` };
+  // set_run_media holds the limit again; asked here, a run that would pass it is not recorded at all.
+  const budget = await liveData.getVideoBudget();
+  if (budget.spent + forTheRun(price.value.credits) > budget.cap) {
+    return { ok: false, status: 400, error: `Three videos at ${price.value.credits} credits would take this month past its Higgsfield limit of ${budget.cap} credits (${budget.spent} used). Pick a shorter or lower video, or raise the limit in Settings.` };
+  }
+  return { ok: true, value: price.value.credits, sample: false };
 }
 
 /** Hands n8n the stage a go-ahead returned. If n8n cannot be reached, the stage waits again and says why. */
@@ -234,15 +270,33 @@ const adSetById = cache(async (id: string) => {
     if (signError) console.error('Signing ad pictures failed', signError);
     for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
   }
-  return toAdSet(data, (path) => links.get(path));
+  // Each ad's made AI video plays from a link signed as the viewer, as a clip does.
+  const videoPaths = data.ad_variants.flatMap((v) => v.ai_videos.flatMap((a) => (a.status === 'ready' && a.path ? [a.path] : [])));
+  const videoLinks = new Map<string, string>();
+  if (videoPaths.length > 0) {
+    const { data: signed, error: signError } = await supabase.storage.from(AI_VIDEO_BUCKET).createSignedUrls(videoPaths, PLAY_SECONDS);
+    if (signError) console.error('Signing the ads\u2019 videos failed', signError);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) videoLinks.set(s.path, s.signedUrl);
+  }
+  return toAdSet(data, (path) => links.get(path), (path) => videoLinks.get(path));
 });
 
 // A page and its title both ask for the run; one query serves them.
 const runById = cache(async (id: string) => {
   if (!UUID.test(id)) return null;
-  const { data, error } = await (await db()).from('runs').select(RUN_WITH_EVENTS).eq('id', id).maybeSingle();
+  const supabase = await db();
+  const { data, error } = await supabase.from('runs').select(RUN_WITH_EVENTS).eq('id', id).maybeSingle();
   if (error) readFailed('the run', error);
-  return data ? toRun(data) : null;
+  if (!data) return null;
+  // The run page shows the reference pictures the team gave Higgsfield, signed as the viewer.
+  const paths = data.run_references.map((r) => r.path);
+  const links = new Map<string, string>();
+  if (paths.length > 0) {
+    const { data: signed, error: signError } = await supabase.storage.from(RUN_REFS_BUCKET).createSignedUrls(paths, PICTURE_SECONDS);
+    if (signError) console.error('Signing reference pictures failed', signError);
+    for (const s of signed ?? []) if (s.path && s.signedUrl) links.set(s.path, s.signedUrl);
+  }
+  return toRun(data, (path) => links.get(path));
 });
 
 // What is at work now: three small reads, each kept to what can still count
@@ -313,7 +367,7 @@ export const liveData: DataSource = {
     if (error) console.error('Signing the profile photo failed', error);
     return data?.signedUrl ? { ...user, photoUrl: data.signedUrl } : user;
   },
-  getRuns: async () => (await runRows()).map(toRun),
+  getRuns: async () => (await runRows()).map((row) => toRun(row)),
   getRun: (id) => runById(id),
   getCompetitors: () => competitors(),
   getCompetitor: async (id) => {
@@ -356,7 +410,7 @@ export const liveData: DataSource = {
   getActivity: () => activity(),
   getSearchIndex: async () => {
     const [c, s, a, r] = await Promise.all([competitors(), strategies(), adSets(), runRows()]);
-    return searchIndex(c, s, a, r.map(toRun));
+    return searchIndex(c, s, a, r.map((row) => toRun(row)));
   },
   getBrandProfile: () => brandProfile(),
   getBrandMemory: async () => {
@@ -379,9 +433,11 @@ export const liveData: DataSource = {
         if (found.error || found.data.some((f) => f.error)) return { ok: false, status: 400, error: 'A file in the video edit was not uploaded. Add it again.' };
       }
     }
+    const credits = await runVideoCredits(input);
+    if (!credits.ok) return credits;
     const { data: id, error } = await supabase.rpc('create_run', toCreateRunArgs(input, page));
     if (error) return refused(error, 'The run could not be saved.');
-    const unsaved = await saveRunOptions(supabase, id, input);
+    const unsaved = await saveRunOptions(supabase, id, input, credits.value);
     if (unsaved) return unsaved;
     const started = await startPipeline(pipeline, id, input.source.kind === 'custom' ? 'strategist' : 'tracker');
     if (!started.ok) {
@@ -396,6 +452,8 @@ export const liveData: DataSource = {
     const pipeline = pipelineConfig();
     if (!pipeline) return { ok: false, status: 503, error: 'The agents aren’t connected yet, so runs can’t start.' };
     const supabase = await db();
+    const credits = await runVideoCredits(input);
+    if (!credits.ok) return credits;
     const { data: id, error } = await supabase.rpc('start_run_from_ads', {
       p_report_id: input.reportId,
       p_ad_ids: input.adIds,
@@ -404,7 +462,7 @@ export const liveData: DataSource = {
       ...(input.title ? { p_title: input.title } : {}),
     });
     if (error) return refused(error, 'The run could not be saved.');
-    const unsaved = await saveRunOptions(supabase, id, input);
+    const unsaved = await saveRunOptions(supabase, id, input, credits.value);
     if (unsaved) return unsaved;
     // The tracker is skipped: the report is already there.
     const started = await startPipeline(pipeline, id, 'strategist');
@@ -435,6 +493,28 @@ export const liveData: DataSource = {
       return { ok: false, status: 500, error: 'The screenshot could not be removed.' };
     }
     return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That screenshot is in use or already gone.' };
+  },
+
+  createReferenceUpload: async (extension) => {
+    const viewer = await getViewer();
+    if (!viewer) return { ok: false, status: 401, error: 'Sign in again to upload.' };
+    const path = `refs/${viewer.id}/${crypto.randomUUID()}.${extension}`;
+    const { data, error } = await (await db()).storage.from(RUN_REFS_BUCKET).createSignedUploadUrl(path);
+    if (error) {
+      console.error('Signing a reference picture\u2019s upload link failed', error);
+      return { ok: false, status: 500, error: 'The reference picture could not be uploaded.' };
+    }
+    return { ok: true, value: { path, url: data.signedUrl }, sample: false };
+  },
+
+  deleteReference: async (path) => {
+    // Storage refuses (by its policy) a picture that is not the caller's or that a run uses.
+    const { data, error } = await (await db()).storage.from(RUN_REFS_BUCKET).remove([path]);
+    if (error) {
+      console.error('Removing a reference picture failed', error);
+      return { ok: false, status: 500, error: 'The reference picture could not be removed.' };
+    }
+    return data.length > 0 ? { ok: true, value: null, sample: false } : { ok: false, status: 404, error: 'That picture is in use or already gone.' };
   },
 
   saveVariant: async (variantId, edit) => {

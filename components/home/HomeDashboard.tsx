@@ -4,6 +4,7 @@ import { Workflow } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import type { RunWithStatus } from '@/lib/data';
+import type { MediaSetup } from '@/lib/run-media';
 import { dayKey } from '@/lib/format';
 import { postsByDay, postState } from '@/lib/posts';
 import type { ActivityItem, AdsSetting, Agent, Post, User } from '@/lib/types';
@@ -26,6 +27,7 @@ export function HomeDashboard({
   adsSource,
   activity,
   brand,
+  mediaSetup,
 }: {
   user: User;
   runs: RunWithStatus[];
@@ -38,6 +40,8 @@ export function HomeDashboard({
   /** What the agents are doing now, as the top bar reads it. */
   activity: ActivityItem[];
   brand: { name: string; website: string };
+  /** What the question after Start run needs to know. */
+  mediaSetup: MediaSetup;
 }) {
   // A day picked on the calendar: its posts and runs show under the calendar.
   const [day, setDay] = useState<string | null>(null);
@@ -53,7 +57,7 @@ export function HomeDashboard({
           <p className="lead">Your AI marketing team is ready.</p>
         </header>
 
-        <StartRunCard adsSource={adsSource} brand={brand} />
+        <StartRunCard adsSource={adsSource} brand={brand} mediaSetup={mediaSetup} />
 
         <section className="section" aria-labelledby="recent-runs">
           <div className="section-head">

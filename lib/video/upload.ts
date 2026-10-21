@@ -152,6 +152,29 @@ export async function removeShot(path: string): Promise<void> {
   await fetch('/api/competitor-shots', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
 }
 
+/** Uploads a reference picture for Higgsfield through a link /api/run-refs signs (run-refs, the teammate's own folder). */
+export async function uploadReference(file: Blob, onProgress: (share: number) => void, signal?: AbortSignal): Promise<Uploaded> {
+  const extension = (Object.keys(SHOT_TYPES) as ShotExtension[]).find((ext) => SHOT_TYPES[ext] === file.type);
+  if (!extension) throw new UploadError('Add a PNG, JPEG or WebP picture.');
+  const init: RequestInit = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: file.type, size: file.size }) };
+  if (signal) init.signal = signal;
+  const res = await fetch('/api/run-refs', init);
+  const body = (await res.json().catch(() => null)) as { path?: string; url?: string | null; sample?: boolean; error?: string } | null;
+  if (!res.ok || !body?.path) throw new UploadError(body?.error ?? 'The picture could not be uploaded.');
+  if (body.sample || !body.url) {
+    onProgress(1);
+    return { path: body.path, sample: true };
+  }
+  await put(body.url, file, `reference.${extension}`, 'picture', onProgress, signal);
+  onProgress(1);
+  return { path: body.path, sample: false };
+}
+
+/** Removes a reference picture taken away before its run started. Best effort. */
+export async function removeReference(path: string): Promise<void> {
+  await fetch('/api/run-refs', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }), keepalive: true }).catch(() => undefined);
+}
+
 /**
  * Uploads an AI video's first picture straight to Storage (video-refs, the
  * teammate's own folder), through a link the server signs as them.

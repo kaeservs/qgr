@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { StartRunCard } from '@/components/home/StartRunCard';
 import type { StartFromVideo, StartTab } from '@/components/home/StartRunCard';
 import { notesFor } from '@/lib/ai-video';
-import { getAiVideo, getFrameBrand, getTeamSettings } from '@/lib/data';
+import { getAiVideo, getFrameBrand, getTeamSettings, getVideoBudget, usingSampleData } from '@/lib/data';
+import { mediaSetup } from '@/lib/run-media';
 import { STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import styles from '@/components/runs/runs.module.css';
 
@@ -18,7 +19,7 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
   const url = typeof params.url === 'string' ? params.url : '';
   // More screenshots of a competitor known from screenshots: their name, ready.
   const shotsFor = typeof params.shots === 'string' ? params.shots.slice(0, 80) : undefined;
-  const [settings, video, brand] = await Promise.all([getTeamSettings(), typeof params.video === 'string' ? getAiVideo(params.video) : null, getFrameBrand()]);
+  const [settings, video, brand, budget] = await Promise.all([getTeamSettings(), typeof params.video === 'string' ? getAiVideo(params.video) : null, getFrameBrand(), getVideoBudget()]);
   // A finished AI video starts a run as if it were uploaded: the agents read what it shows, in words.
   const fromVideo: StartFromVideo | undefined =
     video?.status === 'ready' && video.url ? { url: video.url, name: `${video.title}.mp4`, title: video.title, notes: notesFor(video) } : undefined;
@@ -35,7 +36,7 @@ export default async function NewRunPage({ searchParams }: { searchParams: Promi
           <p className="lead">Start from a competitor (their website, an ad link or screenshots of their ads), or from your own content.</p>
         </div>
       </header>
-      <StartRunCard initialTab={shotsFor !== undefined ? 'competitor' : type} initialUrl={url} shotsFor={shotsFor} adsSource={settings.adsSource} fromVideo={fromVideo} brand={brand} />
+      <StartRunCard initialTab={shotsFor !== undefined ? 'competitor' : type} initialUrl={url} shotsFor={shotsFor} adsSource={settings.adsSource} fromVideo={fromVideo} brand={brand} mediaSetup={mediaSetup(settings, budget, usingSampleData())} />
       <section className={`card card-pad ${styles.howItWorks}`} aria-labelledby="how">
         <h2 id="how" className="card-title">
           How a run works

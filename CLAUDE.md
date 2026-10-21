@@ -48,7 +48,10 @@ strategist and the Content Agent can each be switched off, so a run waits for
 a person before them (Switches and scans below). A run can also ask, once
 Start run is pressed, to wait for the team's picks: the report's ads the
 strategy answers, then the strategy's angles the ads are written from, or
-"Use all" (Picking inside a run below).
+"Use all" (Picking inside a run below). The same question asks what the ads
+are made of: the drawn design, an AI picture for each ad or an AI video for
+each, with Higgsfield's price for the three, and up to four reference
+pictures Higgsfield keeps to (What the ads are made of below).
 
 A competitor run can also start from screenshots of their ads, which Claude
 reads; and any few of a report's ads, ticked on the competitor page, start a
@@ -85,9 +88,11 @@ X's ads APIs, which each need their own access.
             ── POST /api/uploads → a signed upload link; the clip goes straight to Storage
             ── POST /api/competitor-shots → a signed upload link for a screenshot of a competitor's ad
             ── a clip's words: heard in the browser (lib/speech.ts, public/speech/whisper-worker.js)
-            ── Start run → a question in the browser (RunQuestions) → POST /api/runs →
-               reads the run's link → create_run() → set_run_guidance() when the team
-               gave a direction → set_run_pick_first() when it picks first →
+            ── POST /api/run-refs → a signed upload link for a reference picture for Higgsfield
+            ── Start run → a question in the browser (RunQuestions, MediaChoice) → POST /api/runs →
+               reads the run's link → Higgsfield's price for a video run, asked again →
+               create_run() → set_run_guidance() when the team gave a direction →
+               set_run_pick_first() when it picks first → set_run_media() →
                POST the n8n webhook { runId, startAt }
             ── POST /api/post-media → a signed upload link for the file a post goes out with
             ── leads → server actions → update_lead_criteria(), set_leads_source(), set_lead_verdict(),
@@ -118,6 +123,8 @@ X's ads APIs, which each need their own access.
     n8n "QGR · Post results", every six hours → results_take_due() → each place's
         numbers from Meta or LinkedIn → results_record() or results_fail()
     n8n "QGR · Pictures", every minute and on POST /webhook/qgr-picture →
+        reference_take_due() → each run's reference picture → Higgsfield's
+        media_import_url → reference_ready(), reference_failed() or reference_release();
         picture_take_due() → each ad → picture_finish() or picture_fail(); on
         Higgsfield: its price → picture_higgsfield_begin() → sent once →
         picture_higgsfield_started(), _release(), _unknown() or _fail();
@@ -198,7 +205,7 @@ X's ads APIs, which each need their own access.
   `save_variant_words` (`save_variant` stays for pages opened before it),
   `approve_variant`, `save_video_edit`, `save_variant_design`, `update_brand_profile`,
   `update_brand_memory`, `add_brand_example`, `remove_brand_example`, `remember_post`,
-  `continue_run` and `report_continue_failure`, `set_run_pick_first`,
+  `continue_run` and `report_continue_failure`, `set_run_pick_first`, `set_run_media`,
   `continue_with_ads`, `continue_with_angles`, `schedule_post`,
   `cancel_post`, `retry_post`, `reschedule_post`, `request_picture`,
   `ask_for_picture`, `use_picture`, `stop_picture`, `remove_picture`,
@@ -215,7 +222,7 @@ X's ads APIs, which each need their own access.
   `start_due_scans`, `publisher_*`, `results_*`, `picture_*`,
   `prune_pictures`, `moments_*`, `leads_*`, `lead_judged`, `lead_judge_fail`,
   `video_take_due`, `video_started`, `video_release`, `video_unknown`,
-  `video_fail`, `video_take_making`, `video_finish`; the picture ones include
+  `video_fail`, `video_take_making`, `video_finish`, `reference_*`; the picture ones include
   `picture_release`, `picture_in_flight`, `picture_not_made`,
   `picture_higgsfield_*` and `picture_take_making`) is granted to the service
   role alone. The service role has no use of the private schema, so a helper
@@ -255,6 +262,11 @@ X's ads APIs, which each need their own access.
   `refs/{uploader}/{uuid}.{ext}`: a member reads any, uploads only into their
   own folder, and removes their own only while no video was asked from it.
   `ask_for_video` checks the picture is there.
+- A run's reference pictures for Higgsfield live in the private bucket
+  `run-refs` (10 MB; PNG, JPEG or WebP) at `refs/{uploader}/{uuid}.{ext}`: a
+  member reads any and uploads only into their own folder; the uploader
+  removes one only while no run names it (`run_references`). `set_run_media`
+  checks each is there.
 - The tests run every migration in PGlite, with stand-ins for Supabase's
   roles, `auth.uid()` and storage (`test/supabase.ts`):
   `supabase/access.test.ts` checks who can read and change what,
@@ -262,7 +274,8 @@ X's ads APIs, which each need their own access.
   `supabase/pictures.test.ts` the posts, the switches, the scan schedule and
   the pictures, `supabase/ai-videos.test.ts` AI video's asks, limit and
   retries, `supabase/higgsfield-pictures.test.ts` Higgsfield's pictures and
-  the limit they share with videos, `n8n/pipeline.test.ts` takes each kind of run through all three
+  the limit they share with videos, `supabase/run-media.test.ts` what a run's ads are made of, its
+  references and its per-ad videos, `n8n/pipeline.test.ts` takes each kind of run through all three
   agents' scripts against them, with Claude's answers as fixtures,
   `n8n/publisher.test.ts` a post, its results and a picture through their
   workflows, and `n8n/ai-video.test.ts` and `n8n/pictures-higgsfield.test.ts`
@@ -521,10 +534,10 @@ X's ads APIs, which each need their own access.
 
 ### Picking inside a run (`runs.pick_first`, the run page)
 
-- Start run asks one question before anything is saved (`RunQuestions`, a
-  dialog; Back keeps the form): straight through, or "Let me pick the ads and
-  angles" ("the angles" on a custom run or one from chosen ads, which have no
-  report of their own). Picking is kept as `runs.pick_first`, set by
+- Start run asks before anything is saved (`RunQuestions`, a dialog; Back
+  keeps the form): straight through, or "Let me pick the ads and angles"
+  ("the angles" on a custom run or one from chosen ads, which have no report
+  of their own); and what the ads are made of (below). Picking is kept as `runs.pick_first`, set by
   `set_run_pick_first` right after the run is created and only while no agent
   has started; Start over carries it.
 - `pipeline_next` holds such a run before the strategist when its own report
@@ -553,6 +566,62 @@ X's ads APIs, which each need their own access.
   each stage card says what it worked from.
 - Tested in `supabase/agents.test.ts` and end to end in
   `n8n/pipeline.test.ts`.
+
+### What the ads are made of (`runs.ai_media`, `run_references`)
+
+- The same question (`MediaChoice`, also in "Make ads from these") asks what
+  the ads are made of: the drawn design (the words on QGR's own artwork,
+  free), an AI picture for each ad, or an AI video for each ad. It starts on
+  what the team's picture switch would do. A run from a clip is not asked,
+  and `set_run_media` refuses it anything but the design: its ads are the
+  clip. A run nobody asked (a scheduled scan, a run from before) has no
+  answer (`ai_media` null) and follows the switch as before.
+- Up to four reference pictures, each uploaded at once to `run-refs`
+  through `/api/run-refs`, with a line on what it shows (120 characters):
+  the office, a project site, a brochure, a look. They are for pictures and
+  video only. The card keeps the answer and its uploads (`MediaDraft`), so
+  Back and a start that fails keep them; Start over carries them, pricing a
+  video again (`answerOf`).
+- The question shows Higgsfield's price for the three ads, asked as Settings
+  asks it (nothing is made), with what this month's limit still allows and
+  what is left on the plan; the sample data prices nothing. Pictures: GPT
+  Image 2.5 at the team's quality whenever the run has references (the other
+  models take none, `picturesBy`), else the team's model (Cloudflare's free,
+  or the stand-in, which makes none and says so). Video: Seedance 2.0 Mini,
+  silent, from no first picture, at a length (4, 5, 8, 10 or 15 s), 480p or
+  720p and a shape the team picks; only while AI video is on. References do
+  not change either price (measured 2026-10-20).
+- The server asks a video run's price again before the run is recorded, and
+  refuses one that would take the month past the limit; `set_run_media`
+  keeps the answer, the references and the price (`runs.ai_video`) and
+  holds the limit again. It is set right after the run is created, only
+  while no agent has started, and the pictures workflow is pinged so the
+  references reach Higgsfield at once.
+- "QGR · Pictures" imports each reference into Higgsfield once
+  (`reference_take_due`, `media_import_url`, free; `reference_ready` keeps
+  its media id), through a link Storage signs for 15 minutes. One Higgsfield
+  could not be reached for is taken again, three tries at most; one it
+  refused is marked failed, and the run goes on without it. Pictures and
+  videos of a run wait while any of its references is still waiting, then
+  every one is sent with the ready ones as `image_references`; a picture
+  ask then goes to Higgsfield whatever the team's model.
+- The Content Agent is told the references by number and what each shows,
+  and names them in its prompts ("reference 1"). On a video run it also
+  writes each ad's `video_prompt` (one continuous shot, for the run's length
+  and shape), and as each ad is saved a trigger asks Higgsfield for its video
+  (`ai_videos.variant_id`), held to the month's limit: one that would pass it
+  is recorded as not asked, and the run says so. A video run asks for no
+  pictures. Without references or a video run every request is as before
+  (`n8n/code.test.ts`).
+- The run page says what the ads are made of and shows the references with
+  where each stands. In the studio each ad of a video run says while its
+  video is being made (the page re-reads), or why it was not, and stays the
+  drawn design meanwhile; once made, the video is the ad's clip
+  (`clipOfVideo`): it previews, edits (`save_video_edit` holds the edit to
+  its length) and posts as a clip run's do.
+- Tested in `lib/run-media.test.ts`, `supabase/run-media.test.ts` and the
+  n8n tests above; the sample data has a video run with a reference
+  (`r-1046`), its ads' videos ready, being made and refused.
 
 ### Posting (`posts`, `post_targets`, "QGR · Publisher")
 
@@ -672,9 +741,10 @@ X's ads APIs, which each need their own access.
   scene only: no words, the brand's colours, no identifiable people, no
   flags). The studio's Picture dialog (`PictureDialog`) shows it to edit and
   makes a picture from what is written there (`ask_for_picture`: the prompt
-  becomes the variant's, up to 1,200 characters); with the team's switch on
-  (Settings, Agents), every new ad asks for one as it is saved (a trigger on
-  `ad_variants`). The Content Agent makes none itself: a picture takes its
+  becomes the variant's, up to 1,200 characters). Every new ad asks for one as
+  it is saved (a trigger on `ad_variants`) when its run asked for AI pictures
+  at Start run, or, on a run nobody asked, while the team's switch is on
+  (Settings, Agents). The Content Agent makes none itself: a picture takes its
   own time, and a run should neither wait for one nor fail with it.
 - Every picture made for a variant is kept to choose again (`variant_pictures`,
   newest first, eight a variant): the dialog shows them, and picking one shows
@@ -696,7 +766,8 @@ X's ads APIs, which each need their own access.
   `picture_fail` keeps the reason.
 - The image model is the team's choice in Settings, Agents (`pictures_model`,
   `set_pictures_model`): the stand-in, Cloudflare Workers AI's FLUX.1
-  schnell on the account named there, or Higgsfield (below). "Real pictures?" sends a Cloudflare ask
+  schnell on the account named there, or Higgsfield (below); a run with
+  reference pictures has Higgsfield make its pictures whatever the choice. "Real pictures?" sends a Cloudflare ask
   through "Write the prompt" (the scene, then the brand's picture style, then
   the rules: no text, no real or identifiable people, no flags; 2,048
   characters at most, only an agent's long scene is shortened), the call
@@ -926,8 +997,10 @@ X's ads APIs, which each need their own access.
 - n8n asks Higgsfield through its MCP (`mcp.higgsfield.ai`), signed in with
   the team's own Higgsfield account: not the API, which bills separately. The
   MCP always spends the plan's credits, Unlimited or not (Higgsfield's
-  Unlimited applies on its own site only), so every video costs. Only a
-  person's Generate makes one, never a run.
+  Unlimited applies on its own site only), so every video costs. A video is
+  made only when a person asks: Generate here, or AI video chosen at Start
+  run, priced there, one for each of the run's ads (What the ads are made of
+  above).
 - Higgsfield's price shows before Generate. The page asks for it a moment
   after each change (`priceVideoAction` → "Price", `generate_video` with
   `get_cost`, which makes nothing and spends nothing, measured: 280 credits
@@ -992,7 +1065,8 @@ X's ads APIs, which each need their own access.
 - A finished video starts a run as if it were uploaded (`/runs/new?video=…`):
   the start card fetches it into the clip field, which cuts and uploads it as
   any clip, and the notes start with what it shows (`notesFor`), since it has
-  no speech. A run never waits on a generation.
+  no speech. A run never waits on a generation: on a video run, the ads are
+  written first and each one's video follows.
 - The sample data has one video, the sample clip, marked "Sample video";
   there Generate stays off and nothing is priced.
 
@@ -1092,10 +1166,11 @@ X's ads APIs, which each need their own access.
     (`unknown`) is never sent again by itself: a person checks the Page, then
     sends it again or dismisses it.
 12. **Higgsfield's credits are spent knowingly, and once.** A video is made
-    only by a person's Generate, never a run; a picture only when someone
-    asks, or the team's switch asks for every new ad. Each is priced by
-    Higgsfield first and held to the month's one limit; an ask whose answer
-    was lost (`unknown`) is never sent again by itself.
+    only when a person asks: their Generate, or AI video chosen at Start run,
+    priced there for the run's three ads; a picture only when someone asks,
+    the run asked for AI pictures, or the team's switch asks for every new
+    ad. Each is priced by Higgsfield first and held to the month's one limit;
+    an ask whose answer was lost (`unknown`) is never sent again by itself.
 
 ## Design
 

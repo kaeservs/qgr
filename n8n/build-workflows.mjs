@@ -1067,6 +1067,7 @@ export default workflow('qgr-post-results', 'QGR · Post results')
 
 const pictureAsk = `{ variant_id: 'variant-id', label: 'A', prompt: 'A calm skyline at dusk, indigo and gold. No words, no people, no flags.', style: 'arcs', look: 'Warm natural light, indigo and gold accents.', model: 'stand-in', account: null, quality: 'low', path: 'pictures/variant-id/picture-id.png' }`;
 const pictureJob = `{ id: 'sent-id', variant_id: 'variant-id', job_id: 'job-id', path: 'pictures/variant-id/picture-id.png' }`;
+const referenceAsk = `{ id: 'reference-id', run_id: 'run-id', position: 0, path: 'refs/user-id/picture-id.png' }`;
 /** Cloudflare Workers AI's FLUX.1 schnell, on the account the team names in Settings. */
 const CLOUDFLARE_AI = 'https://api.cloudflare.com/client/v4/accounts';
 /** A picture script with what it shares in front: the words to draw, Higgsfield's answers, or both. */
@@ -1167,6 +1168,31 @@ ${rpcNode('recordStarted', 'Record: Higgsfield has it', 'picture_higgsfield_star
 ${rpcNode('recordNotMade', 'Record: not made', 'picture_higgsfield_fail', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 ${rpcNode('recordRetry', 'Record: try again', 'picture_higgsfield_release', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 ${rpcNode('recordUnknown', 'Record: may have been made', 'picture_higgsfield_unknown', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+
+// ---- a run's reference pictures, given to Higgsfield once
+${rpcNode('takeRefs', 'Take the references for Higgsfield', 'reference_take_due', '{{ JSON.stringify({ p_limit: 8 }) }}', referenceAsk, "\n    executeOnce: true,")}
+${codeNode('eachRef', 'One item per reference', code('shared-items.js'), referenceAsk)}
+${callNode('signRef', 'Sign the reference', {
+  method: 'POST',
+  url: `expr('${SUPABASE_STORAGE}/object/sign/run-refs/{{ $json.path }}')`,
+  auth: 'supabaseApi',
+  json: '{{ JSON.stringify({ expiresIn: 900 }) }}',
+  timeout: 30000,
+  credentials: "{ supabaseApi: newCredential('Supabase QGR') }",
+  output: `{ statusCode: 200, body: { signedURL: '/object/sign/run-refs/refs/user-id/picture-id.png?token=t' } }`,
+})}
+${codeNode('refLink', 'Reference link', code('references-link.js'), `{ id: 'reference-id', url: '${SUPABASE_STORAGE}/object/sign/run-refs/refs/user-id/picture-id.png?token=t' }`)}
+${ifTrue('refLinked', 'Reference link made?', '{{ typeof $json.url === "string" && $json.url.length > 0 }}')}
+${higgsfieldNode('importRef', 'Higgsfield: take the reference', 'media_import_url', '{{ JSON.stringify({ url: $json.url }) }}', `{ structuredContent: { media_id: 'media-id' } }`)}
+${codeNode('readRef', "Read the reference's id", videoCode('references-read.js'), `{ kind: 'ready', id: 'reference-id', media_id: 'media-id' }`)}
+${routeNode('refOutcome', 'Reference taken?', [
+  ['ready', '{{ $json.kind === "ready" }}'],
+  ['failed', '{{ $json.kind === "failed" }}'],
+  ['retry', '{{ $json.kind === "retry" }}'],
+])}
+${rpcNode('refReady', 'Record: Higgsfield has the reference', 'reference_ready', '{{ JSON.stringify({ p_id: $json.id, p_media_id: $json.media_id }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('refFailed', 'Record: the reference was refused', 'reference_failed', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
+${rpcNode('refRetry', 'Record: try the reference again', 'reference_release', '{{ JSON.stringify({ p_id: $json.id, p_error: $json.error }) }}', '{}', "\n    onError: 'continueRegularOutput',")}
 
 // ---- Higgsfield's jobs: checked until the picture is stored
 ${rpcNode('takeMaking', 'Take the pictures being made', 'picture_take_making', '{{ JSON.stringify({ p_limit: 10 }) }}', pictureJob, "\n    executeOnce: true,")}
@@ -1315,6 +1341,7 @@ const removePicture = node({
 
 const noteFlow = sticky('## Pictures\\nAt once when someone asks in the studio, and every minute for the ads that asked by themselves (the team\\'s switch in Settings, Agents), the database hands over the ads waiting for a picture (**picture_take_due**, claimed so two runs never make the same one; a claim lost for ten minutes is taken again, three times at most), each with its prompt, the brand\\'s picture style, the team\\'s image model and quality, and the path to upload to. The answer is recorded (**picture_finish** or **picture_fail**): the studio shows the picture under the ad\\'s words and keeps it with the variant\\'s others to choose again, and takes an approval back, since the ad changed. Past the eight a variant keeps, the oldest it does not show is removed from Storage.', [everyMinute, makeNow, takeDue, eachAsk], { color: 4 });
 const noteHiggsfield = sticky('## Higgsfield\\nWith pictures set to Higgsfield in Settings, Agents, each ask goes to **GPT Image 2.5** (square, 1k, the team\\'s quality) through Higgsfield\\'s MCP with the **Higgsfield** credential, signed in with the team\\'s own account: every picture spends the plan\\'s credits. Its price is asked first (**get_cost**, which makes nothing) and recorded against the month\\'s Higgsfield limit (**picture_higgsfield_begin**, shared with AI video); past the limit nothing is sent and the studio says why.\\n\\nA picture is sent once. Not reached at all, it waits for the next minute (three tries). Refused, nothing was made. Any other trouble after sending is **unknown**: never sent again by itself, a person checks Higgsfield\\'s history. Jobs are checked every minute (**picture_take_making**); a finished one\\'s file is fetched, typed by what it is, stored in ad-pictures and recorded (**picture_higgsfield_finish**).', [onHiggsfield, higgsRequest, higgsPricePicture, readPicturePrice, priced, begin, begun, releaseAsk, pictureRequest, makePicture, readStart, whatHappened, takeMaking, eachJob, jobStatus, readJob, howIsItGoing, download, readFile, aPicture, store, stored, inStorage, recordHiggsfield], { color: 6 });
+const noteReferences = sticky('## Reference pictures\\nA run can carry up to four reference pictures the team uploaded (bucket **run-refs**). Every minute the database hands over those Higgsfield does not have yet (**reference_take_due**, claimed so two runs never take the same one; three tries at most). Each is signed for 15 minutes and given to Higgsfield (**media_import_url**, which costs nothing), and its media id is kept (**reference_ready**). Every picture and video of the run then goes with those ids as image_references; a run\\'s pictures and videos wait until its references are in. Refused, the run goes on without that one and says why (**reference_failed**); not reached, it is taken again (**reference_release**).', [takeRefs, eachRef, signRef, refLink, refLinked, importRef, readRef, refOutcome, refReady, refFailed, refRetry], { color: 2 });
 const notePrice = sticky('## Price\\nSettings and the studio ask what one picture costs at a quality before any is made: **generate_image** with **get_cost**, which makes nothing, and the credits left on the plan.', [priceIt, priceRequest, higgsPrice, readPrice, higgsBalance, answer, respond], { color: 7 });
 const noteCloudflare = sticky('## Cloudflare Workers AI\\nWith pictures set to Cloudflare in Settings, Agents (with the account ID there), each ask goes to **FLUX.1 schnell**: the scene, the brand\\'s picture style from brand memory, and the rules (no words, no real people, no flags), 2,048 characters at most. The picture is read by its bytes, uploaded to ad-pictures with the **Supabase QGR** credential, and recorded.\\n\\nThe token: create a **Bearer Auth** credential named **Cloudflare Workers AI** holding an API token made from Cloudflare\\'s Workers AI template, then attach it to **Cloudflare: FLUX.1 schnell**. Until then that step does not run and the studio says why.\\n\\nFree: 10,000 neurons a day, about 170 pictures at 1024×1024. On Cloudflare\\'s free plan nothing is charged: past that a picture fails and says so until 00:00 UTC.', [realPictures, writePrompt, cloudflare, readPicture, gotPicture, toFile, upload, uploaded], { color: 5 });
 const noteStandIn = sticky('## Stand-in\\nThe way taken while pictures are set to the stand-in (Settings, Agents). It makes nothing and says so: the studio says no picture was made, and the variant keeps what it shows. Its output is the shape the real way answers in: { ok: true, variant_id, path, stand_in }, or { ok: false, variant_id, error }.', [imageModel], { color: 3 });
@@ -1343,6 +1370,15 @@ export default workflow('qgr-pictures', 'QGR · Pictures')
   .add(imageModel)
   .to(made.onTrue(finish.to(pictureToRemove.onTrue(removePicture))).onFalse(fail))
   .add(everyMinute)
+  .to(takeRefs)
+  .add(makeNow)
+  .to(takeRefs)
+  .add(takeRefs)
+  .to(eachRef)
+  .to(signRef)
+  .to(refLink)
+  .to(refLinked.onTrue(importRef.to(readRef).to(refOutcome.onCase(0, refReady).onCase(1, refFailed).onCase(2, refRetry))).onFalse(refRetry))
+  .add(everyMinute)
   .to(takeMaking)
   .add(makeNow)
   .to(takeMaking)
@@ -1353,6 +1389,7 @@ export default workflow('qgr-pictures', 'QGR · Pictures')
   .to(howIsItGoing.onCase(0, download.to(readFile).to(aPicture.onCase(0, store.to(stored).to(inStorage.onTrue(recordHiggsfield.to(pictureToRemove)))).onCase(1, recordNotMade))).onCase(1, recordNotMade).onCase(2, recordUnknown))
   .add(noteFlow)
   .add(noteHiggsfield)
+  .add(noteReferences)
   .add(notePrice)
   .add(noteCloudflare)
   .add(noteStandIn);

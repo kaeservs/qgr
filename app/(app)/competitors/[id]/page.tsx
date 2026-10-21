@@ -7,7 +7,8 @@ import { ChooseAds } from '@/components/competitors/ChooseAds';
 import { TrackedSwitch } from '@/components/competitors/TrackedSwitch';
 import { Avatar } from '@/components/ui/Avatar';
 import { PlatformIcon, PlatformIcons } from '@/components/ui/PlatformIcon';
-import { getCompetitor, getNow, getStrategyForCompetitor } from '@/lib/data';
+import { getCompetitor, getNow, getStrategyForCompetitor, getTeamSettings, getVideoBudget, usingSampleData } from '@/lib/data';
+import { mediaSetup } from '@/lib/run-media';
 import { timeAgo } from '@/lib/format';
 import { PLATFORM_LABEL } from '@/lib/platforms';
 import styles from '@/components/competitors/competitors.module.css';
@@ -23,7 +24,7 @@ const FORMAT = { video: 'Video', image: 'Image', carousel: 'Carousel', document:
 
 export default async function CompetitorPage({ params }: Props) {
   const { id } = await params;
-  const [c, now, strategy] = await Promise.all([getCompetitor(id), getNow(), getStrategyForCompetitor(id)]);
+  const [c, now, strategy, settings, budget] = await Promise.all([getCompetitor(id), getNow(), getStrategyForCompetitor(id), getTeamSettings(), getVideoBudget()]);
   if (!c) notFound();
 
   // Ranked by how long they have run; one whose days are not known (a screenshot rarely shows them) comes after.
@@ -196,7 +197,7 @@ export default async function CompetitorPage({ params }: Props) {
           {c.dataSource === 'apify' && <span className="muted small">Active in Meta’s Ad Library, read through Apify</span>}
           {shots && <span className="muted small">Each as its screenshot, with the words the tracker read from it</span>}
         </div>
-        <ChooseAds competitor={c.name} reportId={c.reportId} ads={c.examples} />
+        <ChooseAds competitor={c.name} reportId={c.reportId} ads={c.examples} mediaSetup={mediaSetup(settings, budget, usingSampleData())} />
       </section>
     </div>
   );
