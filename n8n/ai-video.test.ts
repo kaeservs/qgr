@@ -235,6 +235,17 @@ describe('Higgsfield’s real answers, from the first video made (2026-10-20)', 
     expect(read(generation('in_progress'))).toEqual({ kind: 'waiting', id: 'video-1' });
     expect(read(generation('completed', { rawUrl: RAW }))).toEqual({ kind: 'done', id: 'video-1', path: 'videos/video-1.mp4', url: RAW });
   });
+
+  it('takes the video it made, never a reference picture its answer echoes back', () => {
+    const jobs = [{ id: 'video-1', job_id: JOB, path: 'videos/video-1.mp4' }];
+    const reference = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3KvMOcHKA9JTv89W2IDT4vG0Bc5/bde54508-a2ad-4d64-9842-deeea37615ce.png';
+    const withReference = { ...params, medias: [{ role: 'image', data: { id: 'bde54508-a2ad-4d64-9842-deeea37615ce', type: 'media_input', url: reference } }] };
+    const answer = (results: Json) => ({ structuredContent: { generation: { id: JOB, type: 'video', status: 'completed', model: 'seedance_2_0_mini', params: withReference, results } }, content: [] });
+    expect(runAll('video-read-job.js', [answer({ rawUrl: RAW })], { 'One item per job': jobs })[0]).toEqual({ kind: 'done', id: 'video-1', path: 'videos/video-1.mp4', url: RAW });
+    // Even a made file whose link does not end in .mp4 wins over the reference.
+    const plain = 'https://cdn.higgsfield.ai/jobs/b2b3238f/output';
+    expect(runAll('video-read-job.js', [answer({ url: plain })], { 'One item per job': jobs })[0]).toEqual({ kind: 'done', id: 'video-1', path: 'videos/video-1.mp4', url: plain });
+  });
 });
 
 describe('a job, until its video is stored', () => {

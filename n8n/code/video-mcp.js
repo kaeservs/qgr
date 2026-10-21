@@ -137,20 +137,25 @@ function jobStatus(answer) {
   return (findString(answer, ['status', 'state'], 0) || '').toLowerCase();
 }
 
-/** Every https link in an answer, at any depth. */
-function allLinks(value, out, depth) {
-  out = out || [];
-  depth = depth || 0;
-  if (depth > 6 || value === null || value === undefined) return out;
-  if (typeof value === 'string') {
-    if (/^https:\/\/\S+$/.test(value)) out.push(value);
-    return out;
-  }
-  if (typeof value === 'object') {
-    const inner = Array.isArray(value) ? value : Object.keys(value).map(function (k) { return value[k]; });
-    inner.forEach(function (v) { allLinks(v, out, depth + 1); });
-  }
-  return out;
+/**
+ * The links to what a job made, its rawUrl first. Never one from params,
+ * where Higgsfield echoes the request with the pictures it was given (a
+ * reference's link would pass for the result: it did on 2026-10-21), nor the
+ * small minUrl preview.
+ */
+function madeLinks(answer) {
+  const raw = [];
+  const rest = [];
+  (function walk(value, key, depth) {
+    if (depth > 6 || value === null || value === undefined || key === 'params' || key === 'minUrl') return;
+    if (typeof value === 'string') {
+      if (/^https:\/\/\S+$/.test(value)) (key === 'rawUrl' ? raw : rest).push(value);
+      return;
+    }
+    if (Array.isArray(value)) value.forEach(function (v) { walk(v, key, depth + 1); });
+    else if (typeof value === 'object') Object.keys(value).forEach(function (k) { walk(value[k], k, depth + 1); });
+  })(answer, '', 0);
+  return raw.concat(rest);
 }
 
 /** Why a job failed, as plainly as Higgsfield says it. */

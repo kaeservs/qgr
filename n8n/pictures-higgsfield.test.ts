@@ -263,6 +263,31 @@ describe('Higgsfield’s real answers, from the first picture made (2026-10-20)'
     expect(read(generation('completed', { rawUrl: raw, minUrl: `${CDN}/hf_20261020_181252_${JOB}_min.webp` }))).toEqual({ kind: 'done', id: 'sent-1', path: jobs[0]!.path, url: raw });
   });
 
+  it('takes the picture it made, never the reference picture its answer echoes back', () => {
+    // Higgsfield's answer for a picture sent with a reference (2026-10-21), trimmed of the prompt:
+    // params echo the request, the reference's link first; results hold what was made.
+    const job = '7104c8e0-5a0b-44f7-94fb-2cc144d960c0';
+    const made = `${CDN}/hf_20261021_074058_${job}.png`;
+    const reference = 'https://d2ol7oe51mr4n9.cloudfront.net/user_3KvMOcHKA9JTv89W2IDT4vG0Bc5/bde54508-a2ad-4d64-9842-deeea37615ce.png';
+    const answer = {
+      structuredContent: {
+        generation: {
+          id: job,
+          type: 'image',
+          status: 'completed',
+          model: 'gpt_image_2_5',
+          params: { prompt: 'A photograph of one person seen from behind.', aspect_ratio: '1:1', medias: [{ role: 'image', data: { id: 'bde54508-a2ad-4d64-9842-deeea37615ce', type: 'media_input', url: reference } }], width: 1024, height: 1024, quality: 'low', resolution: '1k', model: 'flare' },
+          results: { rawUrl: made, minUrl: `${CDN}/hf_20261021_074058_${job}_min.webp` },
+          createdAt: 1792568458.413845,
+          liked: false,
+        },
+      },
+      content: [{ type: 'text', text: `Job ${job} — completed\n${made}` }],
+    };
+    const jobs = [{ id: 'sent-1', job_id: job, path: `pictures/${VARIANT}/4855bd63-7bfe-43a5-a2a8-fa363681572e.png` }];
+    expect(runJson('pictures-higgsfield-job.js', [answer], { 'One item per job': jobs })[0]).toEqual({ kind: 'done', id: 'sent-1', path: jobs[0]!.path, url: made });
+  });
+
   it('stores the PNG it fetched as a PNG', () => {
     const done = [{ id: 'sent-1', path: `pictures/${VARIANT}/c5049290-2ed7-49b9-9e4c-9e47f8210b57.png`, url: raw }];
     const [file] = run('pictures-higgsfield-file.js', [{ json: {}, binary: { data: { mimeType: 'image/png' } } }], { "Read the picture's job": done });

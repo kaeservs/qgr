@@ -4,9 +4,9 @@
 //   waiting  -> nothing yet: checked again at the next run
 // A job Higgsfield no longer knows is left to a person (unknown).
 
-/** The picture's own link: one ending as a picture does, else the first. */
+/** The picture's own link: one ending as a picture does, else the first it made. */
 function pictureLink(answer) {
-  const all = allLinks(answer);
+  const all = madeLinks(answer);
   return all.filter(function (u) { return /\.(png|jpe?g|webp)(\?|$)/i.test(u); })[0] || all[0] || '';
 }
 

@@ -4,9 +4,9 @@
 //   waiting  -> nothing yet: asked again in a minute or so
 // A job Higgsfield no longer knows is left to a person (unknown).
 
-/** The video's own link: an .mp4 first, else one that says video, else the first. */
+/** The video's own link: an .mp4 first, else one that says video, else the first it made. */
 function videoLink(answer) {
-  const all = allLinks(answer);
+  const all = madeLinks(answer);
   return all.filter(function (u) { return /\.mp4(\?|$)/i.test(u); })[0] || all.filter(function (u) { return /video/i.test(u); })[0] || all[0] || '';
 }
 
