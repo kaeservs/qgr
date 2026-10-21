@@ -34,7 +34,7 @@ type Shown = Moment & { savedAt: string };
 const shown = (m: Moment): Shown => ({ ...m, savedAt: key(m) });
 
 /** A moment's words being written: its title, description (why it works) and hook. */
-type Draft = { key: string; title: string; why: string; hook: string };
+type Draft = { /** The lines the moment is kept at (`savedAt`). */ key: string; title: string; why: string; hook: string };
 
 type Making = { key: string; label: string } | null;
 
@@ -60,6 +60,8 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
   const [moments, setMoments] = useState<Shown[]>(() => video.moments.map(shown));
   const [draft, setDraft] = useState<Draft | null>(null);
   const [savingMoment, setSavingMoment] = useState<string | null>(null);
+  // What went wrong with one moment, shown beside it rather than in the Make ads panel: by the lines it is kept at.
+  const [momentError, setMomentError] = useState<{ at: string; text: string } | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [platforms, setPlatforms] = useState<Platform[]>(['meta', 'linkedin']);
   const [goal, setGoal] = useState<Goal>('consultations');
@@ -138,6 +140,9 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
 
   function change(m: Shown, next: Moment) {
     if (next === m) return;
+    // Two moments never share their lines: a nudge onto another's stops there.
+    if (moments.some((x) => x !== m && key(x) === key(next))) return setMomentError({ at: m.savedAt, text: 'Another moment already starts and ends there.' });
+    setMomentError(null);
     setMoments((list) => list.map((x) => (x === m ? { ...next, savedAt: m.savedAt } : x)));
     setPicked((set) => {
       if (!set.has(key(m))) return set;
@@ -163,28 +168,33 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     const [a, b] = own.first <= own.last ? [own.first, own.last] : [own.last, own.first];
     const m = momentOf(video.transcript, a, b);
     if (!m) return;
-    if (momentSeconds(m) > MAX_MOMENT_SECONDS) return setError('Keep a moment to two and a half minutes or less: it becomes an ad.');
-    if (moments.some((x) => key(x) === key(m))) return setError('That moment is already in the list.');
-    setError(null);
+    // Said under the transcript's own bar, where the moment is being made.
+    const refuse = (text: string) => setMomentError({ at: 'own', text });
+    if (momentSeconds(m) > MAX_MOMENT_SECONDS) return refuse('Keep a moment to two and a half minutes or less: it becomes an ad.');
+    if (moments.some((x) => key(x) === key(m))) return refuse('That moment is already in the list.');
+    setMomentError(null);
     setSavingMoment(key(m));
     const saved = await saveMomentAction(video.id, { was: null, first: m.first, last: m.last, title: m.title, why: '', hook: '' });
     setSavingMoment(null);
-    if (!saved.ok) return setError(saved.error);
+    if (!saved.ok) return refuse(saved.error);
     setMoments((list) => [...list, shown(m)]);
     setPicked((set) => new Set(set).add(key(m)));
     setOwn({ first: null, last: null });
-    setDraft({ key: key(m), title: m.title, why: '', hook: '' });
+    setDraft({ key: key(m), title: m.title, why: '', hook: '' }); // a new moment is kept at its own lines
     router.refresh();
   }
 
   /** Saves a moment as it stands on the board: its lines (nudged or not) and its words, the draft's when it is being written. */
   async function saveMoment(m: Shown, words: { title: string; why: string; hook: string } = { title: m.title, why: m.why ?? '', hook: m.hook ?? '' }) {
-    setError(null);
+    setMomentError(null);
     setSavingMoment(key(m));
     const saved = await saveMomentAction(video.id, { was: linesOf(m.savedAt), first: m.first, last: m.last, ...words });
     setSavingMoment(null);
-    if (!saved.ok) return setError(saved.error);
-    setMoments((list) => list.map((x) => (x === m ? { ...x, title: words.title.replace(/\s+/g, ' ').trim(), why: words.why.trim() || null, hook: words.hook.trim() || null, source: 'team', savedAt: key(m) } : x)));
+    if (!saved.ok) return setMomentError({ at: m.savedAt, text: saved.error });
+    const updated: Shown = { ...m, title: words.title.replace(/\s+/g, ' ').trim(), why: words.why.trim() || null, hook: words.hook.trim() || null, source: 'team', savedAt: key(m) };
+    // One that ads were made from keeps its lines: moved, it stays as it was and the new lines are another moment.
+    const original = m.runIds.length > 0 && m.savedAt !== key(m) ? video.moments.find((v) => key(v) === m.savedAt) : undefined;
+    setMoments((list) => list.flatMap((x) => (x === m ? (original ? [shown(original), { ...updated, runIds: [] }] : [updated]) : [x])));
     setDraft(null);
     toast(saved.sample ? 'Saved for this session' : 'Moment saved');
     router.refresh();
@@ -195,7 +205,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     setSavingMoment(key(m));
     const saved = await removeMomentAction(video.id, linesOf(m.savedAt).first, linesOf(m.savedAt).last);
     setSavingMoment(null);
-    if (!saved.ok) return setError(saved.error);
+    if (!saved.ok) return setMomentError({ at: m.savedAt, text: saved.error });
     setMoments((list) => list.filter((x) => x !== m));
     setPicked((set) => {
       const copy = new Set(set);
@@ -254,7 +264,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     try {
       const cut = await cutOf(m, (what) => setMaking({ key: key(m), label: `${m.title}: ${what}` }));
       const edit = edits.get(key(m));
-      setEditing({ key: key(m), clip: { path: '', ...cut.clip, ...(edit ? { edit } : {}) }, url: URL.createObjectURL(cut.blob) });
+      setEditing({ key: key(m), clip: { path: '', ...cut.clip, name: clipName(m, cut), ...(edit ? { edit } : {}) }, url: URL.createObjectURL(cut.blob) });
     } catch (err) {
       setError(`${m.title}: ${err instanceof Error ? err.message : 'the clip could not be made.'}`);
     } finally {
@@ -262,8 +272,18 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
     }
   }
 
-  async function makeOne(m: Moment): Promise<string> {
+  /** The clip's name from the titles as they are now: a cut is kept by its lines, and the moment or the video may have been renamed since. */
+  const clipName = (m: Moment, cut: Cut) => `${video.title} · ${m.title}.${cut.extension}`;
+
+  async function makeOne(m: Shown): Promise<string> {
     const label = (what: string) => setMaking({ key: key(m), label: `${m.title}: ${what}` });
+    // A moment moved here and not saved is saved first, so its run is kept on it, with its words, and the board stays one card a moment.
+    if (m.savedAt !== key(m)) {
+      label('saving its new start and end');
+      const saved = await saveMomentAction(video.id, { was: linesOf(m.savedAt), first: m.first, last: m.last, title: m.title, why: m.why ?? '', hook: m.hook ?? '' });
+      if (!saved.ok) throw new Error(saved.error);
+      setMoments((list) => list.map((x) => (x === m ? { ...x, source: 'team', savedAt: key(m) } : x)));
+    }
     const cut = await cutOf(m, label);
     const edit = edits.get(key(m));
 
@@ -282,7 +302,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
         source: {
           kind: 'custom',
           type: 'video',
-          clip: { path: up.path, ...cut.clip, ...(edit ? { edit } : {}) },
+          clip: { path: up.path, ...cut.clip, name: clipName(m, cut), ...(edit ? { edit } : {}) },
           notes,
         },
         platforms,
@@ -446,7 +466,8 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
           const k = key(m);
           const length = momentSeconds(m);
           const moved = k !== m.savedAt;
-          const writing = draft?.key === k ? draft : null;
+          // The draft follows the moment it was opened on, through a nudge, by the lines it is kept at.
+          const writing = draft?.key === m.savedAt ? draft : null;
           const saving = savingMoment === k;
           return (
             <article key={k} className={cx('card', styles.moment, picked.has(k) && styles.momentOn)}>
@@ -502,7 +523,7 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
                     <div className={styles.momentTop}>
                       <h3 className={styles.momentTitle}>{m.title}</h3>
                       {m.source === 'team' && <span className="pill pill-quiet pill-sm">Yours</span>}
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraft({ key: k, title: m.title, why: m.why ?? '', hook: m.hook ?? '' })} disabled={savingMoment !== null}>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDraft({ key: m.savedAt, title: m.title, why: m.why ?? '', hook: m.hook ?? '' })} disabled={savingMoment !== null}>
                         <Pencil size={14} aria-hidden />
                         Edit title and description
                       </button>
@@ -572,6 +593,11 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
                 {making?.key === k && (
                   <p className={styles.notice} role="status">
                     {making.label}
+                  </p>
+                )}
+                {momentError?.at === m.savedAt && (
+                  <p className="error-text" role="alert">
+                    {momentError.text}
                   </p>
                 )}
               </div>
@@ -657,6 +683,11 @@ export function MomentsBoard({ video, brand }: { video: LongVideoWithTranscript;
             Add as a moment
           </button>
         </div>
+        {momentError?.at === 'own' && (
+          <p className="error-text" role="alert">
+            {momentError.text}
+          </p>
+        )}
         <ol className={styles.lines}>
           {found.slice(0, 1500).map((l) => {
             const inOwn = ownMoment && l.i >= ownMoment.first && l.i <= ownMoment.last;

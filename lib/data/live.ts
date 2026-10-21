@@ -593,8 +593,9 @@ export const liveData: DataSource = {
     if (error) return refused(error, 'The video could not be kept.');
     // create_long_video takes no description (a new argument would be a new function): it is set straight after.
     if (input.description) {
+      // The video is kept by now: a description that did not save must not turn a retry into a second copy of it. It can be added on the video's page.
       const described = await (await db()).rpc('update_long_video', { p_id: data, p_title: input.title, p_description: input.description, p_guidance: input.guidance ?? '' });
-      if (described.error) return refused(described.error, 'The video was kept, but not its description.');
+      if (described.error) console.error('The long video was kept, but not its description', described.error.message);
     }
     // The Moments agent looks at once rather than at its next five minutes.
     const moments = momentsConfig();
