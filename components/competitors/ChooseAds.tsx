@@ -18,6 +18,7 @@ import { useToast } from '../ui/Toast';
 import home from '../home/home.module.css';
 import video from '../video/video.module.css';
 import { AdThumb } from './AdThumb';
+import { PlaceIcon } from './PlaceIcon';
 import styles from './competitors.module.css';
 
 /**
@@ -128,7 +129,7 @@ function StartFromAds({ competitor, reportId, ads, mediaSetup, onClose }: { comp
         <ol className={styles.chosenList} aria-label="The ads chosen">
           {ads.map((ad) => (
             <li key={ad.id}>
-              <PlatformIcon platform={ad.platform} size={14} decorative />
+              <PlaceIcon place={ad.platform} size={14} decorative />
               <span>“{ad.text.length > 120 ? `${ad.text.slice(0, 120).trimEnd()}…` : ad.text}”</span>
             </li>
           ))}

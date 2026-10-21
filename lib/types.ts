@@ -164,10 +164,16 @@ export interface RunPicks {
 export type AdFormat = 'video' | 'image' | 'carousel' | 'document' | 'text';
 export type CreativeStyle = 'arcs' | 'split' | 'spotlight';
 
+/** Where a competitor's item is: an ad or post on a platform, or their email or a web page (read from a screenshot). */
+export type CompetitorPlace = Platform | 'email' | 'web';
+
+/** What a competitor's item is: a paid ad, an organic post, an email or a web page. */
+export type CompetitorItemKind = 'ad' | 'post' | 'email' | 'page';
+
 export interface Hook {
   id: string;
   text: string;
-  platform: Platform;
+  platform: CompetitorPlace;
   format: AdFormat;
   /**
    * How long the ad has kept running: advertisers stop paying for ads that do
@@ -185,7 +191,22 @@ export interface AngleShare {
 /** A competitor's ad as the tracker saw it. Drawn in neutral tones so it is never mistaken for one of ours. */
 export interface AdExample {
   id: string;
-  platform: Platform;
+  platform: CompetitorPlace;
+  /** A paid ad unless a screenshot showed a post, an email or a page. */
+  kind?: CompetitorItemKind;
+  /**
+   * The public signs of how well it is doing (lib/competitor-signal.ts works
+   * its rating out of them): how many copies they run of it, where Meta shows
+   * it, whether it still runs, and the counts a screenshot shows. Null or
+   * absent is not shown, never zero.
+   */
+  versions?: number | null;
+  placements?: string[];
+  active?: boolean | null;
+  reactions?: number;
+  comments?: number;
+  shares?: number;
+  views?: number;
   format: AdFormat;
   text: string;
   /** Null when it is not known: a screenshot rarely shows when an ad started. */

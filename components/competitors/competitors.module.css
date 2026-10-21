@@ -549,3 +549,102 @@
   flex-shrink: 0;
   margin-top: 2px;
 }
+
+/* How well an ad looks to be doing: a rating, then the facts it rests on. */
+.signal {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.signalReasons {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.signalStrong {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.signalPromising {
+  background: var(--review-bg);
+  color: var(--review);
+}
+
+.signalQuiet {
+  background: var(--idle-bg);
+  color: var(--idle);
+}
+
+.signalEnded {
+  background: var(--fail-bg);
+  color: var(--fail);
+}
+
+.thumbSignal {
+  padding-top: 2px;
+}
+
+.best {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.bestItem {
+  display: grid;
+  grid-template-columns: auto 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 16px 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.bestItem:last-child {
+  border-bottom: 0;
+}
+
+.bestArt {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--idle-bg);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.bestBody {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.bestBody p {
+  margin: 0;
+}
+
+.bestText {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.bestNote {
+  margin: 8px 0 0;
+}
+
+@media (max-width: 640px) {
+  .bestItem {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .bestArt {
+    display: none;
+  }
+}

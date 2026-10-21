@@ -1,10 +1,12 @@
-import { Clock3, ExternalLink, Play } from 'lucide-react';
+import { ExternalLink, Play } from 'lucide-react';
 import { cx } from '@/lib/cx';
 import type { AdExample } from '@/lib/types';
-import { PlatformIcon } from '../ui/PlatformIcon';
+import { AdSignalBadge } from './AdSignalBadge';
+import { PlaceIcon } from './PlaceIcon';
 import styles from './competitors.module.css';
 
 const FORMAT = { video: 'Video', image: 'Image', carousel: 'Carousel', document: 'Document', text: 'Text' } as const;
+const KIND = { ad: 'Ad', post: 'Organic post', email: 'Email', page: 'Web page' } as const;
 
 /**
  * A competitor's ad, drawn in a neutral tone so it is never mistaken for one
@@ -19,7 +21,7 @@ export function AdThumb({ ad, chosen, onChoose, chooseLabel = 'Build on this ad'
       <div className={cx(styles.thumbArt, ad.screenshot ? styles.thumbShot : styles[`tone-${ad.tone}`])}>
         {ad.screenshot && <img src={ad.screenshot} alt={`Screenshot of the ad: ${words}`} />}
         <span className={styles.thumbPlatform}>
-          <PlatformIcon platform={ad.platform} size={14} />
+          <PlaceIcon place={ad.platform} size={14} />
         </span>
         {ad.format === 'video' && !ad.screenshot && (
           <span className={styles.thumbPlay} aria-hidden>
@@ -42,15 +44,12 @@ export function AdThumb({ ad, chosen, onChoose, chooseLabel = 'Build on this ad'
           {ad.screenshot && <p className={styles.thumbWords}>{ad.text}</p>}
         </div>
       )}
+      <div className={styles.thumbSignal}>
+        <AdSignalBadge ad={ad} />
+      </div>
       <figcaption className={styles.thumbCaption}>
-        <span>{FORMAT[ad.format]}</span>
+        <span>{ad.kind && ad.kind !== 'ad' ? KIND[ad.kind] : FORMAT[ad.format]}</span>
         {ad.angle && <span>{ad.angle}</span>}
-        {ad.daysRunning !== null && (
-          <span>
-            <Clock3 size={13} aria-hidden />
-            {ad.daysRunning} days
-          </span>
-        )}
         {ad.url && (
           <a className="link" href={ad.url} target="_blank" rel="noopener noreferrer">
             See the ad

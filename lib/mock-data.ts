@@ -48,10 +48,11 @@ export const competitors: Competitor[] = [
       { label: 'Lifestyle', ads: 3 },
     ],
     examples: [
-      { id: 'e-1', platform: 'meta', format: 'video', text: "Your kids shouldn't age out while you wait.", daysRunning: 63, tone: 'slate' },
-      { id: 'e-2', platform: 'meta', format: 'image', text: "The H-1B lottery isn't a plan.", daysRunning: 41, tone: 'teal' },
+      { id: 'e-1', platform: 'meta', format: 'video', text: "Your kids shouldn't age out while you wait.", daysRunning: 63, tone: 'slate', versions: 6, placements: ['facebook', 'instagram'], active: true },
+      { id: 'e-2', platform: 'meta', format: 'image', text: "The H-1B lottery isn't a plan.", daysRunning: 41, tone: 'teal', versions: 3, placements: ['facebook', 'instagram', 'messenger'], active: true },
       { id: 'e-3', platform: 'linkedin', format: 'document', text: 'What $800K actually buys.', daysRunning: 34, tone: 'sand' },
       { id: 'e-4', platform: 'linkedin', format: 'carousel', text: '3 questions before you pick a project.', daysRunning: 28, tone: 'plum' },
+      { id: 'e-5', platform: 'meta', format: 'image', text: 'Book a free EB-5 call this week.', daysRunning: 4, tone: 'slate', versions: 1, placements: ['facebook'], active: true },
     ],
   },
   {

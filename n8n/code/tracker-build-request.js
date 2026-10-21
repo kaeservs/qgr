@@ -6,27 +6,33 @@
 const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'medium';
 const p = $input.first().json;
-// A run from the team's screenshots: Claude reads the ads out of the pictures
-// first (ads_read), then reports on them as on any others.
+// A run from the team's screenshots: Claude reads the items out of the
+// pictures first (ads_read): paid ads, organic posts, emails or web pages,
+// each with the counts the screenshot shows copied as written (numbers are
+// worked out of them in code, never estimated). Then it reports on them as
+// on any ads.
 const shots = Array.isArray(p.shots) ? p.shots : [];
 const ANGLES = ['Timeline & urgency', 'Family & education', 'Due diligence', 'Investment safety', 'Career freedom', 'Process explained', 'Cost & pricing', 'Lifestyle', 'Social proof', 'Other'];
 
 const READ = [
-  'First read every ad in the screenshots into ads_read, in order: one entry per ad (a screenshot can show more than one).',
+  'First read every piece of their marketing in the screenshots into ads_read, in order: one entry per item (a screenshot can show more than one). An item is a paid ad, an organic social post, an email (a newsletter) or a web page; leave out anything that is none of these.',
   '- id: a1, a2, a3 and so on, in the order read. shot: the number of the screenshot it is in.',
-  '- platform: meta for Facebook and Instagram, linkedin or x. format: video, image, carousel, document or text.',
-  "- page_name: the advertiser's name as the ad shows it. text: the ad's main text exactly as written, without its headline or button; where it is cut off (\"See more\"), up to the cut. headline and cta: as written, or an empty string.",
-  "- started_on: the day it started running as YYYY-MM-DD, only when the screenshot shows it (Meta's Ad Library says \"Started running on\"); otherwise an empty string.",
-  'Never guess words that are cut off or cannot be read, and leave out anything that is not an ad.',
+  '- kind: ad for a paid ad (it says Sponsored, or it is in an ad library), post for an organic post, email, or page.',
+  '- platform: meta for Facebook and Instagram, linkedin, x, email for an email, web for a web page. format: video, image, carousel, document or text.',
+  "- page_name: the advertiser or sender as it shows. text: the main text exactly as written, without its headline or button (an email: its subject, then its opening; a page: its heading, then its opening); where it is cut off (\"See more\"), up to the cut. headline and cta: as written, or an empty string.",
+  "- started_on: the day it started running as YYYY-MM-DD, only when the screenshot shows it (Meta's Ad Library says \"Started running on\"); otherwise an empty string. active: active or inactive when the screenshot says so; otherwise an empty string.",
+  "- versions: the number in \"N ads use this creative and text\" when the screenshot shows it, as written; otherwise an empty string. placements: the places the ad library lists it on, from facebook, instagram, messenger, audience_network, threads and whatsapp; otherwise none.",
+  '- reactions, comments, shares and views: each count exactly as the screenshot shows it (for example 1.2K or 347); an empty string when it is not shown. Never estimate one.',
+  'Never guess words that are cut off or cannot be read.',
   '',
 ];
 const system = [
   shots.length > 0
-    ? "You analyse a competitor's paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get screenshots of the competitor's ads that the QGR team saved, numbered, and sometimes text from their website."
-    : "You analyse a competitor's paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get the competitor's active ads, each with an id and the number of days it has been running, and sometimes text from their website.",
+    ? "You analyse a competitor's marketing for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get screenshots of the competitor's marketing that the QGR team saved, numbered: mostly paid ads, sometimes organic posts, emails or web pages; and sometimes text from their website."
+    : "You analyse a competitor's paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get the competitor's active ads, each with an id, the number of days it has been running and, when Meta says, how many copies of it they run (versions) and where Meta shows it (placements); and sometimes text from their website.",
   '',
 ].concat(shots.length > 0 ? READ : [], [
-  'Report what is working for them:',
+  "Report what is working for them. The public signs of an ad that works are how long it has run, how many versions they run of it and how widely it is placed, and, on a screenshot, the reactions, comments and shares it shows; nothing else is known of an ad's results, so never claim spend, clicks or reach.",
   '- hooks: group ads that open with the same idea and state that idea once, quoted from the ad that words it best (do not paraphrase). List every ad id in the group. At most six hooks; an ad belongs to at most one. The system works out how long each hook has run and how many versions it has from the ids, so give no numbers.',
   '- ad_angles: one angle for every ad id, from the allowed list.',
   '- insights: three observations a marketer could act on, one sentence each, each naming its evidence in the ads (for example "their four longest-running ads all lead with ..."). If the ads are few or thin, say so rather than guess.',
@@ -52,7 +58,10 @@ if (shots.length > 0) {
   material.screenshots = shots.length;
 } else {
   material.ads = p.ads.map(function (a) {
-    return { id: a.id, platform: a.platform, format: a.format, days_running: a.days_running, text: a.text, headline: a.headline, cta: a.cta, page_name: a.page_name };
+    const ad = { id: a.id, platform: a.platform, format: a.format, days_running: a.days_running, text: a.text, headline: a.headline, cta: a.cta, page_name: a.page_name };
+    if (a.versions) ad.versions = a.versions;
+    if (a.placements && a.placements.length > 0) ad.placements = a.placements;
+    return ad;
   });
 }
 if (p.brand) material.our_brand = p.brand;
@@ -88,7 +97,7 @@ const schema = {
   },
 };
 if (shots.length > 0) {
-  const READ_FIELDS = ['id', 'shot', 'platform', 'format', 'page_name', 'text', 'headline', 'cta', 'started_on'];
+  const READ_FIELDS = ['id', 'shot', 'kind', 'platform', 'format', 'page_name', 'text', 'headline', 'cta', 'started_on', 'active', 'versions', 'placements', 'reactions', 'comments', 'shares', 'views'];
   schema.required = ['ads_read'].concat(schema.required);
   schema.properties = Object.assign({
     ads_read: {
@@ -100,13 +109,21 @@ if (shots.length > 0) {
         properties: {
           id: { type: 'string' },
           shot: { type: 'integer' },
-          platform: { type: 'string', enum: ['meta', 'linkedin', 'x'] },
+          kind: { type: 'string', enum: ['ad', 'post', 'email', 'page'] },
+          platform: { type: 'string', enum: ['meta', 'linkedin', 'x', 'email', 'web'] },
           format: { type: 'string', enum: ['video', 'image', 'carousel', 'document', 'text'] },
           page_name: { type: 'string' },
           text: { type: 'string' },
           headline: { type: 'string' },
           cta: { type: 'string' },
           started_on: { type: 'string' },
+          active: { type: 'string', enum: ['active', 'inactive', ''] },
+          versions: { type: 'string' },
+          placements: { type: 'array', items: { type: 'string', enum: ['facebook', 'instagram', 'messenger', 'audience_network', 'threads', 'whatsapp'] } },
+          reactions: { type: 'string' },
+          comments: { type: 'string' },
+          shares: { type: 'string' },
+          views: { type: 'string' },
         },
       },
     },

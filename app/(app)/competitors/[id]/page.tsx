@@ -6,11 +6,13 @@ import { AngleBars } from '@/components/competitors/AngleBars';
 import { ChooseAds } from '@/components/competitors/ChooseAds';
 import { TrackedSwitch } from '@/components/competitors/TrackedSwitch';
 import { Avatar } from '@/components/ui/Avatar';
-import { PlatformIcon, PlatformIcons } from '@/components/ui/PlatformIcon';
+import { AdSignalBadge } from '@/components/competitors/AdSignalBadge';
+import { PLACE_LABEL, PlaceIcon } from '@/components/competitors/PlaceIcon';
+import { PlatformIcons } from '@/components/ui/PlatformIcon';
+import { bestPerformers } from '@/lib/competitor-signal';
 import { getCompetitor, getNow, getStrategyForCompetitor, getTeamSettings, getVideoBudget, usingSampleData } from '@/lib/data';
 import { mediaSetup } from '@/lib/run-media';
 import { timeAgo } from '@/lib/format';
-import { PLATFORM_LABEL } from '@/lib/platforms';
 import styles from '@/components/competitors/competitors.module.css';
 
 type Props = { params: Promise<{ id: string }> };
@@ -31,6 +33,7 @@ export default async function CompetitorPage({ params }: Props) {
   const hooks = [...c.hooks].sort((a, b) => (b.daysRunning ?? -1) - (a.daysRunning ?? -1));
   const longest = hooks[0]?.daysRunning ?? null;
   const shots = c.dataSource === 'upload';
+  const best = bestPerformers(c.examples);
   // A competitor known from screenshots has no site to scan: more screenshots, then.
   const rescan = c.domain ? `/runs/new?url=${encodeURIComponent(c.domain)}` : `/runs/new?shots=${encodeURIComponent(c.name)}`;
 
@@ -119,6 +122,43 @@ export default async function CompetitorPage({ params }: Props) {
         </div>
       </dl>
 
+      <section className="section" aria-labelledby="best">
+        <div className="section-head">
+          <h2 id="best" className="display h2">
+            Their best performers
+          </h2>
+          <span className="muted small">From what is public: how long each has run, how many versions they run, where it is placed and the reactions a screenshot shows</span>
+        </div>
+        {best.length > 0 ? (
+          <ol className={`card ${styles.best}`}>
+            {best.map(({ ad }, i) => (
+              <li key={ad.id} className={styles.bestItem}>
+                <span className={styles.hookRank}>{i + 1}</span>
+                {ad.screenshot ? <img className={styles.bestArt} src={ad.screenshot} alt="" /> : <span className={styles.bestArt}><PlaceIcon place={ad.platform} size={22} decorative /></span>}
+                <div className={styles.bestBody}>
+                  <p className={styles.bestText}>“{ad.text.length > 160 ? `${ad.text.slice(0, 160).trimEnd()}…` : ad.text}”</p>
+                  <AdSignalBadge ad={ad} />
+                  {ad.url && (
+                    <a className="link small" href={ad.url} target="_blank" rel="noopener noreferrer">
+                      See the ad
+                      <ExternalLink size={12} aria-hidden />
+                      <span className="sr-only"> in Meta’s Ad Library (opens in a new tab)</span>
+                    </a>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="card card-pad muted">
+            {shots
+              ? 'Nothing here shows yet how well it is doing: a screenshot from Meta’s Ad Library shows when an ad started and how many versions run, and a post shows its reactions.'
+              : 'None of their ads has run long enough, or in enough versions, to show it is working.'}
+          </p>
+        )}
+        <p className={`muted small ${styles.bestNote}`}>Meta does not publish another advertiser’s spend, clicks or reach, so nothing here claims them. The rating is worked out from the facts beside it.</p>
+      </section>
+
       <div className={styles.reportGrid}>
         <section className="card card-pad" aria-labelledby="working">
           <h2 id="working" className="card-title">
@@ -159,8 +199,8 @@ export default async function CompetitorPage({ params }: Props) {
                 <p className={styles.hookText}>“{h.text}”</p>
                 <p className={styles.hookMeta}>
                   <span>
-                    <PlatformIcon platform={h.platform} size={14} decorative />
-                    {PLATFORM_LABEL[h.platform]}
+                    <PlaceIcon place={h.platform} size={14} decorative />
+                    {PLACE_LABEL[h.platform]}
                   </span>
                   <span>{FORMAT[h.format]}</span>
                   <span>

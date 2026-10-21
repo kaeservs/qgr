@@ -363,55 +363,79 @@ export type Database = {
       }
       competitor_ads: {
         Row: {
+          active: boolean | null
           ad_url: string | null
           angle: string | null
+          comments: number | null
           cta: string | null
           days_known: boolean
           days_running: number
           format: string
           headline: string | null
           id: string
+          kind: string
           media_url: string | null
           page_name: string | null
+          placements: string[]
           platform: string
           position: number | null
+          reactions: number | null
           report_id: string
           screenshot_path: string | null
+          shares: number | null
           text: string
+          versions: number | null
+          views: number | null
         }
         Insert: {
+          active?: boolean | null
           ad_url?: string | null
           angle?: string | null
+          comments?: number | null
           cta?: string | null
           days_known?: boolean
           days_running: number
           format: string
           headline?: string | null
           id?: string
+          kind?: string
           media_url?: string | null
           page_name?: string | null
+          placements?: string[]
           platform: string
           position?: number | null
+          reactions?: number | null
           report_id: string
           screenshot_path?: string | null
+          shares?: number | null
           text: string
+          versions?: number | null
+          views?: number | null
         }
         Update: {
+          active?: boolean | null
           ad_url?: string | null
           angle?: string | null
+          comments?: number | null
           cta?: string | null
           days_known?: boolean
           days_running?: number
           format?: string
           headline?: string | null
           id?: string
+          kind?: string
           media_url?: string | null
           page_name?: string | null
+          placements?: string[]
           platform?: string
           position?: number | null
+          reactions?: number | null
           report_id?: string
           screenshot_path?: string | null
+          shares?: number | null
           text?: string
+          versions?: number | null
+          views?: number | null
         }
         Relationships: [
           {

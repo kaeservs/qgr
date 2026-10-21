@@ -83,7 +83,7 @@ describe('screenshots of their ads', () => {
       { text: 'Ad 2 says something.', position: 1, screenshot_path: files[1], days_known: true, headline: 'Headline 2' },
     ]);
     expect(await t.value<string>(`select summary from public.run_stages where run_id = $1 and stage = 'tracker'`, [runId]))
-      .toBe('Read 2 ads from 2 screenshots and found 1 hook.');
+      .toBe('Read 2 items from 2 screenshots and found 1 hook.');
 
     // The strategist reads an unknown days running as nothing, not as zero.
     const begun = await service<{ report: { data_source: string; hooks: { days_running: number | null }[] }; chosen_ads: unknown }>(

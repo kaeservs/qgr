@@ -75,6 +75,16 @@ function untemplated(text) {
 function first(list) {
   return Array.isArray(list) && list.length > 0 && list[0] && typeof list[0] === 'object' ? list[0] : {};
 }
+// Where Meta shows the ad, as the Ad Library names it.
+const PLACEMENTS = { FACEBOOK: 'facebook', INSTAGRAM: 'instagram', MESSENGER: 'messenger', AUDIENCE_NETWORK: 'audience_network', THREADS: 'threads', WHATSAPP: 'whatsapp' };
+function placementsOf(list) {
+  const out = [];
+  (Array.isArray(list) ? list : []).forEach(function (p) {
+    const name = PLACEMENTS[String(p || '').toUpperCase()];
+    if (name && out.indexOf(name) === -1) out.push(name);
+  });
+  return out;
+}
 const FORMATS = { VIDEO: 'video', IMAGE: 'image', CAROUSEL: 'carousel', MULTI_IMAGES: 'carousel', DCO: 'carousel', DPA: 'carousel', TEXT: 'text' };
 
 let returned = 0;
@@ -118,6 +128,9 @@ $input.all().forEach(function (item) {
     format: format,
     startDate: isoDate(pick(a, ['startDate', 'start_date', 'adDeliveryStartTime', 'ad_delivery_start_time'])),
     isActive: pick(a, ['isActive', 'is_active']) !== false,
+    // "N ads use this creative and text": the copies an advertiser runs of what works.
+    versions: (function () { const n = Number(pick(a, ['collationCount', 'collation_count'])); return Number.isInteger(n) && n >= 1 ? n : null; })(),
+    placements: placementsOf(pick(a, ['publisherPlatform', 'publisher_platform', 'publisherPlatforms', 'publisher_platforms'])),
     pageName: pageName || null,
     text: text,
     headline: untemplated(clean(words(pick(snap, ['title'])))) || untemplated(clean(words(pick(card, ['title'])))),

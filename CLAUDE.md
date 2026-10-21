@@ -522,6 +522,24 @@ X's ads APIs, which each need their own access.
   dashboard and the agents say nothing in their place. The report says it was
   read from screenshots (`data_source: upload`). A competitor known only from
   screenshots has no website to scan: "Add screenshots" starts another run.
+- A screenshot can be any of their marketing, not only a paid ad: Claude
+  reads each item with its `kind` (ad, post, email or page; an email's
+  platform is `email`, a page's `web`, kept by `competitor_ads` and `hooks`),
+  and fails a run only when nothing in the screenshots is any of these,
+  saying what it saw instead.
+- How well each ad is doing (`competitor_ads`: `versions`, `placements`,
+  `active`, `reactions`, `comments`, `shares`, `views`; null is not shown,
+  never zero). Meta does not publish another advertiser's spend, clicks or
+  reach, so only the public signs are kept: Apify gives versions ("N ads use
+  this creative and text", `collationCount`) and placements
+  (`publisherPlatform`); a screenshot gives what it shows, the counts copied
+  as written ("1.2K") and turned into numbers in code (`count` in
+  `tracker-read-answer.js`). `adSignal` in `lib/competitor-signal.ts` (pure,
+  tested) rates each from days running, versions, placements and visible
+  engagement (Strong, Promising, Little sign yet, Too new to tell, Stopped
+  early, Not enough shown) with the facts it rests on; the competitor page
+  leads with "Their best performers" (`bestPerformers`) and every ad shows its
+  rating. Never a number from the model, and nothing claims spend or reach.
 - On the competitor page, any few of the latest report's ads (up to 20) can be
   ticked and made into a run ("Make ads from these"): `start_run_from_ads`
   records it with the report it came from (`runs.source_report_id`) and the
