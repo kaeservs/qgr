@@ -170,7 +170,8 @@ export function VideoEditor({
   // The preview is drawn at up to 720p; the export at full size from the same instructions.
   const previewSize = useMemo(() => frameSize(edit, clip, 720), [edit, clip]);
   // Before the run there are no ad words yet: the preview shows where each ad's own will go.
-  const shownWords = variant ? words : WORDS_TO_COME;
+  // A video edited for itself (a long video whole) carries no ad's words.
+  const shownWords = variant ? words : purpose ? '' : WORDS_TO_COME;
   const aiIds = useMemo(() => aiVideosOf(edit), [edit]);
   const aiKey = aiIds.join(',');
   const states = useMemo(() => aiStates(edit, aiIds.length === 0 ? new Map() : known), [edit, aiIds, known]);

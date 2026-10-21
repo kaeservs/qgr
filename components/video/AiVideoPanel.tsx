@@ -17,6 +17,7 @@ import { linesAround } from '@/lib/video-prompt';
 import type { PromptMode } from '@/lib/video-prompt';
 import { useToast } from '../ui/Toast';
 import { Choices } from './EditorPanels';
+import { playableUrl } from './media';
 import type { Changes } from './EditorPanels';
 import styles from './video.module.css';
 
@@ -304,7 +305,7 @@ export function AiVideoPanel({
         {library && usable.length === 0 && <span className="muted small">No AI videos yet: make one above, or on Video, AI video.</span>}
         {usable.map((v) => (
           <div key={v.id} className={styles.aiItem}>
-            {v.url ? <video className={styles.aiThumb} src={v.url} muted preload="metadata" playsInline aria-hidden /> : <span className={styles.aiThumb} aria-hidden />}
+            {v.url ? <video className={styles.aiThumb} src={playableUrl(v.url)} muted preload="metadata" playsInline aria-hidden /> : <span className={styles.aiThumb} aria-hidden />}
             <span className="small">
               <strong>{v.title}</strong>
               <br />

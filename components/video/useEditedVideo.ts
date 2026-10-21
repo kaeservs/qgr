@@ -129,7 +129,11 @@ export function useEditedVideo(
     live.current = { edit, placed, total, size, words, assets, urls, clipSrc, waiting };
   });
 
-  const srcOf = useCallback((path: string | null): string | null => (path === null ? live.current.clipSrc : (live.current.urls[path] ?? null)), []);
+  const srcOf = useCallback((path: string | null): string | null => {
+    if (path === null) return live.current.clipSrc;
+    const url = live.current.urls[path];
+    return url ? playableUrl(url) : null;
+  }, []);
 
   const redrawSoon = useRef<() => void>(() => undefined);
 
