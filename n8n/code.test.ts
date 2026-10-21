@@ -237,7 +237,7 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
 
   it('keeps the ads Claude read, with their screenshot, counting days only from a start date shown', () => {
     const read = (id: string, shot: number, text: string, started_on = '') => ({
-      id, shot, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Horizon Visa', text, headline: '', cta: 'Learn more', started_on,
+      id, shot, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Horizon Visa', text, headline: '', cta: 'Learn more', started_on, ended_on: '',
       active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '',
     });
     const started = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -276,7 +276,7 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
 
   it('reads an email or a page as what it is, and the counts a screenshot shows as numbers worked out here', () => {
     const item = (id: string, seen: Json) => ({
-      id, shot: 1, kind: 'ad', platform: 'meta', format: 'image', page_name: 'EB5UNITED', text: `Item ${id}.`, headline: '', cta: '', started_on: '',
+      id, shot: 1, kind: 'ad', platform: 'meta', format: 'image', page_name: 'EB5UNITED', text: `Item ${id}.`, headline: '', cta: '', started_on: '', ended_on: '',
       active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '', ...seen,
     });
     const answer = {
@@ -293,9 +293,32 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
     const ads = (run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared }).p_report as { ads: Json[] }).ads;
     expect(ads.map((a) => [a.kind, a.platform])).toEqual([['email', 'email'], ['page', 'web'], ['ad', 'meta'], ['post', 'meta']]);
     expect(ads[2]).toMatchObject({ active: false, versions: 6, placements: ['facebook', 'instagram'], reactions: 1200, comments: 3456, shares: 2000000 });
+    // A stopped ad without the day it ended has no days running: never the days since it started.
+    expect(ads[2]).toMatchObject({ days_running: 0, days_known: false });
     // A count the screenshot did not show is left out, never zero.
     expect(ads[2]).not.toHaveProperty('views');
     expect(ads[3]).toMatchObject({ versions: null });
+  });
+
+  it('counts a stopped ad from its start to its end, and reads counts written every way', () => {
+    const item = (id: string, seen: Json) => ({
+      id, shot: 1, kind: 'ad', platform: 'meta', format: 'image', page_name: 'EB5UNITED', text: `Item ${id}.`, headline: '', cta: '', started_on: '', ended_on: '',
+      active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '', ...seen,
+    });
+    const answer = {
+      ads_read: [
+        item('a1', { started_on: '2026-06-01', ended_on: '2026-06-04', active: 'inactive', reactions: '1,2K', comments: '1.234', shares: '3B' }),
+        item('a2', { started_on: '2026-06-01', active: 'inactive', reactions: '12K+', views: '2,5 Mio.' }),
+      ],
+      competitor_name: 'EB5UNITED', summary: 'Two stopped ads.', website_summary: '', insights: ['x'],
+      hooks: [{ text: 'Item a1.', ad_ids: ['a1', 'a2'] }],
+      ad_angles: [],
+    };
+    const ads = (run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared }).p_report as { ads: Json[] }).ads;
+    const byText = (t: string) => ads.find((a) => a.text === t)!;
+    expect(byText('Item a1.')).toMatchObject({ days_running: 3, active: false, reactions: 1200, comments: 1234, shares: 2000000000 });
+    expect(byText('Item a1.')).not.toHaveProperty('days_known');
+    expect(byText('Item a2.')).toMatchObject({ days_running: 0, days_known: false, active: false, reactions: 12000, views: 2500000 });
   });
 
   it('fails with what Claude saw when nothing in the screenshots is marketing it can read', () => {

@@ -101,6 +101,8 @@ export interface Changes {
   set: (next: Partial<VideoEdit>) => void;
   /** The whole edit, for taking a field away. */
   replace: (next: VideoEdit) => void;
+  /** The edit as it is now, read when work that took a while (an AI video asked for) comes back. */
+  latest: () => VideoEdit;
   preview: (next: Partial<VideoEdit>) => void;
   settle: () => void;
   setSequence: (next: Segment[]) => void;

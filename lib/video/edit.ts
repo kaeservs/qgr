@@ -11,7 +11,7 @@
 import { parseSpot } from '../spot';
 import type { Spot } from '../spot';
 import type { ParseResult } from '../run-input';
-import { keepOfSequence, layout, parseCutaways, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
+import { fitCutaways, keepOfSequence, layout, parseCutaways, parseLook, parseMusic, parseOverlays, parseSequence, sequenceSeconds } from './timeline';
 import type { Cutaway, Look, Music, Overlay, Segment } from './timeline';
 
 /** The longest clip a run takes: ten minutes. The database holds the same limit. */
@@ -111,6 +111,18 @@ export const keptSeconds = (keep: readonly Part[]): number => ms(keep.reduce((su
 /** How long the edited video runs: the parts kept (or the timeline's pieces), then the end card. */
 export const editedSeconds = (edit: Pick<VideoEdit, 'keep' | 'endCard'> & { sequence?: Segment[] | undefined }): number =>
   ms((edit.sequence && edit.sequence.length > 0 ? sequenceSeconds(layout(edit.sequence)) : keptSeconds(edit.keep)) + (edit.endCard?.seconds ?? 0));
+
+/** How long a cutaway can sit over: the video itself, never its end card. */
+export const cutawayRoom = (edit: Pick<VideoEdit, 'keep' | 'endCard'> & { sequence?: Segment[] | undefined }): number => ms(editedSeconds(edit) - (edit.endCard?.seconds ?? 0));
+
+/** The edit with its cutaways kept inside the video as it now is (after a cut, a piece taken out, an end card). */
+export function withCutawaysFitted(edit: VideoEdit): VideoEdit {
+  if (!edit.cutaways || edit.cutaways.length === 0) return edit;
+  const cutaways = fitCutaways(edit.cutaways, cutawayRoom(edit));
+  if (cutaways.length === edit.cutaways.length && cutaways.every((c, i) => c === edit.cutaways![i])) return edit;
+  const { cutaways: _old, ...rest } = edit;
+  return cutaways.length > 0 ? { ...rest, cutaways } : rest;
+}
 
 /** The clip's second that an edited second shows, or null past the last part (on the end card). */
 export function clipTimeAt(keep: readonly Part[], t: number): number | null {
@@ -374,14 +386,14 @@ function endCardOf(raw: unknown): VideoEdit['endCard'] | string {
  * endpoints, so this is the check that counts in the app; save_video_edit
  * checks what the database must hold true again.
  */
-export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS): ParseResult<VideoEdit> {
+export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS, maxSeconds?: number): ParseResult<VideoEdit> {
   const fail = (error: string): ParseResult<VideoEdit> => ({ ok: false, error });
   if (!isRecord(raw)) return fail('The edit is not readable.');
 
   // A timeline's sequence decides which parts of the clip are kept; without one, `keep` does.
   let sequence: Segment[] | undefined;
   if (raw.sequence !== undefined) {
-    const parsed = parseSequence(raw.sequence, duration);
+    const parsed = parseSequence(raw.sequence, duration, maxSeconds);
     if (typeof parsed === 'string') return fail(parsed);
     sequence = parsed;
   }

@@ -180,4 +180,14 @@ describe('long videos', () => {
       [100, 'Our own, longer'],
     ]);
   });
+
+  it('holds forty moments even when a moment ads were made from is moved', async () => {
+    const id = await create(member);
+    const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom', 'text', 'From the webinar', array['meta'], 'consultations', p_excerpt => $1)`, ['What the clip says, long enough to be a run of its own.']));
+    for (let i = 0; i < 40; i++) {
+      await t.asUser(member, () => t.db.query(`select public.save_moment($1, null, null, $2, $3, 'M', '', '', '[]'::jsonb)`, [id, i * 4, i * 4 + 1]));
+    }
+    await t.asUser(member, () => t.db.query(`select public.record_moment_run($1, 0, 1, 'M', $2)`, [id, runId]));
+    await expect(t.asUser(member, () => t.db.query(`select public.save_moment($1, 0, 1, 0, 2, 'M', '', '', '[]'::jsonb)`, [id]))).rejects.toThrow(/up to 40 moments/);
+  });
 });

@@ -35,14 +35,29 @@ try {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
-// A count as a screenshot shows it ("1.2K", "3,456", "2M"), worked out here:
-// the model copies what it sees and never does the arithmetic. Null when it
-// shows none.
+// A count as a screenshot shows it ("1.2K", "3,456", "2M", and the European
+// "1,2K", "1.234", "1 234", "2,5 Mio."), worked out here: the model copies
+// what it sees and never does the arithmetic. A word after it ("likes") and a
+// "+" are let go. Null when it shows none, and never past two billion (the
+// database's whole numbers).
+const COUNT_MAX = 2000000000;
 function count(v) {
-  const m = /^\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmMbB])?\s*$/.exec(String(v || ''));
+  const m = /^\s*([0-9][0-9.,\s]*?)\s*(?:(k|tsd\.?|mio\.?|mil|mn|bn|m|b)(?![a-z]))?\s*\+?\s*[a-z]*\.?\s*$/i.exec(String(v || '')); // \s takes the no-break spaces some languages group thousands with
   if (!m) return null;
-  const n = Number(m[1].replace(/,/g, '')) * ({ k: 1e3, m: 1e6, b: 1e9 }[String(m[2] || '').toLowerCase()] || 1);
-  return Number.isFinite(n) ? Math.round(n) : null;
+  let digits = m[1].replace(/\s+/g, ' ').trim();
+  const unit = String(m[2] || '').toLowerCase().replace('.', '');
+  const scale = unit === 'k' || unit === 'tsd' ? 1e3 : unit === 'm' || unit === 'mio' || unit === 'mil' || unit === 'mn' ? 1e6 : unit === 'b' || unit === 'bn' ? 1e9 : 1;
+  if (/^\d{1,3}([ .,]\d{3})+$/.test(digits)) {
+    // 1,234 · 1.234 · 1 234: thousands, whichever mark separates them.
+    digits = digits.replace(/[ .,]/g, '');
+  } else if (/^\d+,\d{1,2}$/.test(digits)) {
+    // 1,2K · 2,5 Mio.: a decimal comma.
+    digits = digits.replace(',', '.');
+  } else if (!/^\d+(\.\d+)?$/.test(digits)) {
+    return null;
+  }
+  const n = Number(digits) * scale;
+  return Number.isFinite(n) ? Math.min(Math.round(n), COUNT_MAX) : null;
 }
 const PLACEMENTS = ['facebook', 'instagram', 'messenger', 'audience_network', 'threads', 'whatsapp'];
 const KINDS = ['ad', 'post', 'email', 'page'];
@@ -57,8 +72,13 @@ if (shots.length > 0) {
       const id = String(a.id || '');
       if (!shot || !text || !id || seen[id]) return null;
       seen[id] = true;
-      const day = /^\d{4}-\d{2}-\d{2}$/.test(a.started_on || '') ? Date.parse(a.started_on + 'T00:00:00Z') : NaN;
-      const known = Number.isFinite(day) && day <= Date.now() && day >= Date.parse('2010-01-01T00:00:00Z');
+      const dayOf = function (s) { return /^\d{4}-\d{2}-\d{2}$/.test(s || '') ? Date.parse(s + 'T00:00:00Z') : NaN; };
+      const day = dayOf(a.started_on);
+      const ended = dayOf(a.ended_on);
+      // A stopped ad ran from its start to its end, never to today: without the end it shows, how long it ran is not known.
+      const stopped = a.active === 'inactive' || Number.isFinite(ended);
+      const until = stopped ? ended : Date.now();
+      const known = Number.isFinite(day) && Number.isFinite(until) && day <= until && until <= Date.now() && day >= Date.parse('2010-01-01T00:00:00Z');
       const kind = KINDS.indexOf(a.kind) >= 0 ? a.kind : 'ad';
       // An email or a web page is where it is, whatever platform was given.
       const platform = kind === 'email' ? 'email' : kind === 'page' ? 'web' : a.platform;
@@ -70,12 +90,12 @@ if (shots.length > 0) {
         kind: kind,
         versions: versions !== null && versions >= 1 ? Math.min(versions, 100000) : null,
         placements: (Array.isArray(a.placements) ? a.placements : []).filter(function (p, i, all) { return PLACEMENTS.indexOf(p) >= 0 && all.indexOf(p) === i; }),
-        active: a.active === 'active' ? true : a.active === 'inactive' ? false : null,
+        active: a.active === 'active' ? true : stopped ? false : null,
         reactions: count(a.reactions),
         comments: count(a.comments),
         shares: count(a.shares),
         views: count(a.views),
-        days_running: known ? Math.max(0, Math.floor((Date.now() - day) / DAY)) : 0,
+        days_running: known ? Math.max(0, Math.floor((until - day) / DAY)) : 0,
         days_known: known,
         text: text.slice(0, 600),
         headline: String(a.headline || '').trim() || null,

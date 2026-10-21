@@ -67,6 +67,7 @@ import type {
   VideoBudget,
 } from '../types';
 import { parseVideoEdit } from '../video/edit';
+import { longEditSeconds } from '../video/timeline';
 import { parseDesign } from '../creative/design';
 import { scanLabel } from '../schedule';
 import { isLeadPlatform, isZohoRegion, zohoLeadUrl } from '../leads';
@@ -998,7 +999,7 @@ export function toLongVideo(row: LongVideoRow): LongVideoWithTranscript {
     transcript,
     edit: (() => {
       // An edit that no longer reads is dropped: the video is as it is.
-      const parsed = row.edit !== undefined && row.edit !== null ? parseVideoEdit(row.edit, num(f.duration)) : null;
+      const parsed = row.edit !== undefined && row.edit !== null ? parseVideoEdit(row.edit, num(f.duration), longEditSeconds(num(f.duration))) : null;
       return parsed?.ok ? parsed.value : null;
     })(),
   };

@@ -8,7 +8,7 @@ import type { Saved } from '@/lib/data';
 import { checkTeam } from '@/lib/session';
 import type { AiVideo, VideoBudget } from '@/lib/types';
 import { parseVideoEdit } from '@/lib/video/edit';
-import { compactEdit } from '@/lib/video/timeline';
+import { compactEdit, longEditSeconds } from '@/lib/video/timeline';
 import { parseVideoPromptRequest } from '@/lib/video-prompt';
 
 const isId = (v: unknown): v is string => typeof v === 'string' && v.length > 0 && v.length <= 64;
@@ -113,7 +113,7 @@ export async function saveLongVideoEditAction(id: unknown, edit: unknown): Promi
   if (edit === null) return saveLongVideoEdit(id, null);
   const video = await getLongVideo(id);
   if (!video) return { ok: false, status: 404, error: 'That long video is gone.' };
-  const parsed = parseVideoEdit(edit, video.file.duration);
+  const parsed = parseVideoEdit(edit, video.file.duration, longEditSeconds(video.file.duration));
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
   return saveLongVideoEdit(id, compactEdit(parsed.value));
 }
