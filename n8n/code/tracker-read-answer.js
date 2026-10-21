@@ -35,6 +35,17 @@ try {
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+// A count as a screenshot shows it ("1.2K", "3,456", "2M"), worked out here:
+// the model copies what it sees and never does the arithmetic. Null when it
+// shows none.
+function count(v) {
+  const m = /^\s*([0-9][0-9,]*(?:\.[0-9]+)?)\s*([kKmMbB])?\s*$/.exec(String(v || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, '')) * ({ k: 1e3, m: 1e6, b: 1e9 }[String(m[2] || '').toLowerCase()] || 1);
+  return Number.isFinite(n) ? Math.round(n) : null;
+}
+const PLACEMENTS = ['facebook', 'instagram', 'messenger', 'audience_network', 'threads', 'whatsapp'];
+const KINDS = ['ad', 'post', 'email', 'page'];
 const shots = Array.isArray(prep.shots) ? prep.shots : [];
 let ads = prep.ads;
 if (shots.length > 0) {
@@ -48,10 +59,22 @@ if (shots.length > 0) {
       seen[id] = true;
       const day = /^\d{4}-\d{2}-\d{2}$/.test(a.started_on || '') ? Date.parse(a.started_on + 'T00:00:00Z') : NaN;
       const known = Number.isFinite(day) && day <= Date.now() && day >= Date.parse('2010-01-01T00:00:00Z');
+      const kind = KINDS.indexOf(a.kind) >= 0 ? a.kind : 'ad';
+      // An email or a web page is where it is, whatever platform was given.
+      const platform = kind === 'email' ? 'email' : kind === 'page' ? 'web' : a.platform;
+      const versions = count(a.versions);
       return {
         id: id,
-        platform: a.platform,
+        platform: platform,
         format: a.format,
+        kind: kind,
+        versions: versions !== null && versions >= 1 ? Math.min(versions, 100000) : null,
+        placements: (Array.isArray(a.placements) ? a.placements : []).filter(function (p, i, all) { return PLACEMENTS.indexOf(p) >= 0 && all.indexOf(p) === i; }),
+        active: a.active === 'active' ? true : a.active === 'inactive' ? false : null,
+        reactions: count(a.reactions),
+        comments: count(a.comments),
+        shares: count(a.shares),
+        views: count(a.views),
         days_running: known ? Math.max(0, Math.floor((Date.now() - day) / DAY)) : 0,
         days_known: known,
         text: text.slice(0, 600),
@@ -66,7 +89,9 @@ if (shots.length > 0) {
     .filter(Boolean)
     .slice(0, 60);
   if (ads.length === 0) {
-    return fail('Claude found no ads it could read in the screenshots.');
+    // Say what Claude saw instead, so the team knows what to save next.
+    const saw = String(answer.summary || '').trim();
+    return fail('Claude found no ad, post, email or web page it could read in the screenshots' + (saw ? ': ' + saw : '.'));
   }
 }
 
@@ -117,7 +142,12 @@ const kept = ads
       cta: a.cta || null,
       page_name: a.page_name || null,
       angle: angleOf[a.id] || null,
+      kind: a.kind || 'ad',
+      versions: a.versions || null,
+      placements: a.placements || [],
+      active: a.active === undefined ? null : a.active,
     };
+    ['reactions', 'comments', 'shares', 'views'].forEach(function (k) { if (typeof a[k] === 'number') ad[k] = a[k]; });
     if (!known(a)) ad.days_known = false;
     if (a.screenshot_path) ad.screenshot_path = a.screenshot_path;
     return ad;

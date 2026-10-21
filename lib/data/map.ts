@@ -156,6 +156,14 @@ export interface CompetitorRow {
       /** The tracker's order; null on reports from before it kept every ad. */
       position: number | null;
       days_known: boolean;
+      kind?: string;
+      versions?: number | null;
+      placements?: string[];
+      active?: boolean | null;
+      reactions?: number | null;
+      comments?: number | null;
+      shares?: number | null;
+      views?: number | null;
     }[];
   }[];
 }
@@ -257,6 +265,8 @@ const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
 const LIBRARY_AD = /^https:\/\/www\.facebook\.com\/ads\/library\/\?id=\d{1,25}$/;
 const ADS_SETTINGS: readonly AdsSetting[] = ['sample', 'apify'];
 
+const COMPETITOR_PLACES = [...PLATFORMS, 'email', 'web'] as const;
+const ITEM_KINDS = ['ad', 'post', 'email', 'page'] as const;
 const platformsOf = (list: readonly string[] | null): Platform[] => PLATFORMS.filter((p) => (list ?? []).includes(p));
 const goalOf = (value: string): Goal => (isOneOf(GOALS, value) ? value : 'consultations');
 const formatOf = (value: string): AdFormat => (isOneOf(FORMATS, value) ? value : 'image');
@@ -482,7 +492,7 @@ export function toAdExamples(ads: CompetitorAdRow[], shotUrl: (path: string) => 
   return [...ads]
     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || b.days_running - a.days_running)
     .flatMap((a, i): AdExample[] => {
-      if (!isOneOf(PLATFORMS, a.platform)) return [];
+      if (!isOneOf(COMPETITOR_PLACES, a.platform)) return [];
       const shot = a.screenshot_path ? shotUrl(a.screenshot_path) : undefined;
       return [
         {
@@ -492,6 +502,14 @@ export function toAdExamples(ads: CompetitorAdRow[], shotUrl: (path: string) => 
           text: a.text,
           daysRunning: a.days_known ? a.days_running : null,
           tone: TONES[i % TONES.length] ?? 'slate',
+          ...(a.kind && isOneOf(ITEM_KINDS, a.kind) && a.kind !== 'ad' ? { kind: a.kind } : {}),
+          ...(a.versions ? { versions: a.versions } : {}),
+          ...(a.placements && a.placements.length > 0 ? { placements: a.placements } : {}),
+          ...(typeof a.active === 'boolean' ? { active: a.active } : {}),
+          ...(typeof a.reactions === 'number' ? { reactions: a.reactions } : {}),
+          ...(typeof a.comments === 'number' ? { comments: a.comments } : {}),
+          ...(typeof a.shares === 'number' ? { shares: a.shares } : {}),
+          ...(typeof a.views === 'number' ? { views: a.views } : {}),
           ...(a.headline ? { headline: a.headline } : {}),
           ...(a.cta ? { cta: a.cta } : {}),
           ...(a.angle ? { angle: a.angle } : {}),
@@ -512,7 +530,7 @@ export function toCompetitor(row: CompetitorRow, shotUrl: (path: string) => stri
   const hooks = [...report.hooks]
     .sort((a, b) => a.rank - b.rank)
     .flatMap((h): Hook[] =>
-      isOneOf(PLATFORMS, h.platform)
+      isOneOf(COMPETITOR_PLACES, h.platform)
         ? [{ id: h.id, text: h.text, platform: h.platform, format: formatOf(h.format), daysRunning: h.days_known ? h.days_running : null, variations: h.variations }]
         : [],
     );

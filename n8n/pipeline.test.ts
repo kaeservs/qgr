@@ -275,7 +275,8 @@ async function dashboardCompetitor(competitorId: string): Promise<CompetitorRow>
           'id', cr.id, 'data_source', cr.data_source, 'active_ads', cr.active_ads, 'platforms', cr.platforms, 'insights', cr.insights, 'angles', cr.angles, 'created_at', cr.created_at,
           'hooks', coalesce((select json_agg(json_build_object('id', h.id, 'rank', h.rank, 'text', h.text, 'platform', h.platform, 'format', h.format, 'days_running', h.days_running, 'variations', h.variations, 'days_known', h.days_known)) from public.hooks h where h.report_id = cr.id), '[]'),
           'competitor_ads', coalesce((select json_agg(json_build_object('id', a.id, 'platform', a.platform, 'format', a.format, 'text', a.text, 'days_running', a.days_running, 'ad_url', a.ad_url,
-            'headline', a.headline, 'cta', a.cta, 'angle', a.angle, 'screenshot_path', a.screenshot_path, 'position', a.position, 'days_known', a.days_known)) from public.competitor_ads a where a.report_id = cr.id), '[]')
+            'headline', a.headline, 'cta', a.cta, 'angle', a.angle, 'screenshot_path', a.screenshot_path, 'position', a.position, 'days_known', a.days_known,
+            'kind', a.kind, 'versions', a.versions, 'placements', a.placements, 'active', a.active, 'reactions', a.reactions, 'comments', a.comments, 'shares', a.shares, 'views', a.views)) from public.competitor_ads a where a.report_id = cr.id), '[]')
         )) from public.competitor_reports cr where cr.competitor_id = c.id), '[]')) from public.competitors c where c.id = $1`,
       [competitorId],
     ),
@@ -512,9 +513,16 @@ describe('a competitor from screenshots of their ads, and a run on a few of them
   const shotsAnswer = (material: Json): Json => {
     expect(material).toMatchObject({ screenshots: 2, competitor: { name_hint: 'Meridian EB-5' } });
     const started = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
-    const read = (id: string, n: number, text: string, started_on = '') => ({ id, shot: n, platform: 'meta', format: 'image', page_name: 'Meridian EB-5', text, headline: 'Talk to us', cta: 'Learn more', started_on });
+    const read = (id: string, n: number, text: string, started_on = '', seen: Json = {}) => ({
+      id, shot: n, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Meridian EB-5', text, headline: 'Talk to us', cta: 'Learn more', started_on,
+      active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '', ...seen,
+    });
     return {
-      ads_read: [read('a1', 1, 'Your kids should not age out while you wait.', started), read('a2', 1, 'Families plan EB-5 early.'), read('a3', 2, 'Rural projects, explained.')],
+      ads_read: [
+        read('a1', 1, 'Your kids should not age out while you wait.', started, { active: 'active', versions: '6', placements: ['facebook', 'instagram'], reactions: '1.2K', comments: '140' }),
+        read('a2', 1, 'Families plan EB-5 early.'),
+        read('a3', 2, 'Rural projects, explained.', '', { kind: 'email', platform: 'meta' }),
+      ],
       competitor_name: 'Meridian EB-5 Advisors LLC',
       summary: 'They lead with children.',
       website_summary: '',
@@ -544,7 +552,7 @@ describe('a competitor from screenshots of their ads, and a run on a few of them
     await rpc('agent_finish_tracker', { p_run_id: answer.p_run_id, p_report: answer.p_report, p_usage: answer.p_usage });
 
     const run = toRun(await dashboardRun(runId));
-    expect(run.stages.tracker).toMatchObject({ status: 'done', summary: 'Read 3 ads from 2 screenshots and found 2 hooks.' });
+    expect(run.stages.tracker).toMatchObject({ status: 'done', summary: 'Read 3 items from 2 screenshots and found 2 hooks.' });
     expect(run.activity.map((e) => e.text)).toContain('2 screenshots of their ads');
     const competitor = toCompetitor(await dashboardCompetitor(run.output.competitorId!), (path) => `https://signed.example/${path}`);
     expect(competitor).toMatchObject({ name: 'Meridian EB-5', dataSource: 'upload', activeAds: 3 });
@@ -557,6 +565,9 @@ describe('a competitor from screenshots of their ads, and a run on a few of them
       ['Families plan EB-5 early.', null, 'Family & education', `https://signed.example/${files[0]}`],
       ['Rural projects, explained.', null, 'Process explained', `https://signed.example/${files[1]}`],
     ]);
+    // What each shows of how well it is doing reaches the dashboard as facts; the email says what it is.
+    expect(competitor!.examples[0]).toMatchObject({ versions: 6, placements: ['facebook', 'instagram'], active: true, reactions: 1200, comments: 140 });
+    expect(competitor!.examples[2]).toMatchObject({ kind: 'email', platform: 'email' });
 
     // A person ticks two of the ads and builds a run on them alone.
     const [first, second, third] = competitor!.examples;
@@ -570,7 +581,7 @@ describe('a competitor from screenshots of their ads, and a run on a few of them
     expect(strategist.failed).toBeNull();
     const material = materialOf(strategist.body);
     expect((material.competitor_report as Json).chosen_ads).toEqual([
-      { platform: 'meta', format: 'image', text: 'Rural projects, explained.', headline: 'Talk to us', cta: 'Learn more', angle: 'Process explained' },
+      { platform: 'email', format: 'image', text: 'Rural projects, explained.', headline: 'Talk to us', cta: 'Learn more', angle: 'Process explained' },
       { platform: 'meta', format: 'image', text: 'Your kids should not age out while you wait.', headline: 'Talk to us', cta: 'Learn more', angle: 'Family & education', days_running: 30 },
     ]);
     expect(String(strategist.body.system)).toContain('competitor_report.chosen_ads');

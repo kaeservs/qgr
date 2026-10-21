@@ -57,7 +57,7 @@ const RUN =
   'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, source_report_id, pick_first, chosen_angle_ids, ai_media, ai_video, run_references!run_references_run_id_fkey(position, path, note, status, error), run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
-  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known))';
+  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known, kind, versions, placements, active, reactions, comments, shares, views))';
 const STRATEGY =
   'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit, design';
@@ -955,7 +955,7 @@ export const liveData: DataSource = {
     const [{ data: report, error }, all] = await Promise.all([
       supabase
         .from('competitor_reports')
-        .select('id, competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known)')
+        .select('id, competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known, kind, versions, placements, active, reactions, comments, shares, views)')
         .eq('run_id', runId)
         .order('created_at', { ascending: false })
         .limit(1)

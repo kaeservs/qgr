@@ -223,7 +223,8 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
     const material = JSON.parse(String(content[0]!.text).split('\n').slice(1).join('\n'));
     expect(material).toMatchObject({ screenshots: 2, competitor: { name_hint: 'Horizon Visa' } });
     expect(material).not.toHaveProperty('ads');
-    expect(String(body.system)).toContain('First read every ad in the screenshots into ads_read');
+    expect(String(body.system)).toContain('First read every piece of their marketing in the screenshots into ads_read');
+    expect(String(body.system)).toContain('never claim spend, clicks or reach');
     const schema = (body.output_config as { format: { schema: { required: string[] } } }).format.schema;
     expect(schema.required[0]).toBe('ads_read');
   });
@@ -235,7 +236,10 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
   });
 
   it('keeps the ads Claude read, with their screenshot, counting days only from a start date shown', () => {
-    const read = (id: string, shot: number, text: string, started_on = '') => ({ id, shot, platform: 'meta', format: 'image', page_name: 'Horizon Visa', text, headline: '', cta: 'Learn more', started_on });
+    const read = (id: string, shot: number, text: string, started_on = '') => ({
+      id, shot, kind: 'ad', platform: 'meta', format: 'image', page_name: 'Horizon Visa', text, headline: '', cta: 'Learn more', started_on,
+      active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '',
+    });
     const started = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const answer = {
       ads_read: [
@@ -262,16 +266,44 @@ describe('Competitor Tracker, reading screenshots of their ads', () => {
       { text: 'Plan before the bulletin moves.', platform: 'meta', format: 'image', days_running: 20, variations: 2 },
       { text: 'Your kids should not age out.', platform: 'meta', format: 'image', days_running: 0, variations: 1, days_known: false },
     ]);
+    const none = { kind: 'ad', versions: null, placements: [], active: null };
     expect(report.ads).toEqual([
-      { platform: 'meta', format: 'image', text: 'Plan before the bulletin moves.', days_running: 20, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Timeline & urgency', screenshot_path: files[1] },
-      { platform: 'meta', format: 'image', text: 'Your kids should not age out.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Family & education', days_known: false, screenshot_path: files[0] },
-      { platform: 'meta', format: 'image', text: 'A start date in the future.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: null, days_known: false, screenshot_path: files[1] },
+      { platform: 'meta', format: 'image', text: 'Plan before the bulletin moves.', days_running: 20, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Timeline & urgency', ...none, screenshot_path: files[1] },
+      { platform: 'meta', format: 'image', text: 'Your kids should not age out.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: 'Family & education', ...none, days_known: false, screenshot_path: files[0] },
+      { platform: 'meta', format: 'image', text: 'A start date in the future.', days_running: 0, ad_url: null, media_url: null, headline: null, cta: 'Learn more', page_name: 'Horizon Visa', angle: null, ...none, days_known: false, screenshot_path: files[1] },
     ]);
   });
 
-  it('fails with a reason when no ad could be read', () => {
-    const answer = { ads_read: [], competitor_name: '', summary: '', website_summary: '', insights: ['x'], hooks: [], ad_angles: [] };
-    expect(run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared })).toMatchObject({ ok: false, p_error: 'Claude found no ads it could read in the screenshots.' });
+  it('reads an email or a page as what it is, and the counts a screenshot shows as numbers worked out here', () => {
+    const item = (id: string, seen: Json) => ({
+      id, shot: 1, kind: 'ad', platform: 'meta', format: 'image', page_name: 'EB5UNITED', text: `Item ${id}.`, headline: '', cta: '', started_on: '',
+      active: '', versions: '', placements: [], reactions: '', comments: '', shares: '', views: '', ...seen,
+    });
+    const answer = {
+      ads_read: [
+        item('a1', { kind: 'email', platform: 'meta', format: 'text' }),
+        item('a2', { kind: 'page', platform: 'x' }),
+        item('a3', { active: 'inactive', versions: '6', placements: ['facebook', 'instagram', 'facebook', 'tiktok'], reactions: '1.2K', comments: '3,456', shares: '2M', views: 'many' }),
+        item('a4', { kind: 'post', versions: '0' }),
+      ],
+      competitor_name: 'EB5UNITED', summary: 'A newsletter and a page.', website_summary: '', insights: ['x'],
+      hooks: [{ text: 'Item a1.', ad_ids: ['a1', 'a2', 'a3', 'a4'] }],
+      ad_angles: [],
+    };
+    const ads = (run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared }).p_report as { ads: Json[] }).ads;
+    expect(ads.map((a) => [a.kind, a.platform])).toEqual([['email', 'email'], ['page', 'web'], ['ad', 'meta'], ['post', 'meta']]);
+    expect(ads[2]).toMatchObject({ active: false, versions: 6, placements: ['facebook', 'instagram'], reactions: 1200, comments: 3456, shares: 2000000 });
+    // A count the screenshot did not show is left out, never zero.
+    expect(ads[2]).not.toHaveProperty('views');
+    expect(ads[3]).toMatchObject({ versions: null });
+  });
+
+  it('fails with what Claude saw when nothing in the screenshots is marketing it can read', () => {
+    const answer = { ads_read: [], competitor_name: '', summary: 'A photo of an office, with no words.', website_summary: '', insights: ['x'], hooks: [], ad_angles: [] };
+    expect(run('tracker-read-answer.js', reply(answer), { 'Prepare the ads': prepared })).toMatchObject({
+      ok: false,
+      p_error: 'Claude found no ad, post, email or web page it could read in the screenshots: A photo of an office, with no words.',
+    });
   });
 });
 
@@ -359,7 +391,7 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
     const out = read(
       [
         camel('1111111111', 'Horizon Visa Partners', "Your kids shouldn't age out while you wait. Here's how families plan ahead."),
-        snake('2222222222', 'Horizon Visa', 'The H-1B lottery is not a plan. This is.'),
+        snake('2222222222', 'Horizon Visa', 'The H-1B lottery is not a plan. This is.', { collation_count: 4 }),
       ],
       plan,
     );
@@ -371,6 +403,8 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
       format: 'video',
       startDate: new Date((now - 63 * day) * 1000).toISOString(),
       isActive: true,
+      versions: null,
+      placements: ['facebook', 'instagram'],
       pageName: 'Horizon Visa Partners',
       text: "Your kids shouldn't age out while you wait. Here's how families plan ahead.",
       headline: 'Plan your EB-5 timeline',
@@ -378,14 +412,18 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
       adUrl: 'https://www.facebook.com/ads/library/?id=1111111111',
       mediaUrl: 'https://scontent.example/preview.jpg',
     });
-    expect(ads[1]).toMatchObject({ id: '2222222222', format: 'image', text: 'The H-1B lottery is not a plan. This is.', headline: null, cta: 'Learn more', mediaUrl: 'https://scontent.example/original.jpg' });
+    expect(ads[1]).toMatchObject({ id: '2222222222', versions: 4, placements: ['facebook'], format: 'image', text: 'The H-1B lottery is not a plan. This is.', headline: null, cta: 'Learn more', mediaUrl: 'https://scontent.example/original.jpg' });
 
     // Days running are worked out from the start date, as for the sample ads.
     const prepared = run('tracker-prepare-ads.js', out);
-    expect((prepared.ads as Json[]).map((a) => [a.days_running, a.hook_line])).toEqual([
-      [63, "Your kids shouldn't age out while you wait."],
-      [12, 'The H-1B lottery is not a plan.'],
+    expect((prepared.ads as Json[]).map((a) => [a.days_running, a.hook_line, a.versions, a.placements])).toEqual([
+      [63, "Your kids shouldn't age out while you wait.", null, ['facebook', 'instagram']],
+      [12, 'The H-1B lottery is not a plan.', 4, ['facebook']],
     ]);
+    // Claude reads them too, with what Meta says of each.
+    const material = materialOf((run('tracker-build-request.js', prepared) as { body: Json }).body);
+    expect((material.ads as Json[])[1]).toMatchObject({ versions: 4, placements: ['facebook'] });
+    expect(material.ads as Json[]).not.toContainEqual(expect.objectContaining({ id: 'a1', versions: expect.anything() }));
   });
 
   it('keeps a search to the competitor’s own ads, once each, and skips template words', () => {
