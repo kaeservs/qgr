@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clipTranscript, clock, momentOf, momentText, nudge, parseLongVideo, sameFile, sampleMoments, titleFromFile } from './long-video';
+import { clipTranscript, clock, momentOf, momentText, nudge, parseLongVideo, sameFile, sampleMoments, titleFromFile, transcriptThroughEdit } from './long-video';
 
 const TRANSCRIPT = Array.from({ length: 60 }, (_, i) => ({ start: i * 10, end: i * 10 + 9.5, text: `Line ${i}.` }));
 const FILE = { name: 'webinar.mp4', size: 900_000_000, duration: 600, width: 1920, height: 1080 };
@@ -70,5 +70,24 @@ describe('moments, by line', () => {
   it('writes a moment’s place in the video as a clock', () => {
     expect(clock(245)).toBe('4:05');
     expect(clock(3725)).toBe('1:02:05');
+  });
+});
+
+describe('what is said in an edit of the whole video', () => {
+  const own = (at: number, start: number, end: number) => ({ at, segment: { kind: 'clip', media: null, start, end, speed: 1 } });
+  it('is each line where the edit plays it, in the edited video’s seconds', () => {
+    // 0:00-0:30 kept, an AI video of 5 s inserted, then 2:00-2:20.
+    const placed = [own(0, 0, 30), { at: 30, segment: { kind: 'clip', media: { path: 'ai:v1' }, start: 0, end: 5, speed: 1 } }, own(35, 120, 140)];
+    expect(transcriptThroughEdit(TRANSCRIPT, placed)).toEqual([
+      { start: 0, end: 9.5, text: 'Line 0.' },
+      { start: 10, end: 19.5, text: 'Line 1.' },
+      { start: 20, end: 29.5, text: 'Line 2.' },
+      { start: 35, end: 44.5, text: 'Line 12.' },
+      { start: 45, end: 54.5, text: 'Line 13.' },
+    ]);
+  });
+
+  it('keeps a line cut through only when most of it plays', () => {
+    expect(transcriptThroughEdit(TRANSCRIPT, [own(0, 6, 23)]).map((l) => l.text)).toEqual(['Line 1.']);
   });
 });

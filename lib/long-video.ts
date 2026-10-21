@@ -147,3 +147,25 @@ export function sampleMoments(transcript: readonly TranscriptLine[]): Moment[] {
   }
   return out;
 }
+
+/**
+ * What is said in an edit of the whole video, in the edited video's seconds:
+ * each line of the transcript where a piece of the video plays it (a line cut
+ * through is kept for the part that plays, if it is most of it), so the run
+ * made from the edited file has its captions and notes.
+ */
+export function transcriptThroughEdit(transcript: readonly TranscriptLine[], placed: readonly { at: number; segment: { kind: string; media?: unknown; start?: number; end?: number; speed?: number } }[]): TranscriptLine[] {
+  const out: TranscriptLine[] = [];
+  for (const p of placed) {
+    const s = p.segment;
+    if (s.kind !== 'clip' || s.media !== null || s.start === undefined || s.end === undefined) continue;
+    const speed = s.speed ?? 1;
+    for (const l of transcript) {
+      const from = Math.max(l.start, s.start);
+      const to = Math.min(l.end, s.end);
+      if (to - from < (l.end - l.start) / 2) continue;
+      out.push({ start: Math.round((p.at + (from - s.start) / speed) * 100) / 100, end: Math.round((p.at + (to - s.start) / speed) * 100) / 100, text: l.text });
+    }
+  }
+  return out.sort((a, b) => a.start - b.start);
+}
