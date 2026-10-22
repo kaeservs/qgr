@@ -165,6 +165,7 @@ export interface CompetitorRow {
       comments?: number | null;
       shares?: number | null;
       views?: number | null;
+      impressions?: string | null;
     }[];
   }[];
 }
@@ -262,8 +263,8 @@ const POST_STATUSES: readonly PostStatus[] = ['scheduled', 'posting', 'posted', 
 const STYLES: readonly CreativeStyle[] = ['arcs', 'split', 'spotlight'];
 const SOURCES: readonly AdSource[] = ['apify', 'placeholder', 'upload'];
 const TONES: readonly AdExample['tone'][] = ['slate', 'teal', 'plum', 'sand'];
-/** An ad's own page in Meta's Ad Library, the only link a competitor's ad is shown with. */
-const LIBRARY_AD = /^https:\/\/www\.facebook\.com\/ads\/library\/\?id=\d{1,25}$/;
+/** An ad's own page in Meta's or LinkedIn's Ad Library, the only link a competitor's ad is shown with. */
+const LIBRARY_AD = /^https:\/\/www\.(facebook\.com\/ads\/library\/\?id=|linkedin\.com\/ad-library\/detail\/)\d{1,25}$/;
 const ADS_SETTINGS: readonly AdsSetting[] = ['sample', 'apify'];
 
 const COMPETITOR_PLACES = [...PLATFORMS, 'email', 'web'] as const;
@@ -511,6 +512,7 @@ export function toAdExamples(ads: CompetitorAdRow[], shotUrl: (path: string) => 
           ...(typeof a.comments === 'number' ? { comments: a.comments } : {}),
           ...(typeof a.shares === 'number' ? { shares: a.shares } : {}),
           ...(typeof a.views === 'number' ? { views: a.views } : {}),
+          ...(a.impressions ? { impressions: a.impressions } : {}),
           ...(a.headline ? { headline: a.headline } : {}),
           ...(a.cta ? { cta: a.cta } : {}),
           ...(a.angle ? { angle: a.angle } : {}),

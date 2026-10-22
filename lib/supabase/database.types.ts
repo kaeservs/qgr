@@ -373,6 +373,7 @@ export type Database = {
           format: string
           headline: string | null
           id: string
+          impressions: string | null
           kind: string
           media_url: string | null
           page_name: string | null
@@ -398,6 +399,7 @@ export type Database = {
           format: string
           headline?: string | null
           id?: string
+          impressions?: string | null
           kind?: string
           media_url?: string | null
           page_name?: string | null
@@ -423,6 +425,7 @@ export type Database = {
           format?: string
           headline?: string | null
           id?: string
+          impressions?: string | null
           kind?: string
           media_url?: string | null
           page_name?: string | null

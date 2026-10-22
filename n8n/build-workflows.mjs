@@ -25,6 +25,7 @@ const SUPABASE_RPC = 'https://tcinsdexwvzpznqlcpww.supabase.co/rest/v1/rpc';
 const SUPABASE_STORAGE = 'https://tcinsdexwvzpznqlcpww.supabase.co/storage/v1';
 /** Apify's Facebook Ads Library Scraper, run and answered in one call. */
 const APIFY_ACTOR = 'https://api.apify.com/v2/acts/apify~facebook-ads-scraper';
+const APIFY_LINKEDIN_ACTOR = 'https://api.apify.com/v2/acts/silva95gustavo~linkedin-ad-library-scraper';
 const IMPORTS = "import { workflow, node, trigger, sticky, newCredential, ifElse, switchCase, expr } from '@n8n/workflow-sdk';";
 
 // ---------------------------------------------------------------- shared pieces
@@ -234,6 +235,33 @@ const signShots = node({
 });
 ${codeNode('shotAds', 'Screenshot ads', code('tracker-screenshot-ads.js', { __STORAGE__: SUPABASE_STORAGE }), `{ runId: 'run-id', dataSource: 'upload', ads: [], shots: [{ n: 1, path: 'shots/user/file.png', url: '${SUPABASE_STORAGE}/object/sign/competitor-shots/shots/user/file.png?token=token' }] }`, "\n    onError: 'continueErrorOutput',")}
 ${ifTrue('realAds', 'Real ads?', '{{ $json.adsSource === "apify" }}')}
+${ifTrue('linkedinToo', 'LinkedIn too?', '{{ !!$json.linkedin }}')}
+${ifTrue('metaToo', 'Meta too?', '{{ !!$("Plan the scan").first().json.library }}')}
+
+const linkedinApify = node({
+  type: 'n8n-nodes-base.httpRequest',
+  version: 4.5,
+  config: {
+    name: 'Apify: their LinkedIn ads',
+    onError: 'continueRegularOutput',
+    alwaysOutputData: true,
+    parameters: {
+      method: 'POST',
+      url: '${APIFY_LINKEDIN_ACTOR}/run-sync-get-dataset-items',
+      authentication: 'genericCredentialType',
+      genericAuthType: 'httpCustomAuth',
+      sendQuery: true,
+      queryParameters: { parameters: [{ name: 'timeout', value: '240' }, { name: 'maxItems', value: '20' }] },
+      sendBody: true,
+      contentType: 'json',
+      specifyBody: 'json',
+      jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $json.linkedin.url }], resultsLimit: 20, skipDetails: false }) }}'),
+      options: { timeout: 300000 },
+    },
+    credentials: { httpCustomAuth: newCredential('Apify token') },
+  },
+  output: [{ adId: '1595563514', adLibraryUrl: 'https://www.linkedin.com/ad-library/detail/1595563514', advertiserName: 'Example Visa Partners', body: 'Hook', ctas: ['Learn more'], format: 'SINGLE_IMAGE', availability: { start: '2026-10-01', end: '2026-10-22' }, impressions: '10k-20k' }],
+});
 
 const apify = node({
   type: 'n8n-nodes-base.httpRequest',
@@ -242,6 +270,7 @@ const apify = node({
     name: 'Apify: their Meta ads',
     onError: 'continueErrorOutput',
     alwaysOutputData: true,
+    executeOnce: true,
     parameters: {
       method: 'POST',
       url: '${APIFY_ACTOR}/run-sync-get-dataset-items',
@@ -252,7 +281,7 @@ const apify = node({
       sendBody: true,
       contentType: 'json',
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $json.library.url }], resultsLimit: 60, activeStatus: "active" }) }}'),
+      jsonBody: expr('{{ JSON.stringify({ startUrls: [{ url: $("Plan the scan").first().json.library.url }], resultsLimit: 60, activeStatus: "active" }) }}'),
       options: { timeout: 300000 },
     },
     credentials: { httpCustomAuth: newCredential('Apify token') },
@@ -270,7 +299,7 @@ ${rpcNode('save', 'Save the report', 'agent_finish_tracker', '{{ JSON.stringify(
 ${failTail('tracker')}
 
 const noteWebsite = sticky('## Their website\\nThe app read it when the run started (it checks the link is a public site, on every redirect) and stored it with the run. **Plan the scan** takes the page\\'s words from there: n8n never fetches a link someone pasted.', [plan], { color: 4 });
-const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it. It needs the **Apify token** credential (Custom Auth, JSON {"headers": {"Authorization": "Bearer <token>"}}, allowed domain api.apify.com); without it a scan stops and says why.', [realAds, apify, apifyAds, sampleAds], { color: 3 });
+const noteApify = sticky('## Their ads: sample, or Apify\\n**Real ads?** follows the team\\'s choice in Settings, Agents. **Sample ads** are the same examples for every competitor, and the report says so.\\n\\nWith Apify on, Apify\\'s Facebook Ads Library Scraper reads the page of Meta\\'s Ad Library the plan names: the link pasted, or a search for the competitor\\'s name. **Read Apify\\'s ads** keeps their own ads and reads each field whichever way the actor names it.\\n\\nLinkedIn: a pasted LinkedIn Ad Library link, or a search by name (last 30 days), read by the LinkedIn Ads Scraper with its details: run dates and the impressions range LinkedIn publishes. Its step never fails the scan: the report goes on with Meta\\'s ads and says LinkedIn could not be read. It needs the **Apify token** credential (Custom Auth, JSON {"headers": {"Authorization": "Bearer <token>"}}, allowed domain api.apify.com); without it a scan stops and says why.', [realAds, linkedinToo, linkedinApify, metaToo, apify, apifyAds, sampleAds], { color: 3 });
 const noteNumbers = sticky('## Numbers come from the data\\nClaude groups ads into hooks by id and names each ad\\'s angle. Days running, versions and angle counts are computed in code from the ads, never taken from the model.', [prepareAds, readAnswer], { color: 5 });
 const noteShots = sticky('## Screenshots of their ads\\nA run the team started from screenshots (a feed, Meta\\'s Ad Library, LinkedIn) skips the ad sources: Storage signs the pictures for 15 minutes and Claude reads each ad out of them first. A screenshot rarely shows how long an ad has run, so days running are counted only from a start date the screenshot shows.', [fromShots, signShots, shotAds], { color: 4 });
 const noteModel = sticky('## Claude\\nHaiku 5.5 while the app is being built (about a cent a run), medium effort, JSON constrained by a schema. A refusal stands: Haiku has no fallback model. No temperature. Usage is saved with every result.', [buildRequest, claude], { color: 6 });
@@ -279,7 +308,9 @@ export default workflow('qgr-competitor-tracker', 'QGR · Competitor Tracker')
   .add(start)
   .to(begin.onError(couldNotStart))
   .to(plan.onError(whyFailed))
-  .to(fromShots.onTrue(signShots).onFalse(realAds.onTrue(apify.onError(whyFailed)).onFalse(sampleAds)))
+  .to(fromShots.onTrue(signShots).onFalse(realAds.onTrue(linkedinToo.onTrue(linkedinApify).onFalse(metaToo)).onFalse(sampleAds)))
+  .add(linkedinApify)
+  .to(metaToo.onTrue(apify.onError(whyFailed)).onFalse(apifyAds))
   .add(apify)
   .to(apifyAds.onError(whyFailed))
   .to(prepareAds.onError(whyFailed))

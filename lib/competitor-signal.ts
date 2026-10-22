@@ -3,7 +3,8 @@
 // worked out of the signs an ad that works leaves: it keeps running (an
 // advertiser stops paying for one that loses money), they run more copies of
 // it ("N ads use this creative and text"), it is placed widely, and, where a
-// screenshot shows them, people react to it. Computed here, never by a model,
+// screenshot shows them, people react to it. LinkedIn does publish one figure:
+// an ad's impressions, as a range. Computed here, never by a model,
 // and every rating says the facts it rests on. Pure, and tested.
 
 /** The facts an ad carries; null is "not shown", never zero. */
@@ -16,6 +17,8 @@ export interface AdFacts {
   comments?: number;
   shares?: number;
   views?: number;
+  /** LinkedIn's impressions range, as LinkedIn writes it ("10k-20k", "<1k", "1M+"). */
+  impressions?: string;
 }
 
 export type SignalLevel = 'strong' | 'promising' | 'little' | 'new' | 'ended' | 'unknown';
@@ -46,6 +49,15 @@ const PLACEMENT_LABEL: Record<string, string> = {
   whatsapp: 'WhatsApp',
 };
 
+/** The low end of LinkedIn's range: "10k-20k" is 10,000, "<1k" is 0, "1M+" is 1,000,000. */
+export function impressionsLow(range: string): number {
+  if (/^</.test(range)) return 0;
+  const m = /^(\d+(?:\.\d+)?)([kKmM]?)/.exec(range);
+  if (!m) return 0;
+  const unit = m[2]!.toLowerCase();
+  return Math.round(Number(m[1]) * (unit === 'm' ? 1_000_000 : unit === 'k' ? 1000 : 1));
+}
+
 /** 1.2K, 45K, 2.3M: the same on the server and in the browser (no Intl). */
 export function compact(n: number): string {
   if (n >= 1_000_000) return `${trim(n / 1_000_000)}M`;
@@ -58,7 +70,9 @@ const trim = (n: number) => (Math.round(n * 10) / 10).toString();
 /**
  * Points: days running (14, 30, 60 and 90 days are 1 to 4), versions (2 or
  * more is 1, 5 or more is 2), placed in two or more places (1), reactions,
- * comments and shares together (100 is 1, 1,000 is 2), views (10,000 is 1).
+ * comments and shares together (100 is 1, 1,000 is 2), views (10,000 is 1),
+ * LinkedIn's impressions by the low end of their range (10,000 is 1, 100,000
+ * is 2).
  * Four or more is strong, two or more promising. An ad stopped within two
  * weeks is stopped early; one under a week old with less than two points is
  * too new to tell; one with nothing shown at all says so.
@@ -94,6 +108,11 @@ export function adSignal(ad: AdFacts): AdSignal {
   if (said.length > 0) reasons.push(said.join(' · '));
   score += engaged >= 1000 ? 2 : engaged >= 100 ? 1 : 0;
   if ((ad.views ?? 0) >= 10_000) score += 1;
+  if (ad.impressions) {
+    const low = impressionsLow(ad.impressions);
+    reasons.push(`${ad.impressions.replace('-', '–')} impressions on LinkedIn`);
+    score += low >= 100_000 ? 2 : low >= 10_000 ? 1 : 0;
+  }
 
   const level: SignalLevel =
     ad.active === false && days !== null && days < 14

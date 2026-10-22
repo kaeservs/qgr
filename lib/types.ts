@@ -207,6 +207,8 @@ export interface AdExample {
   comments?: number;
   shares?: number;
   views?: number;
+  /** LinkedIn's impressions range for it, as LinkedIn writes it ("10k-20k"). */
+  impressions?: string;
   format: AdFormat;
   text: string;
   /** Null when it is not known: a screenshot rarely shows when an ad started. */

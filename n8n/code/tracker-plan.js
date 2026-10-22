@@ -1,9 +1,10 @@
 // What to scan, from the run the database handed back. The app read the
 // competitor's website when the run started and stored it with the run
 // (run.page): the agents never fetch a link themselves. With the team's ads
-// switched to Apify (Settings, Agents), it also says which page of Meta's Ad
-// Library Apify reads: the library link pasted, or else a search for the
-// competitor's name, kept afterwards to their own ads. A run from screenshots
+// switched to Apify (Settings, Agents), it also says which pages of the ad
+// libraries Apify reads: a Meta or LinkedIn Ad Library link pasted, that
+// library alone; else a search for the competitor's name in both, kept
+// afterwards to their own ads. A run from screenshots
 // of their ads (files in competitor-shots, uploaded by the team) reads those
 // instead, whichever source the team chose. The team's direction for the
 // run, if they gave one, and who QGR is (its brand memory) go along to the
@@ -23,20 +24,30 @@ if (host && host[1]) domain = host[1].replace(/^www\./, '').toLowerCase();
 const competitorHint = run.competitor_name || (page && page.siteName) || (domain ? domain.split('.')[0] : null);
 const adsSource = ctx.ads_source === 'apify' ? 'apify' : 'sample';
 
+const META_LIBRARY = /^https?:\/\/(www\.|m\.)?facebook\.com\/ads\/library\b/i;
+const LINKEDIN_LIBRARY = /^https?:\/\/(www\.)?linkedin\.com\/ad-library\b/i;
 let library = null;
+let linkedin = null;
 if (adsSource === 'apify' && screenshots.length === 0) {
   if (run.input === 'ad_link') {
-    if (!/^https?:\/\/(www\.|m\.)?facebook\.com\/ads\/library\b/i.test(run.url || '')) {
-      throw new Error("Apify reads Meta's Ad Library, and this link is to another one. Start the run from their website or a link to their ads in Meta's Ad Library.");
-    }
-    library = { url: run.url, keep: null };
+    if (META_LIBRARY.test(run.url || '')) library = { url: run.url, keep: null };
+    else if (LINKEDIN_LIBRARY.test(run.url || '')) linkedin = { url: run.url, keep: null };
+    else throw new Error("Apify reads Meta's and LinkedIn's Ad Libraries, and this link is to neither. Start the run from their website or a link to their ads in one of them.");
   } else {
     const query = competitorHint || domain;
-    if (!query) throw new Error('There is no name to look this competitor up by in Meta\'s Ad Library.');
+    if (!query) throw new Error('There is no name to look this competitor up by in the ad libraries.');
+    const keep = { name: competitorHint, domain: domain };
     library = {
       url: 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&media_type=all&search_type=keyword_unordered&q=' + encodeURIComponent(query),
       query: query,
-      keep: { name: competitorHint, domain: domain },
+      keep: keep,
+    };
+    // LinkedIn's library searches by advertiser and keeps a year of ads: the
+    // last 30 days are asked, its own filter, as Meta's are asked for active ads.
+    linkedin = {
+      url: 'https://www.linkedin.com/ad-library/search?accountOwner=' + encodeURIComponent(query) + '&dateOption=last-30-days',
+      query: query,
+      keep: keep,
     };
   }
 }
@@ -54,6 +65,7 @@ return [{
     platforms: run.platforms,
     adsSource: adsSource,
     library: library,
+    linkedin: linkedin,
     guidance: run.guidance || null,
     brand: ctx.brand ? { company: ctx.brand.company, offer: ctx.brand.offer, audience: ctx.brand.audience, topics: ctx.brand.topics || [] } : null,
   },

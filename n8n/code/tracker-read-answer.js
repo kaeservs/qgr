@@ -168,6 +168,7 @@ const kept = ads
       active: a.active === undefined ? null : a.active,
     };
     ['reactions', 'comments', 'shares', 'views'].forEach(function (k) { if (typeof a[k] === 'number') ad[k] = a[k]; });
+    if (typeof a.impressions === 'string' && a.impressions) ad.impressions = a.impressions;
     if (!known(a)) ad.days_known = false;
     if (a.screenshot_path) ad.screenshot_path = a.screenshot_path;
     return ad;
@@ -189,6 +190,8 @@ const report = {
   hooks: hooks,
   ads: kept,
 };
+// How many ads each library gave, and why LinkedIn's could not be read.
+if (prep.sources) report.sources = prep.sources;
 if (report.insights.length === 0) {
   return fail('Claude returned no insights.');
 }
