@@ -28,6 +28,17 @@ describe('guardrailWarnings', () => {
     ]);
   });
 
+  it('flags negative framing: a problem first, a dig at other advisors, a worry, a filter', () => {
+    const posts = { facebook: 'Decide with clarity, not pressure. Every project checked before it reaches you.', instagram: 'Tired of the uncertainty? Your plans shouldn’t hang on one employer.' };
+    expect(guardrailWarnings('A path that doesn’t depend on one employer', copy('Your family’s future in the U.S., planned with QGR.'), ['meta'], posts)).toEqual([
+      'image text leads with a problem ("shouldn\'t", "doesn\'t depend")',
+      'facebook post says QGR turns projects down',
+      'facebook post contrasts with other advisors ("not pressure")',
+      'instagram post leads with a problem ("shouldn\'t", "doesn\'t depend")',
+      'instagram post sells by worry ("uncertainty", "tired of")',
+    ]);
+  });
+
   it('holds X to its hard limit and nothing else to a length', () => {
     expect(guardrailWarnings('Fine', copy('a'.repeat(281)), ['meta', 'x'])).toEqual(['x text is 281 characters; X allows 280']);
   });

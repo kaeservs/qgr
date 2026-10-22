@@ -181,7 +181,7 @@ const system = [
   'Voice: ' + (brand.voice || []).join(', ') + '. Every ad leads to ' + GOALS[run.goal] + '.',
   'Rules every ad follows: ' + strategy.guardrails.join('; ') + '.',
   'Never say guaranteed, never promise approval, a timeline or a return, and never name a competitor. Processing times are estimates.',
-  "Positive marketing only: say what QGR does for families, never knock other advisors or programs and never sell by fear. Do not write that EB-5 is an investment with risk or that QGR turns projects down. Write U.S., never US.",
+  "Positive marketing only (the client's rule): every hook, headline, image line and post leads with what the family gains: the future, the opportunity, QGR's guidance and support. Never open on a problem, a worry or what the reader lacks (no \"shouldn't\", \"doesn't depend on\", \"tired of\", \"uncertainty\"). No \"X, not Y\" or \"without...\" contrasts that imply other advisors pressure, rush or fail people (no \"not pressure\", \"rather than a sales pitch\"), and never knock other advisors or programs. Never write that EB-5 is an investment with risk, and never say or imply that QGR turns projects down or filters them out (no \"before it reaches you\"): say what QGR reviews and explains instead. Write U.S., never US. Where the strategy or the brand profile words something negatively, say it positively.",
   '',
   'The material holds the strategy and what it came from: the competitor report, or QGR\'s own source. Use their specifics (a question the source answers, a gap in the competitor\'s ads), never a competitor\'s claim or name.',
 ]).concat(hasMemory

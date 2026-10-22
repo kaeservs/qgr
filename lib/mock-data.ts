@@ -154,7 +154,7 @@ export const competitors: Competitor[] = [
 const GUARDRAILS = [
   'Never promise an outcome, a timeline or a return',
   'Present processing times as estimates',
-  'Positive marketing only: never knock other advisors or sell by fear',
+  'Positive marketing only: lead with what the family gains, never a problem, a worry or a dig at other advisors',
   'Write U.S., never US',
   'End on the free consultation',
 ];
@@ -355,7 +355,7 @@ export const strategies: Strategy[] = [
     competitorIds: [],
     sourceLabel: 'Podcast · Ep. 12: From H-1B to EB-5',
     goal: 'consultations',
-    audiences: ['H-1B professionals worried about layoffs', 'Couples planning to raise children in the U.S.'],
+    audiences: ['H-1B professionals planning their next step', 'Couples planning to raise children in the U.S.'],
     positioning: 'A calm, clear route off the employer-sponsored treadmill.',
     angles: [
       { id: 'sa-7', name: 'Off the treadmill', why: 'Guests kept coming back to job insecurity.', hook: 'Your green card, not your employer’s.' },
@@ -598,7 +598,7 @@ export const adSets: AdSet[] = [
         ],
         copy: {
           meta: {
-            text: "EB-5 shouldn't feel like a maze. See the six steps to a U.S. Green Card, with independent due diligence at each one.",
+            text: 'Your path to a U.S. Green Card, mapped out. See the six steps, with independent due diligence at each one.',
             headline: 'Your EB-5 path in 6 steps',
             description: 'Free consultation',
             cta: 'Book now',
@@ -615,7 +615,7 @@ export const adSets: AdSet[] = [
         },
         posts: {
           facebook:
-            "EB-5 shouldn't feel like a maze.\n\nMost families we meet start with the same question: where do we even begin? The path to a U.S. Green Card through EB-5 comes down to six steps, from choosing a project to filing, and each one has a clear job.\n\nWe walk you through all six in plain English, with an independent due-diligence file on every project we suggest. Processing times are estimates, so we plan around them together.\n\nBook a free consultation and see your path mapped out.",
+            "Your path to a U.S. Green Card, mapped out.\n\nMost families we meet start with the same question: where do we begin? The path to a U.S. Green Card through EB-5 comes down to six steps, from choosing a project to filing, and each one has a clear job.\n\nWe walk you through all six in plain English, with an independent due-diligence file on every project we suggest. Processing times are estimates, so we plan around them together.\n\nBook a free consultation and see your path mapped out.",
           instagram:
             "Your Green Card path, mapped out. 🗺️\n\nSix steps. Plain English. No hype.\n\nFrom choosing a project to filing, we show you what each step is for, and the independent due diligence behind every project we suggest.\n\nProcessing times are estimates: we plan around them with you.\n\nBook a free consultation (link in bio).\n\n#EB5 #GreenCard #USImmigration #InvestorVisa #FamilyMove",
           linkedin:
@@ -714,7 +714,7 @@ export const adSets: AdSet[] = [
         picturePrompt: 'An open road leading out of a city toward a gold horizon at dawn, the sky indigo overhead. No words, no people, no flags.',
         copy: {
           meta: {
-            text: "Layoffs shouldn't decide where your family lives. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.",
+            text: 'Choose where your family lives next. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.',
             headline: 'From H-1B to EB-5',
             description: 'Listen, then book a call',
             cta: 'Learn more',
@@ -725,7 +725,7 @@ export const adSets: AdSet[] = [
             cta: 'Learn more',
           },
           x: {
-            text: 'H-1B and worried about layoffs? Episode 12 explains how EB-5 puts your green card in your own hands.',
+            text: 'H-1B and planning ahead? Episode 12 explains how EB-5 puts your Green Card in your own hands.',
             headline: 'From H-1B to EB-5',
           },
         },
@@ -1175,7 +1175,7 @@ export const posts: Post[] = [
     targets: [
       {
         place: 'facebook',
-        text: "Layoffs shouldn't decide where your family lives. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.",
+        text: 'Choose where your family lives next. Episode 12 unpacks how H-1B holders use EB-5 to plan their own path.',
         media: 'image',
         status: 'posted',
         postedAt: '2026-10-06T14:00:20Z',
