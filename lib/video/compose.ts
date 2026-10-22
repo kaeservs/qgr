@@ -12,6 +12,7 @@
 // video over the sequence for a stretch) comes from `cutawayOf` the same way,
 // and an AI video still being made shows as on its way.
 
+import { DEFAULT_FONT, WORD_FONT_FACE } from '../creative/design';
 import { WORDS } from '../spot';
 import type { Hit } from '../spot';
 import { captionAt, placePicture } from './edit';
@@ -527,15 +528,19 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
   const words = scene.words.trim();
   if (edit.text.show && words && (edit.text.until === null || time < edit.text.until)) {
     const spot = edit.text.spot;
-    const fontSize = unit * 6.8 * (spot?.scale ?? 1);
-    const b = block(ctx, words, `600 ${fontSize}px ${DISPLAY}`, fontSize, size.width - margin * 2, 3, { x: unit * 2.6, y: unit * 1.7 });
+    const face = WORD_FONT_FACE[edit.text.font ?? DEFAULT_FONT];
+    const color = edit.text.color ?? BRAND_COLORS.white;
+    const fontSize = unit * 6.8 * face.scale * (spot?.scale ?? 1);
+    const font = `${face.weight} ${fontSize}px ${face.family}`;
+    const b = block(ctx, words, font, fontSize, size.width - margin * 2, 3, { x: unit * 2.6, y: unit * 1.7 });
     const top = spot ? spot.y * size.height - b.height / 2 : place(bands, edit.text.place, b.height, size);
     const centre = spot ? spot.x * size.width : size.width / 2;
     const until = edit.text.until ?? scene.total - (edit.endCard?.seconds ?? 0);
     const a = animate(look.textAnimation, time, until - time, words.length);
-    ctx.font = `600 ${fontSize}px ${DISPLAY}`;
-    // White on the indigo band, as the words on a picture ad are (the client's choice, 2026-10-22).
-    drawAnimated(ctx, b, centre, top, 'rgb(28 27 157 / 0.92)', BRAND_COLORS.white, unit * 2, a);
+    ctx.font = font;
+    // White on the indigo band by default, as the words on a picture ad are
+    // (the client's choice, 2026-10-22); a dark colour picked goes on a light band.
+    drawAnimated(ctx, b, centre, top, bandFor(color), color, unit * 2, a);
     hits.push({ id: WORDS, x: centre - b.width / 2, y: top, width: b.width, height: b.height });
   }
 
@@ -551,4 +556,15 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
   }
   ctx.restore();
   return hits;
+}
+
+/** The band behind the variant's words: indigo under a light colour, near-white under a dark one, so they always read. */
+export function bandFor(color: string): string {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color)?.[1];
+  if (!hex) return 'rgb(28 27 157 / 0.92)';
+  const [r, g, b] = [0, 2, 4].map((i) => {
+    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  }) as [number, number, number];
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.3 ? 'rgb(255 255 255 / 0.92)' : 'rgb(28 27 157 / 0.92)';
 }

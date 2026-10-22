@@ -23,6 +23,8 @@ import {
   restoreGap,
   splitAt,
   wholeClip,
+  withColor,
+  withFont,
 } from './edit';
 import type { Part, VideoEdit } from './edit';
 
@@ -152,6 +154,22 @@ describe('parseVideoEdit', () => {
 
   it('starts a video with no logo: most clips carry one already, and the Q goes on only when picked', () => {
     expect(defaultEdit(30).logo).toBeNull();
+  });
+
+  it('keeps the words’ font and colour, the default font as none, and refuses what is not one', () => {
+    const r = parseVideoEdit(edit({ text: { show: true, place: 'top', until: null, font: 'playfair', color: '#EFB74A' } }), 30);
+    expect(r.ok && r.value.text).toEqual({ show: true, place: 'top', until: null, font: 'playfair', color: '#efb74a' });
+    const plain = parseVideoEdit(edit({ text: { show: true, place: 'top', until: null, font: 'lexend' } }), 30);
+    expect(plain.ok && plain.value.text).toEqual({ show: true, place: 'top', until: null });
+    const bad = (text: object) => {
+      const x = parseVideoEdit(edit({ text: { show: true, place: 'top', until: null, ...text } as VideoEdit['text'] }), 30);
+      return x.ok ? null : x.error;
+    };
+    expect(bad({ font: 'comic' })).toBe('Pick one of the fonts offered.');
+    expect(bad({ color: 'red' })).toBe('Pick a colour for the words.');
+    const t = withColor(withFont(defaultEdit(30).text, 'oswald'), '#123456');
+    expect(t).toMatchObject({ font: 'oswald', color: '#123456' });
+    expect(withColor(withFont(t, 'lexend'), null)).toEqual(defaultEdit(30).text);
   });
 
   it('accepts an edit and tidies it', () => {

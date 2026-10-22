@@ -47,7 +47,8 @@ export const WORD_COLORS = [
   { value: '#1c1b9d', label: 'Indigo' },
   { value: '#111111', label: 'Black' },
 ] as const;
-const HEX = /^#[0-9a-f]{6}$/;
+/** A colour as #rrggbb, lower case, which is how a colour picked is kept. */
+export const HEX = /^#[0-9a-f]{6}$/;
 
 export interface CreativeDesign {
   /** Whether the logo shows. */

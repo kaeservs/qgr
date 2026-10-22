@@ -514,7 +514,8 @@ describe('a competitor run, from their website to three ads', () => {
     const competitor = toCompetitor(await dashboardCompetitor(run.output.competitorId!));
     const fromLinkedIn = competitor!.examples.filter((a) => a.platform === 'linkedin');
     expect(fromLinkedIn.map((a) => [a.daysRunning, a.active, a.impressions, a.url])).toEqual([
-      [25, true, '10k-20k', 'https://www.linkedin.com/ad-library/detail/7770001'],
+      // Still showing: counted from its start date to now, so the hour of the day can round it up.
+      [Math.round((Date.now() - Date.parse(iso(25))) / 86_400_000), true, '10k-20k', 'https://www.linkedin.com/ad-library/detail/7770001'],
       [18, false, '<1k', 'https://www.linkedin.com/ad-library/detail/7770002'],
     ]);
     expect(competitor!.platforms).toEqual(expect.arrayContaining(['meta', 'linkedin']));

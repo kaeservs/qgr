@@ -8,6 +8,8 @@
 // caption stays with the words it shows when the cut changes. `text.until` and
 // `cover` are the edited video's seconds, counted from its first frame.
 
+import { HEX, WORD_FONTS } from '../creative/design';
+import type { WordFont } from '../creative/design';
 import { parseSpot } from '../spot';
 import type { Spot } from '../spot';
 import type { ParseResult } from '../run-input';
@@ -68,7 +70,8 @@ export interface VideoEdit {
    * seconds; null keeps them up. `spot`, once a person drags them, is where
    * they sit instead of their place.
    */
-  text: { show: boolean; place: TextPlace; until: number | null; spot?: Spot };
+  /** The variant's words: whether and where they show, for how long, and, when picked, their font and colour (as on a picture ad: Lexend and white without one). */
+  text: { show: boolean; place: TextPlace; until: number | null; spot?: Spot; font?: WordFont; color?: string };
   captions: Caption[];
   logo: Corner | null;
   /** Where the logo sits once a person drags it, instead of its corner, and its size. */
@@ -320,6 +323,19 @@ export function placePicture(edit: Pick<VideoEdit, 'fit' | 'focus'>, picture: Si
 
 // ---------------------------------------------------------------- whole edits
 
+/** The words in a font; the default (Lexend) is kept as no font at all. */
+export function withFont(text: VideoEdit['text'], font: WordFont): VideoEdit['text'] {
+  const { font: _was, ...rest } = text;
+  return font === 'lexend' ? rest : { ...rest, font };
+}
+
+/** The words in a colour, or with null the default white again. */
+export function withColor(text: VideoEdit['text'], color: string | null): VideoEdit['text'] {
+  const { color: _was, ...rest } = text;
+  const hex = color?.toLowerCase();
+  return hex && HEX.test(hex) ? { ...rest, color: hex } : rest;
+}
+
 /** A variant's video before anyone edits it: the whole clip and the variant's words at the top, with no logo (most clips carry one already). */
 export function defaultEdit(duration: number): VideoEdit {
   return {
@@ -412,6 +428,10 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
     until = ms(text.until);
   }
 
+  if (text.font !== undefined && !(WORD_FONTS as readonly unknown[]).includes(text.font)) return fail('Pick one of the fonts offered.');
+  const color = typeof text.color === 'string' ? text.color.toLowerCase() : text.color;
+  if (color !== undefined && (typeof color !== 'string' || !HEX.test(color))) return fail('Pick a colour for the words.');
+
   const captions = captionsOf(raw.captions, duration);
   if (typeof captions === 'string') return fail(captions);
 
@@ -428,7 +448,14 @@ export function parseVideoEdit(raw: unknown, duration: number = MAX_CLIP_SECONDS
     aspect,
     fit,
     focus: { x: clamp(focus.x, 0, 1), y: clamp(focus.y, 0, 1) },
-    text: { show: text.show, place: text.place, until, ...(parseSpot(text.spot) ? { spot: parseSpot(text.spot) as Spot } : {}) },
+    text: {
+      show: text.show,
+      place: text.place,
+      until,
+      ...(parseSpot(text.spot) ? { spot: parseSpot(text.spot) as Spot } : {}),
+      ...(text.font !== undefined && text.font !== 'lexend' ? { font: text.font as WordFont } : {}),
+      ...(color !== undefined ? { color } : {}),
+    },
     captions,
     logo,
     ...(logo !== null && parseSpot(raw.logoSpot) ? { logoSpot: parseSpot(raw.logoSpot) as Spot } : {}),
