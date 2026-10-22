@@ -56,6 +56,7 @@ export function ScheduledPosts({ posts, timeZone, today }: { posts: Post[]; time
               busy={actions.busy === post.id}
               doing={actions.busy === post.id ? actions.doing : null}
               onCancel={() => void actions.cancel(post)}
+              onRemove={() => void actions.remove(post)}
               onRetry={(place) => void actions.retry(post, place)}
               onMove={() => setOpenId(post.id)}
             />

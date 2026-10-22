@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { GoAheadButton } from '@/components/runs/GoAheadButton';
 import { RetryButton } from '@/components/runs/RetryButton';
+import { RemoveRunButton } from '@/components/runs/RemoveRunButton';
 import { PickAds, PickAngles } from '@/components/runs/RunPickers';
 import { StageBadge } from '@/components/runs/StageBadge';
 import { LiveRefresh } from '@/components/ui/LiveRefresh';
@@ -12,10 +13,11 @@ import { SourceIcon } from '@/components/ui/SourceIcon';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { ClipPreview } from '@/components/video/ClipPreview';
 import { cx } from '@/lib/cx';
-import { getClipUrl, getRun, getRunPicks, usingSampleData } from '@/lib/data';
+import { getClipUrl, getPosts, getRun, getRunPicks, getTeamSettings, usingSampleData } from '@/lib/data';
 import { formatDate, formatTime } from '@/lib/format';
 import { GO_AHEAD, STAGE_INFO, STAGE_ORDER } from '@/lib/pipeline';
 import { GOAL_LABEL } from '@/lib/platforms';
+import { deleteRunQuestion } from '@/lib/posts';
 import { SHOT_PATH } from '@/lib/run-input';
 import { answerOf, mediaSaid } from '@/lib/run-media';
 import { SOURCE_LABEL, sourceKind } from '@/lib/sources';
@@ -200,6 +202,9 @@ export default async function RunPage({ params }: Props) {
   const waiting = STAGE_ORDER.filter((key) => run.stages[key].status === 'waiting');
   // What the waiting agent can be given: the run's own report's ads, or its strategy's angles.
   const picks = waiting.some((key) => key !== 'tracker') ? await getRunPicks(run.id) : { ads: [], angles: [] };
+  // Delete asks first, naming every post of the run still to go out or already out.
+  const [posts, settings] = await Promise.all([getPosts(), getTeamSettings()]);
+  const runPosts = posts.filter((p) => p.adSetId === run.output.adSetId);
 
   return (
     <div className="page">
@@ -226,6 +231,7 @@ export default async function RunPage({ params }: Props) {
         </div>
         <div className="page-actions">
           <StatusPill status={run.status} />
+          <RemoveRunButton runId={run.id} question={deleteRunQuestion(run.title, runPosts, settings.timeZone)} disabled={run.status === 'running'} />
         </div>
       </header>
 

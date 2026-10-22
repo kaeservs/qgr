@@ -118,6 +118,8 @@ export interface DataSource {
   getCurrentUser(): Promise<User>;
   getRuns(): Promise<RunWithStatus[]>;
   getRun(id: string): Promise<RunWithStatus | null>;
+  /** Deletes a run (a mark: it leaves the dashboard): its posts still waiting are cancelled. Refused while an agent works on it or a post is going out. */
+  removeRun(runId: string): Promise<Saved>;
   getCompetitors(): Promise<Competitor[]>;
   getCompetitor(id: string): Promise<Competitor | null>;
   getStrategies(): Promise<Strategy[]>;
@@ -251,6 +253,8 @@ export interface DataSource {
   /** Records a post of an approved variant; one to send now is handed to the publisher at once. */
   schedulePost(post: NewPost): Promise<Saved<{ id: string }>>;
   cancelPost(postId: string): Promise<Saved>;
+  /** Deletes a post (a mark): its places still waiting are cancelled; one already posted stays on its platform. Refused while it is going out. */
+  removePost(postId: string): Promise<Saved>;
   /** Asks the image model for a picture for a variant, from the prompt given (kept as its prompt); n8n's "QGR · Pictures" makes it. */
   askForPicture(variantId: string, prompt: string): Promise<Saved>;
   /** Shows one of the pictures made for a variant before, stopping one being made. */

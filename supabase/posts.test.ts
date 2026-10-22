@@ -429,3 +429,67 @@ describe('the Pages posts go to', () => {
     await t.asUser(outsider, () => expect(t.db.query(`select public.update_publishing_settings('', '', '', '', '', '')`)).rejects.toThrow(/Only the QGR team/));
   });
 });
+
+describe('deleting a post or a run', () => {
+  const removePost = (user: string, postId: string) => t.asUser(user, () => t.value<string[]>(`select public.remove_post($1)`, [postId]));
+  const removeRun = (user: string, runId: string) => t.asUser(user, () => t.value<string[]>(`select public.remove_run($1)`, [runId]));
+  const removedAt = (table: 'posts' | 'runs', id: string) => t.value<string | null>(`select removed_at::text from public.${table} where id = $1`, [id]);
+
+  it('cancels a post’s places still waiting, sets it aside, and hands back the files nobody needs', async () => {
+    const { runId, variant } = await adSet();
+    await approve(member, variant.A);
+    const media = file(member);
+    await upload(member, media);
+    const postId = await schedule(member, variant.A, [{ place: 'facebook', media_path: media, media_kind: 'image' }, { place: 'linkedin' }], localIn(2));
+    await expect(removePost(outsider, postId)).rejects.toThrow(/Only the QGR team/);
+    expect(await removePost(teammate, postId)).toEqual([media]);
+    expect(await status(postId, 'facebook')).toBe('cancelled');
+    expect(await status(postId, 'linkedin')).toBe('cancelled');
+    expect(await removedAt('posts', postId)).not.toBeNull();
+    expect(await events(runId)).toContain('A post was deleted');
+    // Once is enough; the publisher never takes it.
+    await expect(removePost(member, postId)).rejects.toThrow(/not found/);
+    expect(await takeDue()).toEqual([]);
+  });
+
+  it('refuses a post going out right now, and keeps one already posted as it is', async () => {
+    const { variant } = await adSet();
+    await approve(member, variant.B);
+    const postId = await schedule(member, variant.B, [{ place: 'linkedin' }]);
+    await takeDue();
+    expect(await status(postId, 'linkedin')).toBe('posting');
+    await expect(removePost(member, postId)).rejects.toThrow(/going out right now/);
+    await t.db.query(`update public.post_targets set status = 'posted', posted_at = now() where post_id = $1`, [postId]);
+    expect(await removePost(member, postId)).toEqual([]);
+    expect(await status(postId, 'linkedin')).toBe('posted');
+  });
+
+  it('sets a run aside with its posts and its unsent pictures, but not while an agent works on it', async () => {
+    const { runId, variant } = await adSet();
+    await approve(member, variant.C);
+    const postId = await schedule(member, variant.C, [{ place: 'linkedin' }], localIn(3));
+    await t.db.query(`update public.ad_variants set picture_status = 'making', picture_requested_at = now() where id = $1`, [variant.A]);
+
+    // An agent at work holds it.
+    await t.db.query(`update public.run_stages set status = 'running' where run_id = $1 and stage = 'content'`, [runId]);
+    await expect(removeRun(member, runId)).rejects.toThrow(/An agent is working on this run/);
+    await t.db.query(`update public.run_stages set status = 'done' where run_id = $1 and stage = 'content'`, [runId]);
+
+    await expect(removeRun(outsider, runId)).rejects.toThrow(/Only the QGR team/);
+    await removeRun(member, runId);
+    expect(await removedAt('runs', runId)).not.toBeNull();
+    expect(await removedAt('posts', postId)).not.toBeNull();
+    expect(await status(postId, 'linkedin')).toBe('cancelled');
+    expect(await t.value<string>('select picture_status from public.ad_variants where id = $1', [variant.A])).toBe('none');
+    expect(await events(runId)).toContain('The run was deleted');
+    await expect(removeRun(member, runId)).rejects.toThrow(/not found/);
+  });
+
+  it('lets a run stuck between agents for over half an hour be deleted', async () => {
+    const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom', 'text', 'Stuck', array['meta'], 'consultations', p_excerpt => $1)`, [EXCERPT]));
+    await expect(removeRun(member, runId)).rejects.toThrow(/An agent is working on this run/);
+    await t.db.query(`update public.runs set created_at = now() - interval '2 hours' where id = $1`, [runId]);
+    await removeRun(member, runId);
+    expect(await removedAt('runs', runId)).not.toBeNull();
+  });
+});

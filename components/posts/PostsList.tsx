@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarClock, Send, TriangleAlert, X as Close } from 'lucide-react';
+import { CalendarClock, Send, Trash2, TriangleAlert, X as Close } from 'lucide-react';
 import Link from 'next/link';
 import { cx } from '@/lib/cx';
 import { cancellable, movable, postState } from '@/lib/posts';
@@ -19,6 +19,7 @@ export function PostCard({
   busy,
   doing,
   onCancel,
+  onRemove,
   onRetry,
   onRemember,
   onMove,
@@ -29,6 +30,8 @@ export function PostCard({
   /** What is being sent for this post, while busy. */
   doing: PostAction | null;
   onCancel: () => void;
+  /** Deletes the post after asking; absent where a post cannot be deleted from. */
+  onRemove?: () => void;
   onRetry: (place: Place) => void;
   /** Keeps one place's words in brand memory, once it went out. */
   onRemember?: (place: Place) => void;
@@ -86,6 +89,12 @@ export function PostCard({
             {postState(post) === 'waiting' ? 'Cancel' : 'Dismiss'}
           </button>
         )}
+        {onRemove && (
+          <button type="button" className="btn btn-quiet btn-sm" onClick={onRemove} disabled={busy} aria-busy={doing === 'remove'}>
+            <Trash2 size={14} aria-hidden />
+            Delete
+          </button>
+        )}
       </div>
     </article>
   );
@@ -130,6 +139,7 @@ export function PostsList({ posts, timeZone }: { posts: Post[]; timeZone: string
                 busy={actions.busy === post.id}
                 doing={actions.busy === post.id ? actions.doing : null}
                 onCancel={() => void actions.cancel(post)}
+                onRemove={() => void actions.remove(post)}
                 onRetry={(place) => void actions.retry(post, place)}
                 onRemember={(place) => void actions.remember(post, place)}
               />

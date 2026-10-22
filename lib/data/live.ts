@@ -57,16 +57,16 @@ const RUN =
   'id, title, kind, input, url, competitor_name, files, excerpt, platforms, goal, summary, competitor_id, created_at, approved_at, page_ok:page->ok, page_url:page->>url, page_title:page->>title, page_words:page->words, page_error:page->>error, media_path, media, guidance, chosen_ad_ids, source_report_id, pick_first, chosen_angle_ids, ai_media, ai_video, run_references!run_references_run_id_fkey(position, path, note, status, error), run_stages!run_stages_run_id_fkey(stage, status, summary, error, finished_at, waiting_since), strategies!strategies_run_id_fkey(id, strategy_angles!strategy_angles_strategy_id_fkey(id)), ad_sets!ad_sets_run_id_fkey(id, ad_variants!ad_variants_ad_set_id_fkey(id)), competitor_reports!competitor_reports_run_id_fkey(id, hooks!hooks_report_id_fkey(id))';
 const RUN_WITH_EVENTS = `${RUN}, run_events!run_events_run_id_fkey(at, text)` as const;
 const COMPETITOR =
-  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known, kind, versions, placements, active, reactions, comments, shares, views, impressions))';
+  'id, name, domain, tracked, competitor_reports!competitor_reports_competitor_id_fkey(id, runs!competitor_reports_run_id_fkey!inner(removed_at), data_source, active_ads, platforms, insights, angles, created_at, hooks!hooks_report_id_fkey(id, rank, text, platform, format, days_running, variations, days_known), competitor_ads!competitor_ads_report_id_fkey(id, platform, format, text, days_running, ad_url, headline, cta, angle, screenshot_path, position, days_known, kind, versions, placements, active, reactions, comments, shares, views, impressions))';
 const STRATEGY =
-  'id, run_id, competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
+  'id, run_id, runs!strategies_run_id_fkey!inner(removed_at), competitor_id, title, source_label, goal, positioning, audiences, channels, guardrails, created_at, approved_at, strategy_angles!strategy_angles_strategy_id_fkey(id, position, name, why, hook, based_on_hook), ad_sets!ad_sets_strategy_id_fkey(id)';
 const VARIANT = 'id, label, angle, creative_text, creative_style, image_prompt, picture_path, picture_status, picture_error, picture_requested_at, copy, posts, warnings, approved_at, video_edit, design';
 /** An ad's own AI video, on a run that asked for one per ad. */
 const VARIANT_VIDEO = 'ai_videos!ai_videos_variant_id_fkey(id, status, seconds, aspect, quality, path, error, asked_at)';
-const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}), runs!ad_sets_run_id_fkey(media_path, media)` as const;
+const AD_SET = `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}), runs!ad_sets_run_id_fkey!inner(media_path, media, removed_at)` as const;
 /** The studio's ad set: each variant with the pictures made for it, to choose again. */
 const AD_SET_STUDIO =
-  `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}, variant_pictures!variant_pictures_variant_id_fkey(id, path, prompt, created_at, removed_at)), runs!ad_sets_run_id_fkey(media_path, media)` as const;
+  `id, run_id, strategy_id, title, created_at, ad_variants!ad_variants_ad_set_id_fkey(${VARIANT}, ${VARIANT_VIDEO}, variant_pictures!variant_pictures_variant_id_fkey(id, path, prompt, created_at, removed_at)), runs!ad_sets_run_id_fkey!inner(media_path, media, removed_at)` as const;
 const POST =
   'id, variant_id, scheduled_for, created_at, thumbnail, post_targets!post_targets_post_id_fkey(place, text, media_kind, status, posted_at, remote_url, stand_in, error, reach, views, reactions, comments, shares, clicks, results_at, results_error), ad_variants!posts_variant_id_fkey(label, angle, ad_set_id, ad_sets!ad_variants_ad_set_id_fkey(title)), brand_examples!brand_examples_post_id_fkey(place, removed_at)';
 /** Uploaded clips. Private: people play them through links the server signs as them. */
@@ -214,10 +214,17 @@ async function aiVideos(rows: AiVideoRow[]) {
     .filter((v) => v !== null);
 }
 
+/** Removes the files of posts that no longer go out: each platform keeps its own copy of what went. */
+async function removePostFiles(supabase: Awaited<ReturnType<typeof db>>, paths: string[]) {
+  if (paths.length === 0) return;
+  const { error } = await supabase.storage.from(POST_BUCKET).remove(paths);
+  if (error) console.error('Removing a deleted post’s files failed', error);
+}
+
 // One query per list per request (React's cache): the layout and the page share them.
 
 const runRows = cache(async (): Promise<RunRow[]> => {
-  const { data, error } = await (await db()).from('runs').select(RUN).order('created_at', { ascending: false }).limit(RECENT);
+  const { data, error } = await (await db()).from('runs').select(RUN).is('removed_at', null).order('created_at', { ascending: false }).limit(RECENT);
   if (error) readFailed('runs', error);
   return data;
 });
@@ -226,6 +233,7 @@ const competitors = cache(async () => {
   const { data, error } = await (await db())
     .from('competitors')
     .select(COMPETITOR)
+    .is('competitor_reports.runs.removed_at', null)
     .order('created_at', { referencedTable: 'competitor_reports', ascending: false })
     .limit(1, { referencedTable: 'competitor_reports' });
   if (error) readFailed('competitors', error);
@@ -236,14 +244,14 @@ const competitors = cache(async () => {
 });
 
 const strategies = cache(async () => {
-  const { data, error } = await (await db()).from('strategies').select(STRATEGY).order('created_at', { ascending: false });
+  const { data, error } = await (await db()).from('strategies').select(STRATEGY).is('runs.removed_at', null).order('created_at', { ascending: false });
   if (error) readFailed('strategies', error);
   return data.map(toStrategy);
 });
 
 const adSets = cache(async () => {
   const supabase = await db();
-  const { data, error } = await supabase.from('ad_sets').select(AD_SET).order('created_at', { ascending: false });
+  const { data, error } = await supabase.from('ad_sets').select(AD_SET).is('runs.removed_at', null).order('created_at', { ascending: false });
   if (error) readFailed('ad sets', error);
   // Pictures are private: each is shown through a link signed as the viewer, all in one call.
   const paths = data.flatMap((set) => set.ad_variants.flatMap((v) => (v.picture_path ? [v.picture_path] : [])));
@@ -261,7 +269,7 @@ const adSets = cache(async () => {
 const adSetById = cache(async (id: string) => {
   if (!UUID.test(id)) return null;
   const supabase = await db();
-  const { data, error } = await supabase.from('ad_sets').select(AD_SET_STUDIO).eq('id', id).maybeSingle();
+  const { data, error } = await supabase.from('ad_sets').select(AD_SET_STUDIO).eq('id', id).is('runs.removed_at', null).maybeSingle();
   if (error) readFailed('the ad set', error);
   if (!data) return null;
   const paths = data.ad_variants.flatMap((v) => [...(v.picture_path ? [v.picture_path] : []), ...v.variant_pictures.filter((p) => p.removed_at === null).map((p) => p.path)]);
@@ -286,7 +294,7 @@ const adSetById = cache(async (id: string) => {
 const runById = cache(async (id: string) => {
   if (!UUID.test(id)) return null;
   const supabase = await db();
-  const { data, error } = await supabase.from('runs').select(RUN_WITH_EVENTS).eq('id', id).maybeSingle();
+  const { data, error } = await supabase.from('runs').select(RUN_WITH_EVENTS).eq('id', id).is('removed_at', null).maybeSingle();
   if (error) readFailed('the run', error);
   if (!data) return null;
   // The run page shows the reference pictures the team gave Higgsfield, signed as the viewer.
@@ -334,7 +342,7 @@ const teamSettings = cache(async () => {
 });
 
 const posts = cache(async () => {
-  const { data, error } = await (await db()).from('posts').select(POST).order('scheduled_for', { ascending: false }).limit(RECENT);
+  const { data, error } = await (await db()).from('posts').select(POST).is('removed_at', null).order('scheduled_for', { ascending: false }).limit(RECENT);
   if (error) readFailed('posts', error);
   return (data as PostRow[]).map(toPost).filter((p) => p !== null);
 });
@@ -370,6 +378,13 @@ export const liveData: DataSource = {
   },
   getRuns: async () => (await runRows()).map((row) => toRun(row)),
   getRun: (id) => runById(id),
+  removeRun: async (runId) => {
+    const supabase = await db();
+    const { data: freed, error } = await supabase.rpc('remove_run', { p_run_id: runId });
+    if (error) return refused(error, 'The run could not be deleted.');
+    await removePostFiles(supabase, freed);
+    return { ok: true, value: null, sample: false };
+  },
   getCompetitors: () => competitors(),
   getCompetitor: async (id) => {
     if (!UUID.test(id)) return null;
@@ -378,6 +393,7 @@ export const liveData: DataSource = {
       .from('competitors')
       .select(COMPETITOR)
       .eq('id', id)
+      .is('competitor_reports.runs.removed_at', null)
       .order('created_at', { referencedTable: 'competitor_reports', ascending: false })
       .limit(1, { referencedTable: 'competitor_reports' })
       .maybeSingle();
@@ -990,6 +1006,14 @@ export const liveData: DataSource = {
     const publisher = publisherConfig();
     if (!post.at && publisher) await pingQueue(publisher);
     return { ok: true, value: { id }, sample: false };
+  },
+
+  removePost: async (postId) => {
+    const supabase = await db();
+    const { data: freed, error } = await supabase.rpc('remove_post', { p_post_id: postId });
+    if (error) return refused(error, 'The post could not be deleted.');
+    await removePostFiles(supabase, freed);
+    return { ok: true, value: null, sample: false };
   },
 
   cancelPost: async (postId) => {

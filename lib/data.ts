@@ -20,6 +20,7 @@ export const getNow: DataSource['getNow'] = () => source().getNow();
 export const getCurrentUser: DataSource['getCurrentUser'] = () => source().getCurrentUser();
 export const getRuns: DataSource['getRuns'] = () => source().getRuns();
 export const getRun: DataSource['getRun'] = (id) => source().getRun(id);
+export const removeRun: DataSource['removeRun'] = (id) => source().removeRun(id);
 export const getCompetitors: DataSource['getCompetitors'] = () => source().getCompetitors();
 export const getCompetitor: DataSource['getCompetitor'] = (id) => source().getCompetitor(id);
 export const getStrategies: DataSource['getStrategies'] = () => source().getStrategies();
@@ -96,6 +97,7 @@ export const getRunPicks: DataSource['getRunPicks'] = (runId) => source().getRun
 export const getPosts: DataSource['getPosts'] = () => source().getPosts();
 export const schedulePost: DataSource['schedulePost'] = (post) => source().schedulePost(post);
 export const cancelPost: DataSource['cancelPost'] = (id) => source().cancelPost(id);
+export const removePost: DataSource['removePost'] = (id) => source().removePost(id);
 export const reschedulePost: DataSource['reschedulePost'] = (id, at) => source().reschedulePost(id, at);
 export const askForPicture: DataSource['askForPicture'] = (id, prompt) => source().askForPicture(id, prompt);
 export const usePicture: DataSource['usePicture'] = (id, pictureId) => source().usePicture(id, pictureId);

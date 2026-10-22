@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cancellable, monthGrid, movable, postsByDay, postState, shiftMonth } from './posts';
+import { cancellable, deletePostQuestion, deleteRunQuestion, deleteWarnings, monthGrid, movable, postsByDay, postState, shiftMonth } from './posts';
 import type { Post, PostTarget } from './types';
 
 const target = (status: PostTarget['status'], place: PostTarget['place'] = 'facebook'): PostTarget => ({ place, text: 'Words', media: 'image', status, standIn: false });
@@ -52,5 +52,37 @@ describe('the calendar', () => {
     expect(monthGrid('2027-02')).toHaveLength(4);
     expect(shiftMonth('2026-12', 1)).toBe('2027-01');
     expect(shiftMonth('2026-01', -1)).toBe('2025-12');
+  });
+});
+
+describe('asking before a post or a run is deleted', () => {
+  const zone = 'Asia/Dubai';
+
+  it('says when and where a scheduled post was to go out, and that deleting cancels it', () => {
+    const p = post('p', '2026-10-24T06:00:00Z', target('scheduled'), target('scheduled', 'linkedin'));
+    expect(deleteWarnings(p, zone)).toEqual(['Scheduled for Sat 24 Oct, 10:00 on Facebook and LinkedIn: deleting cancels it.']);
+    expect(deletePostQuestion(p, zone)).toBe('Delete the post of variant A of “Set”?\n\nScheduled for Sat 24 Oct, 10:00 on Facebook and LinkedIn: deleting cancels it.');
+  });
+
+  it('says a real post stays on its platform, and leaves a stand-in and a cancelled place unsaid', () => {
+    const p = post('p', '2026-10-20T06:00:00Z', target('posted'), { ...target('posted', 'instagram'), standIn: true }, target('cancelled', 'linkedin'), target('unknown', 'linkedin'));
+    expect(deleteWarnings(p, zone)).toEqual([
+      'Already posted on Facebook: it stays there. Delete it on the platform too if you want it gone.',
+      'May have gone out on LinkedIn: check there, since deleting here does not take it down.',
+    ]);
+    expect(deleteWarnings(post('q', '2026-10-20T06:00:00Z', target('cancelled')), zone)).toEqual([]);
+    expect(deleteWarnings(post('r', '2026-10-20T06:00:00Z', target('posting')), zone)).toEqual(['Going out on Facebook right now: wait for it to finish before deleting.']);
+  });
+
+  it('lists every post of a run, by variant, under what goes with it', () => {
+    const scheduled = post('p', '2026-10-24T06:00:00Z', target('scheduled', 'instagram'));
+    const sent = { ...post('q', '2026-10-20T06:00:00Z', target('posted', 'linkedin')), variantLabel: 'B' as const };
+    expect(deleteRunQuestion('Q4 push', [scheduled, sent], zone).split('\n\n')).toEqual([
+      'Delete the run “Q4 push”? Its strategy and ads go with it, and it leaves the dashboard.',
+      'It has 2 posts, deleted with it.',
+      'Variant A: Scheduled for Sat 24 Oct, 10:00 on Instagram: deleting cancels it.',
+      'Variant B: Already posted on LinkedIn: it stays there. Delete it on the platform too if you want it gone.',
+    ]);
+    expect(deleteRunQuestion('Empty', [], zone)).toBe('Delete the run “Empty”? Its strategy and ads go with it, and it leaves the dashboard.');
   });
 });
