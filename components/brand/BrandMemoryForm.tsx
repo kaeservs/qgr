@@ -120,7 +120,7 @@ export function BrandMemoryForm({ memory }: { memory: BrandMemory }) {
         <textarea
           className="textarea"
           rows={3}
-          placeholder="E.g. Warm natural light: homes, desks, city skylines at dusk. Indigo and gold accents. No identifiable faces, no flags, no money."
+          placeholder="E.g. Real families and students in warm natural light: at home, on campus, arriving somewhere new. Candid, emotional, never posed. Indigo and gold only as small touches. No flags, no money."
           value={pictureStyle}
           maxLength={LIMITS.pictureStyle}
           onChange={(e) => setPictureStyle(e.target.value)}

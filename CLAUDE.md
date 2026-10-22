@@ -421,6 +421,11 @@ X's ads APIs, which each need their own access.
 - Taking a post out of brand memory marks it (`removed_at`), so the agents and
   the page leave it out; marking the same post "This worked" again brings it
   back. Brand memory keeps up to 60 posts.
+- Its limits are generous on purpose (the team asked for none, 2026-10-22):
+  what you offer and who it is for, format notes and pasted posts up to 10,000
+  characters, the picture style 4,000, notes 2,000, 40 topics, 30 guardrails,
+  12 voice words (`LIMITS` in `lib/edit-input.ts`, and the database's
+  functions and checks). Every agent call sends it, so it stays bounded.
 
 ### The Content Agent's chain and posts
 
@@ -452,6 +457,10 @@ X's ads APIs, which each need their own access.
   changes it through `update_agent_settings`, `set_pictures_auto`,
   `set_pictures_model`, `set_pictures_quality`, `set_ads_source`,
   `update_publishing_settings` and `set_post_for_real`; Home's agent cards flip the same switches.
+  The Agents form changes nothing until "Save agents": while it holds a
+  change, its save bar stays in sight saying "Not saved yet", and leaving the
+  page asks first (a quality picked and never saved once left pictures on
+  low).
 - A switch holds what follows, never the agent a run starts at. With the
   strategist's off, every finished scan waits before the strategy; with the
   Content Agent's off, every strategy waits before the ads. The pipeline asks
@@ -764,9 +773,14 @@ X's ads APIs, which each need their own access.
 
 ### Pictures (`ad_variants.picture_*`, "QGR · Pictures")
 
-- Every ad but a clip's carries an `image_prompt` from the Content Agent (the
-  scene only: no words, the brand's colours, no identifiable people, no
-  flags). The studio's Picture dialog (`PictureDialog`) shows it to edit and
+- Every ad but a clip's carries an `image_prompt` from the Content Agent: a
+  real photograph that tells a story (the team's choice, 2026-10-22): made-up,
+  real-looking people (a family planning their future, a parent and child, a
+  student arriving somewhere new) in a moment tied to the variant's angle, with
+  the feeling behind it; never a real or famous person, no words, no flags,
+  nothing that shows a promised outcome (a green card, a visa, money), the
+  brand's colours only as small touches. Video prompts keep to no
+  identifiable people. The studio's Picture dialog (`PictureDialog`) shows it to edit and
   makes a picture from what is written there (`ask_for_picture`: the prompt
   becomes the variant's, up to 1,200 characters). Every new ad asks for one as
   it is saved (a trigger on `ad_variants`) when its run asked for AI pictures
@@ -795,9 +809,11 @@ X's ads APIs, which each need their own access.
   `set_pictures_model`): the stand-in, Cloudflare Workers AI's FLUX.1
   schnell on the account named there, or Higgsfield (below); a run with
   reference pictures has Higgsfield make its pictures whatever the choice. "Real pictures?" sends a Cloudflare ask
-  through "Write the prompt" (the scene, then the brand's picture style, then
-  the rules: no text, no real or identifiable people, no flags; 2,048
-  characters at most, only an agent's long scene is shortened), the call
+  through "Write the prompt" (`pictures-prompt.js`: the scene, then "a real
+  photograph" with what makes one, the brand's picture style, then the rules:
+  no text, everyone a made-up person, no flags; 2,048 characters at most for
+  FLUX, 6,000 for Higgsfield's GPT Image, the scene shortened first and then a
+  long picture style, never the rules), the call
   (Bearer credential), "Read the picture" (the kind from its first bytes, the
   path given that extension; Cloudflare's refusals in plain words: the day's
   free allowance used up, the token, the account), "To a file" and "Upload to

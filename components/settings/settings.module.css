@@ -113,6 +113,22 @@
   border-top: 1px solid var(--line);
 }
 
+.unsaved {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-bottom: 14px;
+  background: var(--surface);
+}
+
+.unsavedNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 0 0;
+  font-weight: 500;
+}
+
 .actions :global(.error-text) {
   margin-right: auto;
 }

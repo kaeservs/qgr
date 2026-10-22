@@ -63,9 +63,13 @@ describe('brand memory', () => {
     expect(brand.picture_style).toBe('Warm light, families, indigo and gold.');
 
     await t.asUser(member, async () => {
-      await expect(t.db.query(`select public.update_brand_memory(array[$1], '{}'::jsonb, null)`, ['x'.repeat(81)])).rejects.toThrow(/Up to 12 topics/);
+      await expect(t.db.query(`select public.update_brand_memory(array[$1], '{}'::jsonb, null)`, ['x'.repeat(301)])).rejects.toThrow(/Up to 40 topics/);
       await expect(t.db.query(`select public.update_brand_memory('{}', '{"tiktok": "Dance"}'::jsonb, null)`)).rejects.toThrow(/Format notes go by platform/);
-      await expect(t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, $1)`, ['x'.repeat(601)])).rejects.toThrow(/under 600/);
+      await expect(t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, $1)`, ['x'.repeat(4001)])).rejects.toThrow(/under 4,000/);
+      // Well past what it once took: long notes, a long picture style, a long pasted post.
+      await t.db.query(`select public.update_brand_memory(array[$1], jsonb_build_object('facebook', $2::text), $3)`, ['t'.repeat(300), 'f'.repeat(10000), 's'.repeat(4000)]);
+      const long = await t.value<string>(`select public.add_brand_example('linkedin', $1, $2)`, ['p'.repeat(10000), 'n'.repeat(2000)]);
+      await t.db.query(`select public.remove_brand_example($1)`, [long]);
       // Empty clears: no topics, no notes, no picture style.
       await t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, '  ')`);
     });
