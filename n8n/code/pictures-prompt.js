@@ -1,29 +1,40 @@
 // Shared by the scripts that ask an image model for a picture (joined in
 // front of each): what it is asked to draw, for each ask. The scene (a
-// person's prompt in the studio, or the Content Agent's), then the brand's
-// picture style from brand memory, a line on the run's reference pictures
-// when Higgsfield is given some, then the rules every picture keeps: no
-// words (the ad's words go over the picture), no real or identifiable people,
-// no flags. 2,048 characters at most, FLUX's limit, kept for every model. The
-// studio keeps a person's prompt to 1,200 and the style is at most 600, so all
-// of it fits; only a longer prompt from the agent is shortened, at a word, and
-// never the style or the rules.
+// person's prompt in the studio, or the Content Agent's), then how it should
+// look (a real photograph of real-looking people, as the team asked on
+// 2026-10-22), the brand's picture style from brand memory, a line on the
+// run's reference pictures when Higgsfield is given some, then the rules
+// every picture keeps: no words (the ad's words go over the picture), people
+// who are made up rather than anyone real or famous, no flags. Cloudflare's
+// FLUX takes 2,048 characters at most; Higgsfield's GPT Image far more, so
+// its scripts pass HIGGSFIELD_PROMPT_MAX. The scene is shortened first, at a
+// word, then a long picture style; the rules never are.
 const PROMPT_MAX = 2048;
-const PICTURE_RULES = 'No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.';
+const HIGGSFIELD_PROMPT_MAX = 6000;
+const PHOTO_LOOK = 'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose.';
+const PICTURE_RULES = 'No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.';
+const SCENE_MIN = 300;
 
 const REFERENCES_RULE = 'Use the reference pictures given for what they show: the real place, product or look to keep to.';
 
-function picturePrompt(ask) {
-  const look = String(ask.look || '').trim();
+function atWord(text, room) {
+  if (text.length <= room) return text;
+  let cut = text.slice(0, Math.max(0, room));
+  const space = cut.lastIndexOf(' ');
+  if (space > room * 0.6) cut = cut.slice(0, space);
+  return cut;
+}
+
+function picturePrompt(ask, max) {
+  const limit = max || PROMPT_MAX;
   const references = Array.isArray(ask.references) && ask.references.length > 0 ? ' ' + REFERENCES_RULE : '';
-  const tail = (look ? ' Picture style: ' + look + (/[.!?]$/.test(look) ? '' : '.') : '') + references + ' ' + PICTURE_RULES;
-  let scene = String(ask.prompt || '').trim().replace(/\s+/g, ' ');
-  const room = PROMPT_MAX - tail.length - 1;
-  if (scene.length > room) {
-    scene = scene.slice(0, room);
-    const cut = scene.lastIndexOf(' ');
-    if (cut > room * 0.6) scene = scene.slice(0, cut);
-  }
+  const fixed = ' ' + PHOTO_LOOK + references + ' ' + PICTURE_RULES;
+  let look = String(ask.look || '').trim().replace(/\s+/g, ' ');
+  const lookRoom = limit - fixed.length - SCENE_MIN - ' Picture style: .'.length;
+  if (look.length > lookRoom) look = atWord(look, lookRoom);
+  const styled = look ? ' Picture style: ' + look + (/[.!?]$/.test(look) ? '' : '.') : '';
+  const tail = ' ' + PHOTO_LOOK + styled + references + ' ' + PICTURE_RULES;
+  let scene = atWord(String(ask.prompt || '').trim().replace(/\s+/g, ' '), limit - tail.length - 1);
   if (!/[.!?]$/.test(scene)) scene += '.';
   return scene + tail;
 }

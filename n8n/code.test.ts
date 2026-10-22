@@ -763,12 +763,14 @@ describe('Content Agent', () => {
     const { body } = run('content-build-request.js', clipCtx) as { body: Json };
     expect(String(body.system)).toContain("the line shown over the team's video clip (0:43)");
     expect(String(body.system)).toContain('image_prompt: an empty string');
-    expect(String(body.system)).not.toContain('no real or identifiable people');
+    expect(String(body.system)).not.toContain('a real photograph that tells a story');
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
     expect(material.clip).toEqual({ length: '0:43', what_is_said: 'Our founder explains concurrent filing.' });
     // A run without a clip is asked for images, as before.
     const plain = run('content-build-request.js', ctx) as { body: Json };
-    expect(String(plain.body.system)).toContain('no real or identifiable people');
+    expect(String(plain.body.system)).toContain('a real photograph that tells a story');
+    expect(String(plain.body.system)).toContain('The people are made up, never real or famous');
+    expect(String(plain.body.system)).toContain('nothing that shows a promised outcome');
   });
 
   it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {

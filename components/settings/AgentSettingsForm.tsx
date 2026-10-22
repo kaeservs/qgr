@@ -3,7 +3,7 @@
 import { TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { saveAgentSettingsAction } from '@/app/(app)/settings/actions';
 import { cx } from '@/lib/cx';
 import { STAGE_INFO } from '@/lib/pipeline';
@@ -30,6 +30,13 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
   const zones = TIME_ZONES.includes(form.timeZone as (typeof TIME_ZONES)[number]) ? TIME_ZONES : [form.timeZone, ...TIME_ZONES];
   const set = <K extends keyof AgentSettings>(key: K, value: AgentSettings[K]) => setForm((f) => ({ ...f, [key]: value }));
   const changed = JSON.stringify(form) !== JSON.stringify(settings);
+  // A change takes effect only once saved: say so, keep the button in sight, and ask before leaving.
+  useEffect(() => {
+    if (!changed) return;
+    const stay = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', stay);
+    return () => window.removeEventListener('beforeunload', stay);
+  }, [changed]);
 
   return (
     <form
@@ -197,11 +204,17 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         <span className="muted small">Scans and scheduled posts keep to this zone’s clock.</span>
       </label>
 
-      <div className={styles.actions}>
-        {error && (
+      <div className={cx(styles.actions, changed && styles.unsaved)}>
+        {error ? (
           <p className="error-text" role="alert">
             {error}
           </p>
+        ) : (
+          changed && (
+            <p className={styles.unsavedNote} role="status">
+              <TriangleAlert size={16} aria-hidden /> Not saved yet: nothing changes until you press Save agents.
+            </p>
+          )
         )}
         <button type="submit" className="btn btn-primary" disabled={saving || !changed} aria-busy={saving}>
           {saving ? 'Saving…' : 'Save agents'}

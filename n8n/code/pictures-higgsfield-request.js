@@ -6,7 +6,7 @@
 // recorded against the month's limit.
 return $input.all().map(function (item) {
   const ask = item.json;
-  const params = higgsfieldPictureParams(picturePrompt(ask), ask.quality, ask.references);
+  const params = higgsfieldPictureParams(picturePrompt(ask, HIGGSFIELD_PROMPT_MAX), ask.quality, ask.references);
   return {
     json: {
       variant_id: ask.variant_id,

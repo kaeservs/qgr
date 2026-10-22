@@ -75,9 +75,11 @@ describe('parseBrandMemory', () => {
   });
 
   it('refuses too many topics and notes past their length', () => {
-    expect(parseBrandMemory({ topics: Array.from({ length: 13 }, (_, i) => `Topic ${i}`) })).toMatchObject({ ok: false });
-    expect(parseBrandMemory({ postFormats: { facebook: 'x'.repeat(1001) } })).toMatchObject({ ok: false });
-    expect(parseBrandMemory({ pictureStyle: 'x'.repeat(601) })).toMatchObject({ ok: false });
+    expect(parseBrandMemory({ topics: Array.from({ length: 41 }, (_, i) => `Topic ${i}`) })).toMatchObject({ ok: false });
+    expect(parseBrandMemory({ postFormats: { facebook: 'x'.repeat(10001) } })).toMatchObject({ ok: false });
+    expect(parseBrandMemory({ pictureStyle: 'x'.repeat(4001) })).toMatchObject({ ok: false });
+    // Well past what it once took, as the team asked.
+    expect(parseBrandMemory({ topics: ['t'.repeat(300)], postFormats: { facebook: 'x'.repeat(10000) }, pictureStyle: 'x'.repeat(4000) })).toMatchObject({ ok: true });
   });
 });
 

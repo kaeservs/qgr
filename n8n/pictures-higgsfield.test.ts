@@ -95,13 +95,18 @@ describe('the request and its price', () => {
     const [written] = runJson('pictures-higgsfield-request.js', [ask({ quality: 'medium' })]);
     expect(written!.params).toEqual({
       model: 'gpt_image_2_5',
-      prompt: 'A calm skyline at dusk, indigo and gold. Picture style: Warm natural light, indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.',
+      prompt: 'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.',
       aspect_ratio: '1:1',
       resolution: '1k',
       quality: 'medium',
     });
     const quote = JSON.parse(written!.quote_input as string);
     expect(quote).toEqual({ params: { ...(written!.params as Json), get_cost: true }, get_cost: true });
+    // GPT Image takes far longer prompts than FLUX: a long picture style goes whole.
+    const look = 'Golden hour warmth, families at home. '.repeat(70).trim();
+    const long = (runJson('pictures-higgsfield-request.js', [ask({ look })])[0]!.params as { prompt: string }).prompt;
+    expect(long.length).toBeGreaterThan(2048);
+    expect(long).toContain(`Picture style: ${look}`);
     // A quality Higgsfield is not asked for falls back to the cheapest.
     expect(runJson('pictures-higgsfield-request.js', [ask({ quality: 'ultra' })])[0]!.quality).toBe('low');
   });
@@ -115,7 +120,7 @@ describe('the request and its price', () => {
       { role: 'image_references', value: 'media-brochure' },
     ]);
     expect(params.prompt).toBe(
-      'A calm skyline at dusk, indigo and gold. Picture style: Warm natural light, indigo and gold accents. Use the reference pictures given for what they show: the real place, product or look to keep to. No text, letters, numbers, logos or watermarks anywhere. No real or identifiable people. No flags.',
+      'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. Use the reference pictures given for what they show: the real place, product or look to keep to. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.',
     );
     expect(JSON.parse(written!.quote_input as string)).toEqual({ params: { ...params, get_cost: true }, get_cost: true });
     // Without references the request is exactly as before.
