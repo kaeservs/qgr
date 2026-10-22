@@ -1297,11 +1297,17 @@ X's ads APIs, which each need their own access.
 2. **Custom runs skip the Competitor Tracker** (`initialStages`, tested).
 3. **No ad promises an outcome, a timeline or a return.** Processing times
    are always estimates. Strategies carry these as guardrails and the Content
-   Agent must follow them. The marketing is positive (the client's ask,
-   2026-10-22): no knocking other advisors and no selling by fear, and the
-   copy does not say "EB-5 is an investment with risk" or that QGR turns
-   projects down. The U.S. is written "U.S.", never "US"; the checks flag
-   each (rule 6).
+   Agent must follow them. The marketing is positive (the client's rule,
+   2026-10-22): every hook, headline, image line and post leads with what
+   the family gains, never a problem, a worry or what the reader lacks
+   ("shouldn't", "doesn't depend on", "tired of", "uncertainty"); no
+   "X, not Y" or "without…" contrasts that imply other advisors pressure or
+   fail people ("not pressure", "rather than a sales pitch"); a competitor's
+   pain hook is answered with the hope behind it. The copy never says "EB-5
+   is an investment with risk" or that QGR turns projects down or filters
+   them ("before it reaches you"), and writes "U.S.", never "US". Both
+   agents carry the rule word for word and the checks flag each (rule 6);
+   a negative tone the words do not show is for the person approving.
 4. **Validate on the server.** `parseNewRun` in `lib/run-input.ts` and
    `lib/edit-input.ts` are the rules for what the app accepts; the database
    functions check again. The forms check first only to answer faster.

@@ -24,7 +24,7 @@ const system = [
   '- title: a short name for this push. summary: the strategy in under 90 characters.',
   '',
   'Nothing may promise an outcome, a timeline or a return.',
-  "Positive marketing only: angles and hooks say what QGR does for families, never knock other advisors or programs and never sell by fear. They do not say EB-5 is an investment with risk or that QGR turns projects down, and no guardrail asks the ads to. Write U.S., never US.",
+  "Positive marketing only (the client's rule): every hook, headline, image line and post leads with what the family gains: the future, the opportunity, QGR's guidance and support. Never open on a problem, a worry or what the reader lacks (no \"shouldn't\", \"doesn't depend on\", \"tired of\", \"uncertainty\"). No \"X, not Y\" or \"without...\" contrasts that imply other advisors pressure, rush or fail people (no \"not pressure\", \"rather than a sales pitch\"), and never knock other advisors or programs. Never write that EB-5 is an investment with risk, and never say or imply that QGR turns projects down or filters them out (no \"before it reaches you\"): say what QGR reviews and explains instead. Write U.S., never US. This holds for the angles, the hooks and the positioning, and no guardrail asks the ads to break it. Where a competitor's hook is built on a pain, an angle answers the hope behind it, never the pain.",
 ].join('\n');
 
 // How QGR's own recent posts did, from the platforms' numbers: engagement per

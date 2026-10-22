@@ -48,7 +48,10 @@ const RULES = [
   [/\bassured\b/i, 'says "assured"'],
   [/\bin\s+\d+\s+(days|weeks|months)\b/i, 'promises a timeline'],
   [/investment with risk/i, 'says "an investment with risk"'],
-  [/\bturn(s|ed|ing)? (them |it |projects? )?down\b|\bwould(n['’]t| not) back\b/i, 'says QGR turns projects down'],
+  [/\bturn(s|ed|ing)? (them |it |projects? )?down\b|\bwould(n['’]t| not) back\b|\bbefore (it|they) reach(es)? you\b|\bfalls? short\b/i, 'says QGR turns projects down'],
+  [/\bshould(n['’]t| not)\b|\b(doesn['’]t|does not|don['’]t|do not) (have to )?(depend|hinge|rest)\b/i, 'leads with a problem ("shouldn\'t", "doesn\'t depend")'],
+  [/\b(not|without|rather than|no)\s+(any\s+)?(pressure|pushing|rush(ing)?|sales pitch|hard sell)\b/i, 'contrasts with other advisors ("not pressure")'],
+  [/\btired of\b|\buncertaint(y|ies)\b|\bworr(y|ied|ies)\b|\banxi(ety|ous)\b|\bstress(ed|ful)?\b|\bfears?\b/i, 'sells by worry ("uncertainty", "tired of")'],
   [/\bUS\b(?!\$)/, 'writes "US" for "U.S."'],
 ];
 const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
