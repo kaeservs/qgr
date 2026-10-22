@@ -18,6 +18,16 @@ describe('guardrailWarnings', () => {
     ]);
   });
 
+  it('flags what the client asked the copy to leave out, and "US" for "U.S."', () => {
+    const posts = { facebook: 'EB-5 is an investment with risk. We turn down what we wouldn’t back.', instagram: 'Move to the U.S. with a plan.' };
+    expect(guardrailWarnings('Your US future', copy('Projects that fail our checks are turned down.'), ['meta'], posts)).toEqual([
+      'meta text says QGR turns projects down',
+      'image text writes "US" for "U.S."',
+      'facebook post says "an investment with risk"',
+      'facebook post says QGR turns projects down',
+    ]);
+  });
+
   it('holds X to its hard limit and nothing else to a length', () => {
     expect(guardrailWarnings('Fine', copy('a'.repeat(281)), ['meta', 'x'])).toEqual(['x text is 281 characters; X allows 280']);
   });

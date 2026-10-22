@@ -336,14 +336,19 @@ export function withColor(text: VideoEdit['text'], color: string | null): VideoE
   return hex && HEX.test(hex) ? { ...rest, color: hex } : rest;
 }
 
-/** A variant's video before anyone edits it: the whole clip and the variant's words at the top, with no logo (most clips carry one already). */
+/**
+ * A variant's video before anyone edits it: the whole clip as it is. Nothing
+ * is laid over it until a person asks (the client's ask, 2026-10-22): no logo,
+ * since most clips carry one already, and not the variant's words, which read
+ * as a caption the clip does not say. Switched on, the words go at the top.
+ */
 export function defaultEdit(duration: number): VideoEdit {
   return {
     keep: wholeClip(duration),
     aspect: 'original',
     fit: 'fill',
     focus: { x: 0.5, y: 0.5 },
-    text: { show: true, place: 'top', until: null },
+    text: { show: false, place: 'top', until: null },
     captions: [],
     logo: null,
     volume: 1,

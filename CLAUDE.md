@@ -816,7 +816,8 @@ X's ads APIs, which each need their own access.
 
 - Every ad but a clip's carries an `image_prompt` from the Content Agent: a
   real photograph that tells a story (the team's choice, 2026-10-22): made-up,
-  real-looking people interacting with each other, as in the client's
+  real-looking Indian people (most of QGR's market is; the client's ask)
+  interacting with each other, as in the client's
   brochure (a parent lifting a child onto their shoulders, a family laughing
   on a waterfront walk, a student greeted on arrival; warm golden light, a
   U.S. landmark softly behind), in a moment tied to the variant's angle, with
@@ -1294,9 +1295,13 @@ X's ads APIs, which each need their own access.
 1. **A run's status is derived from its stages**, never stored beside them
    (`runStatus` in `lib/pipeline.ts`, tested).
 2. **Custom runs skip the Competitor Tracker** (`initialStages`, tested).
-3. **No ad promises an outcome, a timeline or a return.** EB-5 is an
-   investment with risk; processing times are always estimates. Strategies
-   carry these as guardrails and the Content Agent must follow them.
+3. **No ad promises an outcome, a timeline or a return.** Processing times
+   are always estimates. Strategies carry these as guardrails and the Content
+   Agent must follow them. The marketing is positive (the client's ask,
+   2026-10-22): no knocking other advisors and no selling by fear, and the
+   copy does not say "EB-5 is an investment with risk" or that QGR turns
+   projects down. The U.S. is written "U.S.", never "US"; the checks flag
+   each (rule 6).
 4. **Validate on the server.** `parseNewRun` in `lib/run-input.ts` and
    `lib/edit-input.ts` are the rules for what the app accepts; the database
    functions check again. The forms check first only to answer faster.
@@ -1348,19 +1353,22 @@ X's ads APIs, which each need their own access.
   in `PlatformIcon.tsx`.
 - Ad previews use the system font, as the platforms do; only the image wears
   the brand's type.
-- A picture ad carries the client's full logo (given 2026-10-22: the Q over
-  "Quantum Global, Residency and Citizenship"), transparent, top right, as in
-  their brochure, in the version its ground needs (`LOGOS`, `logoFor` in
-  `lib/creative/draw.ts`): as given on the spotlight's light ground,
-  `qgr-logo-full-light.png` (white words) on indigo or a photograph, and
-  `qgr-logo-full-indigo.png` (all indigo) on the split's gold panel, where its
-  gold half would vanish. The studio's CSS preview matches it. Without the
-  files, the page's name in a chip.
+- A picture ad carries the client's full logo exactly as given (2026-10-22:
+  the gold Q over indigo "Quantum Global, Residency and Citizenship"),
+  transparent, top right, as in their brochure, on every ground: the client
+  asked for no other version (`LOGO_FILE`, `loadLogo` in
+  `lib/creative/draw.ts`). Nothing overlaps it: words that would reach under
+  it start below it, set smaller where they must be to fit, unless a person
+  moved either. The studio's CSS preview matches it. Without the file, the
+  page's name in a chip.
 - A video carries no logo until a person picks a corner in the editor (most
   of the client's clips have one already; `defaultEdit`), and then the Q
   alone, transparent (`qgr-q.png`, `LOGO_SRC` in `lib/video/draw.ts`); the
-  end card shows the Q too. The words on a video are white in Lexend on the
-  indigo band unless the editor's Text tab picks a font and colour (the same
+  end card shows the Q too. Nor does it carry the variant's words until a
+  person switches them on under Text (the client's ask, 2026-10-22: they read
+  as a caption the clip does not say), and nothing adds captions by itself;
+  with the logo in a corner, the words and captions keep clear of it. The
+  words on a video are white in Lexend on the indigo band unless the editor's Text tab picks a font and colour (the same
   ones as a picture ad: `text.font`, `text.color`, checked by
   `parseVideoEdit` and `private.check_video_edit`); a dark colour goes on a
   near-white band (`bandFor` in `lib/video/compose.ts`), so they always read. The platform avatar stays the Q in its circle (`qgr-mark.png`).

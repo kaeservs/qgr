@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { LOGOS, logoFor } from '@/lib/creative/draw';
+import { LOGO_FILE } from '@/lib/creative/draw';
 import { cx } from '@/lib/cx';
 import type { CreativeStyle } from '@/lib/types';
 import { AutoTextarea } from './AutoTextarea';
@@ -39,7 +39,7 @@ export function Creative({
       )}
       <div className={styles.creativeInner}>
         <span className={styles.creativeBrand}>
-          <Image src={LOGOS[logoFor(style, Boolean(image))]} alt="Quantum Global, Residency and Citizenship" width={90} height={52} />
+          <Image src={LOGO_FILE} alt="Quantum Global, Residency and Citizenship" width={90} height={52} />
         </span>
         {editable && onChange ? (
           <AutoTextarea className={cx(styles.creativeText, styles.creativeField)} value={text} onChange={onChange} aria-label="Text on the image" singleLine />

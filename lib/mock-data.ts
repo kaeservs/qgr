@@ -154,7 +154,8 @@ export const competitors: Competitor[] = [
 const GUARDRAILS = [
   'Never promise an outcome, a timeline or a return',
   'Present processing times as estimates',
-  'Say plainly that EB-5 is an investment with risk',
+  'Positive marketing only: never knock other advisors or sell by fear',
+  'Write U.S., never US',
   'End on the free consultation',
 ];
 
@@ -202,7 +203,7 @@ const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
   aspect: 'original',
   fit: 'fill',
   focus: { x: 0.5, y: 0.5 },
-  text: { show: true, place: 'top', until: null },
+  text: { show: false, place: 'top', until: null },
   captions: [],
   logo: null,
   volume: 1,
@@ -222,11 +223,11 @@ export const strategies: Strategy[] = [
     sourceLabel: 'Text · project visits',
     goal: 'consultations',
     audiences: ['Investors comparing EB-5 projects', 'Families who want to see a project before they commit'],
-    positioning: 'The advisor that shows the projects it checks, with risk spelled out.',
+    positioning: 'The advisor that shows the projects it checks, and answers every question.',
     angles: [
       { id: 'sa-21', name: 'See the site', why: 'The text’s point: investors can visit the projects we review.', hook: 'Visit the project before you invest.' },
       { id: 'sa-22', name: 'Diligence you can read', why: 'Every project comes with its file, which few advisors share.', hook: 'Ask for the project’s file.' },
-      { id: 'sa-23', name: 'Plain about risk', why: 'EB-5 is an investment with risk, and the text says so.', hook: 'Every investment carries risk. Here is ours, plainly.' },
+      { id: 'sa-23', name: 'Every question answered', why: 'Investors bring the same questions before they commit, and the text answers them.', hook: 'Bring your questions. We answer every one.' },
     ],
     channels: [
       { platform: 'meta', share: 70, role: 'Reach investors comparing projects', format: 'Video' },
@@ -455,12 +456,12 @@ export const adSets: AdSet[] = [
       {
         id: 'v-site-c',
         label: 'C',
-        angle: 'Plain about risk',
-        creative: { text: 'Every investment carries risk.', style: 'spotlight' },
+        angle: 'Every question answered',
+        creative: { text: 'Bring your questions.', style: 'spotlight' },
         aiVideo: sampleAdVideo('v-sample-site-c', 'failed', 'Higgsfield turned the prompt down. Nothing was made or spent.'),
         copy: {
-          meta: { text: 'EB-5 is an investment, and every investment carries risk. We set it out plainly, project by project.', headline: 'Plain about risk', description: 'Free consultation', cta: 'Book now' },
-          linkedin: { text: 'EB-5 carries investment risk. We explain it plainly for every project we review, before you commit.', headline: 'Risk, spelled out', cta: 'Learn more' },
+          meta: { text: 'Bring every question you have about EB-5. We walk you through each project, plainly, before you commit.', headline: 'Every question answered', description: 'Free consultation', cta: 'Book now' },
+          linkedin: { text: 'Bring your EB-5 questions. We answer them for every project we review, before you commit.', headline: 'Your questions, answered', cta: 'Learn more' },
         },
       },
     ],
@@ -678,9 +679,9 @@ export const adSets: AdSet[] = [
         },
         posts: {
           facebook:
-            "Ask for the file. We'll send ours.\n\nEvery EB-5 project we suggest comes with an independent due-diligence report. Ask any advisor for theirs, then compare. EB-5 is an investment with risk, and you should see the work before you commit.\n\nBook a free consultation and we'll send ours.",
+            "Ask for the file. We'll send ours.\n\nEvery EB-5 project we suggest comes with an independent due-diligence report. Ask any advisor for theirs, then compare. See the work before you commit.\n\nBook a free consultation and we'll send ours.",
           instagram:
-            "Ask for the file. 📁\n\nEvery EB-5 project we suggest comes with an independent due-diligence report.\n\nAsk any advisor for theirs. Then compare.\n\nEB-5 is an investment with risk: read the work before you commit.\n\n#EB5 #DueDiligence #InvestorVisa #GreenCard",
+            "Ask for the file. 📁\n\nEvery EB-5 project we suggest comes with an independent due-diligence report.\n\nAsk any advisor for theirs. Then compare.\n\nRead the work before you commit.\n\n#EB5 #DueDiligence #InvestorVisa #GreenCard",
           linkedin:
             "Choosing an EB-5 project is an investment decision, with risk.\n\nThat is why each project we suggest comes with an independent due-diligence report you can read before you commit: who is building it, how the money is used, and what could go wrong.\n\nAsk any advisor for their file, then compare. We will send ours.\n\n#EB5 #DueDiligence #Investing",
         },
@@ -873,7 +874,7 @@ export const runs: Run[] = [
       kind: 'custom',
       type: 'text',
       excerpt:
-        'We take investors to see the EB-5 projects we review before they commit: the site, the developer, the due-diligence file. EB-5 is an investment with risk, and seeing the project is part of judging it. Processing times are estimates.',
+        'We take investors to see the EB-5 projects we review before they commit: the site, the developer, the due-diligence file. Seeing the project is part of judging it. Processing times are estimates.',
     },
     platforms: ['meta', 'linkedin'],
     goal: 'consultations',

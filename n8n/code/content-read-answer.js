@@ -47,6 +47,9 @@ const RULES = [
   [/\b100\s?%/, 'says "100%"'],
   [/\bassured\b/i, 'says "assured"'],
   [/\bin\s+\d+\s+(days|weeks|months)\b/i, 'promises a timeline'],
+  [/investment with risk/i, 'says "an investment with risk"'],
+  [/\bturn(s|ed|ing)? (them |it |projects? )?down\b|\bwould(n['’]t| not) back\b/i, 'says QGR turns projects down'],
+  [/\bUS\b(?!\$)/, 'writes "US" for "U.S."'],
 ];
 const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
 const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };

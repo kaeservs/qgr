@@ -31,7 +31,7 @@ function fakeCtx(): Ctx {
 }
 
 const art = { text: 'Plan your family’s move, step by step.', style: 'split' as const, ratio: 'square' as const };
-const brand = { name: 'Quantum Global', logos: null };
+const brand = { name: 'Quantum Global', logo: null };
 const square = PICTURE_SIZE.square;
 
 describe('a picture’s design', () => {
@@ -109,25 +109,33 @@ describe('drawing a design', () => {
     expect(chip.x + chip.width).toBeCloseTo(square.width * 0.95);
   });
 
-  it('draws the full logo with no plate, top right, in the version its ground needs, and scales it where moved', () => {
-    const image = (name: string) => ({ width: 438, height: 252, name }) as unknown as CanvasImageSource;
-    const logos = { colour: image('colour'), light: image('light'), indigo: image('indigo') };
+  it('starts long words below the logo, so nothing overlaps it, unless someone moved either', () => {
+    const withLogo = { name: 'Quantum Global', logo: { width: 438, height: 252 } as unknown as CanvasImageSource };
+    const long = { ...art, style: 'spotlight' as const, text: 'Meet our team in person at Century G’s in downtown Dubai on 21 and 22 November, and bring every question you have about moving your family to the U.S.' };
+    const hits = drawCreative(fakeCtx(), square, long, withLogo);
+    const words = hits.find((h) => h.id === WORDS)!;
+    const logo = hits.find((h) => h.id === LOGO)!;
+    expect(words.y).toBeGreaterThanOrEqual(logo.y + logo.height);
+    // Without the logo, the words sit where the style puts them.
+    const bare = drawCreative(fakeCtx(), square, long, withLogo, null, { ...PLAIN_DESIGN, logo: false }).find((h) => h.id === WORDS)!;
+    expect(bare.y).toBeLessThan(logo.y + logo.height);
+  });
+
+  it('draws the client’s logo as given on every ground, top right, and scales it where moved', () => {
+    const given = { width: 438, height: 252 } as unknown as CanvasImageSource;
     const drawn: unknown[] = [];
     const ctx = Object.assign(fakeCtx(), { drawImage: (i: unknown) => drawn.push(i) });
-    const withLogo = { name: 'Quantum Global', logos };
+    const withLogo = { name: 'Quantum Global', logo: given };
     const logo = drawCreative(ctx, square, art, withLogo).find((h) => h.id === LOGO)!;
     const tall = 52 * (square.width / 440);
     expect(logo.height).toBeCloseTo(tall);
     expect(logo.width).toBeCloseTo(tall * (438 / 252));
     expect(logo.x + logo.width).toBeCloseTo(square.width * 0.95);
     expect(logo.y).toBeCloseTo(square.width * 0.045);
-    expect(drawn.at(-1)).toBe(logos.indigo);
     drawCreative(ctx, square, { ...art, style: 'arcs' }, withLogo);
-    expect(drawn.at(-1)).toBe(logos.light);
-    drawCreative(ctx, square, { ...art, style: 'spotlight' }, withLogo, { image: logos.colour, width: 10, height: 10 });
-    expect(drawn.at(-1)).toBe(logos.light);
     drawCreative(ctx, square, { ...art, style: 'spotlight' }, withLogo);
-    expect(drawn.at(-1)).toBe(logos.colour);
+    drawCreative(ctx, square, art, withLogo, { image: given, width: 10, height: 10 });
+    expect(drawn.filter((i) => i === given)).toHaveLength(5);
     const moved = drawCreative(fakeCtx(), square, art, withLogo, null, moveTo(PLAIN_DESIGN, 'square', LOGO, { x: 0.5, y: 0.5, scale: 2 })).find((h) => h.id === LOGO)!;
     expect(moved.height).toBeCloseTo(logo.height * 2);
     expect(moved.x + moved.width / 2).toBeCloseTo(540);
