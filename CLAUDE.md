@@ -777,10 +777,12 @@ X's ads APIs, which each need their own access.
   real photograph that tells a story (the team's choice, 2026-10-22): made-up,
   real-looking people (a family planning their future, a parent and child, a
   student arriving somewhere new) in a moment tied to the variant's angle, with
-  the feeling behind it; never a real or famous person, no words, no flags,
-  nothing that shows a promised outcome (a green card, a visa, money), the
-  brand's colours only as small touches. Video prompts keep to no
-  identifiable people. The studio's Picture dialog (`PictureDialog`) shows it to edit and
+  the feeling behind it; never a real or famous person, no readable words; a
+  U.S. flag or quiet props (passports, a folder, a gavel) may sit in the
+  scene with no writing on them (the team's choice, from a picture they had
+  liked); nothing that shows a promised outcome (a green card or visa held up
+  as approved, money); the brand's colours only as small touches. Video
+  prompts keep to no identifiable people and no flags. The studio's Picture dialog (`PictureDialog`) shows it to edit and
   makes a picture from what is written there (`ask_for_picture`: the prompt
   becomes the variant's, up to 1,200 characters). Every new ad asks for one as
   it is saved (a trigger on `ad_variants`) when its run asked for AI pictures
@@ -811,7 +813,8 @@ X's ads APIs, which each need their own access.
   reference pictures has Higgsfield make its pictures whatever the choice. "Real pictures?" sends a Cloudflare ask
   through "Write the prompt" (`pictures-prompt.js`: the scene, then "a real
   photograph" with what makes one, the brand's picture style, then the rules:
-  no text, everyone a made-up person, no flags; 2,048 characters at most for
+  no readable text, everyone a made-up person, a flag or props only without
+  writing, no approved green card, no money; 2,048 characters at most for
   FLUX, 6,000 for Higgsfield's GPT Image, the scene shortened first and then a
   long picture style, never the rules), the call
   (Bearer credential), "Read the picture" (the kind from its first bytes, the
@@ -1298,6 +1301,13 @@ X's ads APIs, which each need their own access.
   in `PlatformIcon.tsx`.
 - Ad previews use the system font, as the platforms do; only the image wears
   the brand's type.
+- Every ad, picture and video, carries the client's full logo
+  (`public/brand/qgr-logo-full.png`, given 2026-10-22: the Q over "Quantum
+  Global, Residency and Citizenship") on a white plate, since its indigo
+  words need a light ground on a photograph (`logoPlate` in
+  `lib/video/draw.ts`, used by `drawCreative`, the video frame and the end
+  card; the studio's CSS preview matches it). Without the file, the page's
+  name in a pill. The platform avatar stays the Q alone (`qgr-mark.png`).
 - Layout after the "glide" reference: white icon sidebar, greeting, a tabbed
   start card, recent runs, and a right panel with a calendar and agent cards.
 - Dates render in UTC with a fixed locale so server and browser agree; scan

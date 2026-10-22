@@ -683,7 +683,7 @@ describe('a picture, from the studio to the image model and back', () => {
     const [written] = step(WRITE_PROMPT, asks);
     expect(written).toMatchObject({ variant_id: variantId, url: `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell` });
     expect((written!.body as { prompt: string }).prompt).toBe(
-      'A quiet harbour at dawn, boats at rest. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm evening light, deep indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.',
+      'A quiet harbour at dawn, boats at rest. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm evening light, deep indigo and gold accents. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.',
     );
 
     // Cloudflare answers a JPEG: the path takes its extension, and it is uploaded there.
@@ -713,7 +713,7 @@ describe('a picture, from the studio to the image model and back', () => {
     const prompt = (long!.body as { prompt: string }).prompt;
     expect(prompt.length).toBeLessThanOrEqual(2048);
     expect(prompt).toContain(`Picture style: ${style}`);
-    expect(prompt.endsWith('never a real, famous or recognisable one. No flags.')).toBe(true);
+    expect(prompt.endsWith('held up as approved, never money.')).toBe(true);
     expect(prompt).toContain(' A real photograph, ');
     expect(prompt.startsWith('A wide harbour scene')).toBe(true);
     // A picture style longer than FLUX takes is shortened after the scene, never the rules.
@@ -721,10 +721,10 @@ describe('a picture, from the studio to the image model and back', () => {
     const both = (styled!.body as { prompt: string }).prompt;
     expect(both.length).toBeLessThanOrEqual(2048);
     expect(both.startsWith('A family at the kitchen table. A real photograph')).toBe(true);
-    expect(both.endsWith('never a real, famous or recognisable one. No flags.')).toBe(true);
+    expect(both.endsWith('held up as approved, never money.')).toBe(true);
     // Without a picture style, the scene and the rules.
     const [plain] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: '  A desk   lamp at night ', look: null }]);
-    expect((plain!.body as { prompt: string }).prompt).toBe('A desk lamp at night. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.');
+    expect((plain!.body as { prompt: string }).prompt).toBe('A desk lamp at night. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.');
   });
 
   it('reads what Cloudflare answers into a picture of the right kind, or a reason a person can act on', () => {

@@ -1,5 +1,5 @@
 // The pieces a frame of an edited video is drawn with: the brand's colours and
-// type, its background, the mark in a pill, blocks of words and the end card.
+// type, its background, the logo on its plate, blocks of words and the end card.
 // lib/video/compose.ts draws whole frames from them. Every size is a share of
 // the frame, so a small preview and a 1080p export look the same.
 
@@ -20,11 +20,44 @@ export const BRAND_COLORS = {
 export const DISPLAY = '"Oswald Variable", Oswald, Impact, "Arial Narrow", sans-serif';
 export const TEXT = '"Lexend Variable", Lexend, system-ui, sans-serif';
 
-/** What the frame names: the page's name and website, and the mark once it has loaded. */
+/** What the frame names: the page's name and website, and the logo once it has loaded. */
 export interface FrameBrand {
   name: string;
   website: string;
+  /** The full logo (public/brand/qgr-logo-full.png); without it, the page's name in a pill. */
   mark: CanvasImageSource | null;
+}
+
+/** The QGR logo as the client gave it (2026-10-22): the Q above "Quantum Global, Residency and Citizenship". */
+export const LOGO_SRC = '/brand/qgr-logo-full.png';
+
+/** An image's width over its height, read off whatever kind of image it is. */
+export function aspectOf(image: CanvasImageSource): number {
+  const i = image as { naturalWidth?: number; naturalHeight?: number; width?: unknown; height?: unknown };
+  const w = i.naturalWidth || (typeof i.width === 'number' ? i.width : 0);
+  const h = i.naturalHeight || (typeof i.height === 'number' ? i.height : 0);
+  return w > 0 && h > 0 ? w / h : 1;
+}
+
+/**
+ * The logo on a white plate with its top left at (x, y), the logo `height`
+ * tall: its indigo words need a light ground on a photograph or a video.
+ */
+export function logoPlate(ctx: Ctx, image: CanvasImageSource, x: number, y: number, height: number): Hit {
+  const pad = height * 0.16;
+  const width = height * aspectOf(image) + pad * 2;
+  const plate = height + pad * 2;
+  ctx.fillStyle = 'rgb(255 255 255 / 0.96)';
+  roundedRect(ctx, x, y, width, plate, plate * 0.18);
+  ctx.fill();
+  ctx.drawImage(image, x + pad, y + pad, width - pad * 2, height);
+  return { id: LOGO, x, y, width, height: plate };
+}
+
+/** The plate's size for a logo `height` tall, before it is drawn. */
+export function logoPlateSize(image: CanvasImageSource, height: number): { width: number; height: number } {
+  const pad = height * 0.16;
+  return { width: height * aspectOf(image) + pad * 2, height: height + pad * 2 };
 }
 
 /** A decoded frame of the clip, at whatever size it was decoded. */
@@ -94,6 +127,13 @@ export function arcs(ctx: Ctx, size: Size, unit: number) {
  */
 export function logo(ctx: Ctx, size: Size, frameUnit: number, corner: Corner, brand: FrameBrand, at?: Spot): Hit {
   const unit = frameUnit * (at?.scale ?? 1);
+  const margin = frameUnit * 5;
+  if (brand.mark) {
+    const plate = logoPlateSize(brand.mark, unit * 9);
+    const px = at ? at.x * size.width - plate.width / 2 : corner.endsWith('left') ? margin : size.width - margin - plate.width;
+    const py = at ? at.y * size.height - plate.height / 2 : corner.startsWith('top') ? margin : size.height - margin - plate.height;
+    return logoPlate(ctx, brand.mark, px, py, unit * 9);
+  }
   const height = unit * 7;
   const markSize = unit * 4.6;
   ctx.font = `600 ${unit * 2.9}px ${TEXT}`;
@@ -101,7 +141,6 @@ export function logo(ctx: Ctx, size: Size, frameUnit: number, corner: Corner, br
   const textWidth = ctx.measureText(name).width;
   const pad = unit * 1.3;
   const width = pad + (brand.mark ? markSize + unit * 1.1 : 0) + textWidth + pad * 1.3;
-  const margin = frameUnit * 5;
   const x = at ? at.x * size.width - width / 2 : corner.endsWith('left') ? margin : size.width - margin - width;
   const y = at ? at.y * size.height - height / 2 : corner.startsWith('top') ? margin : size.height - margin - height;
   ctx.fillStyle = 'rgb(14 15 44 / 0.55)';
@@ -148,16 +187,17 @@ export function drawBlock(ctx: Ctx, b: Block, centerX: number, top: number, fill
 export function endCard(ctx: Ctx, size: Size, unit: number, text: string, brand: FrameBrand) {
   background(ctx, size);
   arcs(ctx, size, unit);
-  const markSize = unit * 13;
+  const markSize = unit * 16;
+  const plate = brand.mark ? logoPlateSize(brand.mark, markSize) : null;
   const words = block(ctx, text, `600 ${unit * 8}px ${DISPLAY}`, unit * 8, size.width * 0.84, 3, { x: 0, y: 0 });
   ctx.font = `500 ${unit * 3.6}px ${TEXT}`;
   const site = brand.website.replace(/^https?:\/\//, '').replace(/\/$/, '');
   const gap = unit * 3.5;
-  const total = (brand.mark ? markSize + gap : 0) + words.height + gap + unit * 3.6;
+  const total = (plate ? plate.height + gap : 0) + words.height + gap + unit * 3.6;
   let y = (size.height - total) / 2;
-  if (brand.mark) {
-    ctx.drawImage(brand.mark, (size.width - markSize) / 2, y, markSize, markSize);
-    y += markSize + gap;
+  if (brand.mark && plate) {
+    logoPlate(ctx, brand.mark, (size.width - plate.width) / 2, y, markSize);
+    y += plate.height + gap;
   }
   ctx.font = `600 ${unit * 8}px ${DISPLAY}`;
   ctx.fillStyle = BRAND_COLORS.gold;
@@ -176,8 +216,8 @@ export async function loadFrameFonts(): Promise<void> {
   await Promise.all([document.fonts.load(`600 40px ${DISPLAY}`), document.fonts.load(`500 20px ${TEXT}`), document.fonts.load(`600 20px ${TEXT}`)]).catch(() => undefined);
 }
 
-/** The mark, decoded, for drawing; null if it could not be loaded. */
-export async function loadMark(src = '/brand/qgr-mark.png'): Promise<HTMLImageElement | null> {
+/** The logo, decoded, for drawing; null if it could not be loaded. */
+export async function loadMark(src = LOGO_SRC): Promise<HTMLImageElement | null> {
   try {
     const image = new Image();
     image.src = src;

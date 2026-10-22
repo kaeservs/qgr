@@ -771,6 +771,7 @@ describe('Content Agent', () => {
     expect(String(plain.body.system)).toContain('a real photograph that tells a story');
     expect(String(plain.body.system)).toContain('The people are made up, never real or famous');
     expect(String(plain.body.system)).toContain('nothing that shows a promised outcome');
+    expect(String(plain.body.system)).toContain('A U.S. flag in the room');
   });
 
   it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {
