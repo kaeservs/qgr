@@ -11,7 +11,7 @@ const KIND = { ad: 'Ad', post: 'Organic post', email: 'Email', page: 'Web page' 
 /**
  * A competitor's ad, drawn in a neutral tone so it is never mistaken for one
  * of ours, or shown as the screenshot it was read from, with the words read
- * from it under it. Linked to Meta's Ad Library when Apify read it there.
+ * from it under it. Linked to Meta's or LinkedIn's Ad Library when Apify read it there.
  * With `onChoose`, a person can tick it to build a run on.
  */
 export function AdThumb({ ad, chosen, onChoose, chooseLabel = 'Build on this ad' }: { ad: AdExample; chosen?: boolean; onChoose?: (chosen: boolean) => void; chooseLabel?: string }) {
@@ -54,7 +54,7 @@ export function AdThumb({ ad, chosen, onChoose, chooseLabel = 'Build on this ad'
           <a className="link" href={ad.url} target="_blank" rel="noopener noreferrer">
             See the ad
             <ExternalLink size={12} aria-hidden />
-            <span className="sr-only"> in Meta’s Ad Library (opens in a new tab)</span>
+            <span className="sr-only"> in {ad.platform === 'linkedin' ? 'LinkedIn’s' : 'Meta’s'} Ad Library (opens in a new tab)</span>
           </a>
         )}
       </figcaption>

@@ -1,5 +1,8 @@
-// Apify's answer: the competitor's ads from Meta's Ad Library, one item each,
-// as the Facebook Ads Library Scraper gives them, turned into the shape the
+// Apify's answers: the competitor's ads from Meta's Ad Library, one item each,
+// as the Facebook Ads Library Scraper gives them (this step's input, when the
+// plan named a Meta page), and from LinkedIn's Ad Library, as the LinkedIn Ads
+// Scraper gives them (silva95gustavo/linkedin-ad-library-scraper, read from
+// its step when the plan named a LinkedIn page), turned into the shape the
 // sample ads have. The actor's versions name fields differently (adArchiveID
 // or ad_archive_id, ctaText or cta_text, a start date in seconds or as a
 // date), so each is read whichever way it comes. A search is kept to the
@@ -8,6 +11,7 @@
 // read and is left out.
 const plan = $('Plan the scan').first().json;
 const keep = plan.library && plan.library.keep;
+const keepLinkedIn = plan.linkedin && plan.linkedin.keep;
 
 function pick(obj, names) {
   if (!obj || typeof obj !== 'object') return undefined;
@@ -90,7 +94,7 @@ const FORMATS = { VIDEO: 'video', IMAGE: 'image', CAROUSEL: 'carousel', MULTI_IM
 let returned = 0;
 const seen = {};
 const ads = [];
-$input.all().forEach(function (item) {
+(plan.library ? $input.all() : []).forEach(function (item) {
   const a = item.json;
   const archiveId = pick(a, ['adArchiveID', 'adArchiveId', 'ad_archive_id']);
   const id = archiveId || pick(a, ['adId', 'ad_id', 'id']);
@@ -140,15 +144,104 @@ $input.all().forEach(function (item) {
   });
 });
 
-const where = plan.library && plan.library.query ? 'for "' + plan.library.query + '"' : 'at that link';
-if (returned === 0) {
-  throw new Error("Meta's Ad Library has no active ads " + where + '.');
+const metaAds = ads.length;
+
+// LinkedIn's Ad Library, as the LinkedIn Ads Scraper gives it: adId,
+// advertiserName, body, headline, ctas, format, imageUrl(s), adLibraryUrl and,
+// with its details, availability { start, end } and impressions as the range
+// LinkedIn publishes ("10k-20k"). Checked against a real run on 2026-10-22.
+// A search is kept to the advertiser with the competitor's name. A failed read
+// leaves the scan to Meta's ads and says so.
+let linkedinItems = [];
+let linkedinFailed = null;
+if (plan.linkedin) {
+  try {
+    linkedinItems = $('Apify: their LinkedIn ads').all();
+  } catch (e) {
+    linkedinItems = [];
+  }
 }
+const LI_FORMATS = { SINGLE_IMAGE: 'image', IMAGE: 'image', VIDEO: 'video', CAROUSEL: 'carousel', DOCUMENT: 'document' };
+const dayBefore = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+function liDay(v) {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null;
+}
+// "10k-20k", "<1k", "1M+", as LinkedIn writes them; anything else is not kept.
+function impressionsOf(v) {
+  const t = String(v || '').replace(/\s+/g, '').replace(/–/g, '-');
+  return /^(<\d+(\.\d+)?[kKmM]?|\d+(\.\d+)?[kKmM]?(-\d+(\.\d+)?[kKmM]?|\+)?)$/.test(t) && t.length <= 20 ? t.toLowerCase().replace(/m/g, 'M') : null;
+}
+let linkedinReturned = 0;
+linkedinItems.forEach(function (item) {
+  const a = item.json || {};
+  if (a.error && !a.adId) {
+    const e = a.error;
+    linkedinFailed = String((e && (e.message || e.description)) || e).slice(0, 200);
+    return;
+  }
+  const adId = pick(a, ['adId', 'ad_id', 'id']);
+  if (!adId) return;
+  linkedinReturned += 1;
+  const id = 'li-' + adId;
+  if (seen[id]) return;
+  seen[id] = true;
+  const advertiser = clean(pick(a, ['advertiserName', 'advertiser_name']));
+  if (keepLinkedIn && keepLinkedIn.name && !sameName(advertiser, keepLinkedIn.name)) return;
+  const headline = clean(pick(a, ['headline', 'title']));
+  const text = clean(pick(a, ['body', 'text', 'description'])) || headline;
+  if (!text) return;
+  const when = a.availability && typeof a.availability === 'object' ? a.availability : {};
+  const start = liDay(when.start);
+  const end = liDay(when.end);
+  const ctas = Array.isArray(a.ctas) ? a.ctas : [];
+  const images = Array.isArray(a.imageUrls) ? a.imageUrls : [];
+  const media = pick(a, ['imageUrl', 'image_url']) || images[0];
+  const link = pick(a, ['adLibraryUrl', 'ad_library_url']);
+  ads.push({
+    id: id,
+    platform: 'linkedin',
+    format: LI_FORMATS[String(pick(a, ['format']) || '').toUpperCase()] || 'text',
+    startDate: start ? start + 'T00:00:00.000Z' : null,
+    // LinkedIn names the last day it showed an ad: one shown in the last two days still runs.
+    endDate: end && end < dayBefore ? end + 'T00:00:00.000Z' : null,
+    isActive: !(end && end < dayBefore),
+    versions: null,
+    placements: [],
+    pageName: advertiser || null,
+    text: text,
+    headline: headline && headline !== text ? headline : null,
+    cta: clean(ctas[0]) || null,
+    adUrl: typeof link === 'string' && /^https:\/\/www\.linkedin\.com\/ad-library\//.test(link) ? link : null,
+    mediaUrl: typeof media === 'string' && /^https:\/\//.test(media) ? media : null,
+    impressions: impressionsOf(pick(a, ['impressions'])),
+  });
+});
+const linkedinAds = ads.length - metaAds;
+
 if (ads.length === 0) {
-  throw new Error(
-    keep
-      ? "Meta's Ad Library has ads " + where + ', but none from ' + (keep.name || keep.domain) + "'s Page or linking to their website. Start the run from a link to their ads in Meta's Ad Library."
-      : 'Apify gave back ads with no words to read.',
-  );
+  const said = [];
+  if (plan.library) {
+    const where = plan.library.query ? 'for "' + plan.library.query + '"' : 'at that link';
+    said.push(
+      returned === 0
+        ? "Meta's Ad Library has no active ads " + where + '.'
+        : keep
+          ? "Meta's Ad Library has ads " + where + ', but none from ' + (keep.name || keep.domain) + "'s Page or linking to their website."
+          : 'Apify gave back Meta ads with no words to read.',
+    );
+  }
+  if (plan.linkedin) {
+    const where = plan.linkedin.query ? 'for "' + plan.linkedin.query + '"' : 'at that link';
+    said.push(
+      linkedinFailed
+        ? "LinkedIn's Ad Library could not be read: " + linkedinFailed
+        : linkedinReturned === 0
+          ? "LinkedIn's Ad Library has no ads " + where + ' in the last 30 days.'
+          : "LinkedIn's Ad Library has ads " + where + ', but none from an advertiser named ' + keepLinkedIn.name + '.',
+    );
+  }
+  throw new Error(said.join(' ') + (keep || keepLinkedIn ? ' Start the run from a link to their ads in Meta\'s or LinkedIn\'s Ad Library.' : ''));
 }
-return [{ json: Object.assign({}, plan, { dataSource: 'apify', ads: ads }) }];
+const sources = { meta: plan.library ? metaAds : null, linkedin: plan.linkedin ? linkedinAds : null };
+if (linkedinFailed) sources.linkedin_error = linkedinFailed;
+return [{ json: Object.assign({}, plan, { dataSource: 'apify', ads: ads, sources: sources }) }];

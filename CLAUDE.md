@@ -490,6 +490,26 @@ X's ads APIs, which each need their own access.
 - The tracker reads sample ads until the team switches it to Apify (Settings,
   Agents; `set_ads_source`). `agent_begin` hands the choice to the tracker
   alone, and "Real ads?" follows it, so a switch takes effect at the next scan.
+- With Apify it reads two libraries: Meta's (below) and LinkedIn's (the team's
+  choice, 2026-10-22). A pasted link to either library is read there alone; a
+  website or a name is searched in both. "LinkedIn too?" sends the plan's
+  LinkedIn page (`plan.linkedin`: a pasted link, or
+  `ad-library/search?accountOwner=<name>&dateOption=last-30-days`) to "Apify:
+  their LinkedIn ads", Coherent Paradox's LinkedIn Ads Scraper
+  (`silva95gustavo/linkedin-ad-library-scraper`, `startUrls`, `resultsLimit`
+  20, `skipDetails` false), then "Meta too?" to Meta's as before. LinkedIn's
+  step never fails a scan (`continueRegularOutput`): "Read Apify's ads" reads
+  it by name, keeps the advertiser with the competitor's name, and a failed
+  read leaves the report to Meta's ads with a run event saying so
+  (`sources.linkedin_error`). Each LinkedIn ad keeps its run dates
+  (`availability`; one LinkedIn last showed more than two days ago has
+  stopped, `active` false, its days counted to its end) and the impressions
+  range LinkedIn publishes (`competitor_ads.impressions`, as written:
+  "10k-20k", "<1k"), the one figure of reach Claude may cite and `adSignal`
+  rates (the low end: 10,000 a point, 100,000 two). At most 20 LinkedIn ads go
+  to Claude beside up to 40 of Meta's. Its field names were read from a real
+  run and the actor's input schema (2026-10-22); its price on Apify's listing
+  is from $2 per 1,000 ads, details included in the run.
 - With Apify, "Plan the scan" names the page of Meta's Ad Library to read: a
   pasted link to the library as it is; for a website (or a run from the
   uploaded ads the start card once took, which were only ever file names), a
@@ -506,9 +526,9 @@ X's ads APIs, which each need their own access.
   or as a date). Days running are still worked out from start dates in code.
   Its fixtures follow the field names the actor's listings show, not a real
   run: check the first real scan's items against `tracker-apify-ads.js`.
-- Each ad keeps its page in Meta's Ad Library (`competitor_ads.ad_url`), shown
-  as "See the ad" on the competitor page, the only link a competitor's ad is
-  shown with. Nothing from Apify is stored but the report.
+- Each ad keeps its page in Meta's or LinkedIn's Ad Library
+  (`competitor_ads.ad_url`), shown as "See the ad" on the competitor page, the
+  only link a competitor's ad is shown with. Nothing from Apify is stored but the report.
 - The report keeps every ad the tracker read (`competitor_ads`, up to 60, in
   its order: longest-running first), with its headline, call to action, the
   angle Claude gave it and, from screenshots, the screenshot. Reports from

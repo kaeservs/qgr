@@ -98,11 +98,11 @@ export function AgentSettingsForm({ settings }: { settings: AgentSettings }) {
         <span className="label">{STAGE_INFO.tracker.name}: competitors’ ads</span>
         <select className="input" value={form.adsSource} onChange={(e) => set('adsSource', e.target.value as AdsSetting)}>
           <option value="sample">Sample ads</option>
-          <option value="apify">Their real ads, from Meta’s Ad Library (Apify)</option>
+          <option value="apify">Their real ads, from Meta’s and LinkedIn’s Ad Libraries (Apify)</option>
         </select>
         <span className="muted small">
           {form.adsSource === 'apify'
-            ? 'Apify reads each competitor’s active ads in Meta’s Ad Library: at a link to their ads there, or by looking their name up. It needs the Apify token in n8n; without it, a scan stops and says why.'
+            ? 'Apify reads each competitor’s ads in Meta’s Ad Library (active ones) and LinkedIn’s (the last 30 days, with the impressions LinkedIn publishes): at a link to their ads in either, or by looking their name up in both. It needs the Apify token in n8n; without it, a scan stops and says why. A LinkedIn read that fails leaves the report to Meta’s ads.'
             : 'The same example ads for every competitor, so runs work before Apify is connected. Their reports say so.'}
         </span>
       </label>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { adSignal, bestPerformers, compact } from './competitor-signal';
+import { adSignal, impressionsLow, bestPerformers, compact } from './competitor-signal';
 
 describe('how well a competitor’s ad looks to be doing', () => {
   it('rates an ad that has run long, in many versions and places, as strong, saying why', () => {
@@ -40,5 +40,16 @@ describe('how well a competitor’s ad looks to be doing', () => {
 
   it('writes counts short, the same everywhere', () => {
     expect([compact(347), compact(1200), compact(1000), compact(45_300), compact(2_340_000)]).toEqual(['347', '1.2K', '1K', '45K', '2.3M']);
+  });
+
+  it('reads LinkedIn’s impressions range by its low end, and says it as LinkedIn wrote it', () => {
+    expect(impressionsLow('10k-20k')).toBe(10_000);
+    expect(impressionsLow('<1k')).toBe(0);
+    expect(impressionsLow('1M+')).toBe(1_000_000);
+    expect(impressionsLow('200k-500k')).toBe(200_000);
+    const big = adSignal({ daysRunning: 40, impressions: '200k-500k' });
+    expect(big).toMatchObject({ level: 'strong', score: 4 });
+    expect(big.reasons).toContain('200k–500k impressions on LinkedIn');
+    expect(adSignal({ daysRunning: 3, impressions: '<1k' })).toMatchObject({ level: 'new', score: 0 });
   });
 });

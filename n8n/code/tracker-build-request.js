@@ -26,6 +26,11 @@ const READ = [
   'Never guess words that are cut off or cannot be read.',
   '',
 ];
+// Ads from LinkedIn's Ad Library carry what LinkedIn publishes: an
+// impressions range, and whether it stopped showing in the last 30 days. Only
+// then is Claude told so; without them the request is exactly as before.
+const fromLinkedIn = shots.length === 0 && (p.ads || []).some(function (a) { return a.platform === 'linkedin'; });
+const LINKEDIN_RULE = "Ads with platform linkedin come from LinkedIn's Ad Library, which publishes an impressions range for some ads (impressions, as written, for example 10k-20k): the one figure of reach you may cite, exactly as written. stopped marks an ad LinkedIn showed in the last 30 days and has stopped; its days_running is how long it ran.";
 const system = [
   shots.length > 0
     ? "You analyse a competitor's marketing for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get screenshots of the competitor's marketing that the QGR team saved, numbered: mostly paid ads, sometimes organic posts, emails or web pages; and sometimes text from their website."
@@ -33,6 +38,7 @@ const system = [
   '',
 ].concat(shots.length > 0 ? READ : [], [
   "Report what is working for them. The public signs of an ad that works are how long it has run, how many versions they run of it and how widely it is placed, and, on a screenshot, the reactions, comments and shares it shows; nothing else is known of an ad's results, so never claim spend, clicks or reach.",
+]).concat(fromLinkedIn ? [LINKEDIN_RULE] : [], [
   '- hooks: group ads that open with the same idea and state that idea once, quoted from the ad that words it best (do not paraphrase). List every ad id in the group. At most six hooks; an ad belongs to at most one. The system works out how long each hook has run and how many versions it has from the ids, so give no numbers.',
   '- ad_angles: one angle for every ad id, from the allowed list.',
   '- insights: three observations a marketer could act on, one sentence each, each naming its evidence in the ads (for example "their four longest-running ads all lead with ..."). If the ads are few or thin, say so rather than guess.',
@@ -61,6 +67,8 @@ if (shots.length > 0) {
     const ad = { id: a.id, platform: a.platform, format: a.format, days_running: a.days_running, text: a.text, headline: a.headline, cta: a.cta, page_name: a.page_name };
     if (a.versions) ad.versions = a.versions;
     if (a.placements && a.placements.length > 0) ad.placements = a.placements;
+    if (a.impressions) ad.impressions = a.impressions;
+    if (a.active === false) ad.stopped = true;
     return ad;
   });
 }

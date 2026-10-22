@@ -59,8 +59,9 @@ export function useLinkCheck(url: string | null, adLibrary: boolean): LinkCheck 
   return check;
 }
 
-/** Meta's Ad Library, the one Apify reads. */
+/** The libraries Apify reads: Meta's and LinkedIn's. */
 const META_LIBRARY = /^https?:\/\/(www\.|m\.)?facebook\.com\/ads\/library\b/i;
+const LINKEDIN_LIBRARY = /^https?:\/\/(www\.)?linkedin\.com\/ad-library\b/i;
 
 /**
  * One line under the link field. `needsText` is a custom run, which has nothing
@@ -68,7 +69,8 @@ const META_LIBRARY = /^https?:\/\/(www\.|m\.)?facebook\.com\/ads\/library\b/i;
  */
 export function LinkStatus({ check, needsText, adsSource, onPasteText }: { check: LinkCheck; needsText: boolean; adsSource: AdsSetting; onPasteText?: () => void }) {
   if (check.state === 'idle') return null;
-  const otherLibrary = check.state === 'ad-library' && adsSource === 'apify' && !META_LIBRARY.test(check.url);
+  const linkedin = check.state === 'ad-library' && LINKEDIN_LIBRARY.test(check.url);
+  const otherLibrary = check.state === 'ad-library' && adsSource === 'apify' && !META_LIBRARY.test(check.url) && !linkedin;
   return (
     <p
       className={cx(styles.linkStatus, check.state === 'failed' && (needsText ? styles.linkBad : styles.linkWarn), check.state === 'ok' && styles.linkOk, otherLibrary && styles.linkWarn)}
@@ -115,12 +117,12 @@ export function LinkStatus({ check, needsText, adsSource, onPasteText }: { check
         ) : otherLibrary ? (
           <>
             <TriangleAlert size={15} aria-hidden />
-            <span>Apify reads Meta’s Ad Library only. Paste their website, or a link to their ads in Meta’s Ad Library.</span>
+            <span>Apify reads Meta’s and LinkedIn’s Ad Libraries only. Paste their website, or a link to their ads in one of them.</span>
           </>
         ) : (
           <>
             <CircleCheck size={15} aria-hidden />
-            <span>Apify will read the active ads at this link in Meta’s Ad Library.</span>
+            <span>{linkedin ? 'Apify will read the ads at this link in LinkedIn’s Ad Library, with their impressions.' : 'Apify will read the active ads at this link in Meta’s Ad Library.'}</span>
           </>
         ))}
     </p>

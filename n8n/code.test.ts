@@ -185,7 +185,7 @@ describe('Competitor Tracker', () => {
   });
 
   it('refuses to report when there are no active ads', () => {
-    expect(() => run('tracker-prepare-ads.js', { ...raw, ads: [] })).toThrow('No active ads');
+    expect(() => run('tracker-prepare-ads.js', { ...raw, ads: [] })).toThrow('No ads were found');
   });
 });
 
@@ -392,7 +392,10 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
   it('reads a pasted Meta Ad Library link as it is, and refuses another library', () => {
     const link = 'https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=ALL&view_all_page_id=1029384756';
     expect(apify({ ...website, input: 'ad_link', url: link, page: null })).toMatchObject({ adsSource: 'apify', library: { url: link, keep: null } });
-    expect(() => apify({ ...website, input: 'ad_link', url: 'https://www.linkedin.com/ad-library/search?companyIds=1', page: null })).toThrow("Apify reads Meta's Ad Library, and this link is to another one");
+    // A pasted LinkedIn Ad Library link is read on LinkedIn alone; any other library is refused.
+    const li = 'https://www.linkedin.com/ad-library/search?companyIds=1';
+    expect(apify({ ...website, input: 'ad_link', url: li, page: null })).toMatchObject({ library: null, linkedin: { url: li, keep: null } });
+    expect(() => apify({ ...website, input: 'ad_link', url: 'https://adstransparency.google.com/advertiser/AR1', page: null })).toThrow("Apify reads Meta's and LinkedIn's Ad Libraries, and this link is to neither");
   });
 
   it('looks a website or an upload up by the competitor’s name, kept to their ads', () => {
@@ -489,6 +492,97 @@ describe('Competitor Tracker, reading real ads through Apify', () => {
     expect(() => read([{}], link)).toThrow("Meta's Ad Library has no active ads at that link.");
     // A pasted link is the team's choice: every ad it shows is read.
     expect((read([camel('7', 'Anyone at all', 'Read as it is.')], link).ads as Json[]).map((a) => a.id)).toEqual(['7']);
+  });
+});
+
+describe('Competitor Tracker, reading their LinkedIn ads through Apify', () => {
+  const website = { id: 'run-1', kind: 'competitor', input: 'website', url: 'https://www.horizonvisa.com/', platforms: ['meta', 'linkedin'], goal: 'consultations', title: 'horizonvisa.com', page: null, competitor_name: 'Horizon Visa' };
+  const plan = (runRow: Json) => run('tracker-plan.js', { run: runRow, brand, ads_source: 'apify' });
+  const iso = (daysAgo: number) => new Date(Date.now() - daysAgo * 86_400_000).toISOString().slice(0, 10);
+  // LinkedIn Ads Scraper items, shaped as its run on 2026-10-22 answered (with details).
+  const li = (id: string, advertiserName: string, body: string, extra: Json = {}): Json => ({
+    adId: id,
+    adLibraryUrl: `https://www.linkedin.com/ad-library/detail/${id}`,
+    body,
+    ctas: ['Learn more'],
+    advertiserName,
+    advertiserUrl: 'https://www.linkedin.com/company/10608457',
+    format: 'SINGLE_IMAGE',
+    paidBy: 'Horizon Visa LLC',
+    imageUrl: 'https://media.licdn.com/dms/image/ad.png',
+    availability: { start: iso(40), end: iso(0) },
+    impressions: '10k-20k',
+    ...extra,
+  });
+
+  /** "Read Apify's ads", given Meta's items as its input and LinkedIn's from its own step. */
+  function read(metaItems: Json[], linkedinItems: Json[] | null, p: Json): Json {
+    const code = readFileSync(join(here, 'code', 'tracker-apify-ads.js'), 'utf8');
+    const all = metaItems.map((json) => ({ json }));
+    const $input = { first: () => all[0], all: () => all };
+    const out = inN8n(code, $input, (name: string) => {
+      if (name === 'Plan the scan') return { first: () => ({ json: p }) };
+      if (name === 'Apify: their LinkedIn ads' && linkedinItems) return { all: () => linkedinItems.map((json) => ({ json })) };
+      throw new Error(`Node "${name}" has not run`);
+    }) as Items;
+    return out[0]!.json;
+  }
+
+  it('looks a competitor up in both libraries by name, and reads a pasted LinkedIn link alone', () => {
+    const both = plan(website);
+    expect(both.linkedin).toEqual({
+      url: 'https://www.linkedin.com/ad-library/search?accountOwner=Horizon%20Visa&dateOption=last-30-days',
+      query: 'Horizon Visa',
+      keep: { name: 'Horizon Visa', domain: 'horizonvisa.com' },
+    });
+    expect(both.library).toMatchObject({ query: 'Horizon Visa' });
+    // Sample ads ask neither.
+    expect(run('tracker-plan.js', { run: website, brand })).toMatchObject({ library: null, linkedin: null });
+  });
+
+  it('reads their LinkedIn ads with what LinkedIn publishes, kept to the advertiser with their name', () => {
+    const p = plan({ ...website, input: 'ad_link', url: 'https://www.linkedin.com/ad-library/search?accountOwner=horizon', page: null });
+    const out = read([], [
+      li('1001', 'Horizon Visa', 'Your family, one plan. See how EB-5 works, step by step.', { headline: 'EB-5, explained' }),
+      li('1002', 'Horizon Visa', 'Webinar on Thursday: the I-526E, line by line.', { format: 'DOCUMENT', imageUrl: undefined, imageUrls: ['https://media.licdn.com/doc/1.png'], ctas: [], availability: { start: iso(30), end: iso(10) }, impressions: '<1k' }),
+      li('1003', 'Horizon Visa', 'No details for this one.', { availability: undefined, impressions: undefined, format: 'VIDEO' }),
+    ], p);
+    expect(out.dataSource).toBe('apify');
+    expect(out.sources).toEqual({ meta: null, linkedin: 3 });
+    const ads = out.ads as Json[];
+    expect(ads[0]).toMatchObject({ id: 'li-1001', platform: 'linkedin', format: 'image', isActive: true, endDate: null, pageName: 'Horizon Visa', headline: 'EB-5, explained', cta: 'Learn more', adUrl: 'https://www.linkedin.com/ad-library/detail/1001', mediaUrl: 'https://media.licdn.com/dms/image/ad.png', impressions: '10k-20k' });
+    // Stopped ten days ago: it ran from its start to its end.
+    expect(ads[1]).toMatchObject({ format: 'document', isActive: false, cta: null, mediaUrl: 'https://media.licdn.com/doc/1.png', impressions: '<1k' });
+    expect(ads[1]!.endDate).toBe(`${iso(10)}T00:00:00.000Z`);
+    expect(ads[2]).toMatchObject({ format: 'video', startDate: null, impressions: null });
+
+    const prepared = run('tracker-prepare-ads.js', out);
+    const prepAds = prepared.ads as Json[];
+    expect(prepAds.map((a) => [a.platform, a.days_running, a.active, a.impressions])).toEqual([
+      ['linkedin', 40, true, '10k-20k'],
+      ['linkedin', 20, false, '<1k'],
+      ['linkedin', 0, true, undefined],
+    ]);
+    expect(prepAds[2]!.days_known).toBe(false);
+    // Claude is told what impressions and stopped are, only when there are LinkedIn ads.
+    const { body } = run('tracker-build-request.js', prepared) as { body: Json };
+    expect(String(body.system)).toContain("Ads with platform linkedin come from LinkedIn's Ad Library");
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.ads[1]).toMatchObject({ impressions: '<1k', stopped: true, days_running: 20 });
+  });
+
+  it('keeps a name search to their own LinkedIn ads, beside their Meta ads, and goes on when LinkedIn fails', () => {
+    const p = plan(website);
+    const meta = { adArchiveID: '777', pageName: 'Horizon Visa', isActive: true, startDate: Math.round(Date.now() / 1000) - 10 * 86400, snapshot: { body: { text: 'Meta ad words.' }, displayFormat: 'IMAGE' } };
+    const out = read([meta], [li('2001', 'Horizon Visa Partners', 'Theirs.'), li('2002', 'Someone Else Entirely', 'Not theirs.')], p);
+    expect((out.ads as Json[]).map((a) => a.id)).toEqual(['777', 'li-2001']);
+    expect(out.sources).toEqual({ meta: 1, linkedin: 1 });
+    // LinkedIn's step failed: the scan goes on with Meta's ads and says so.
+    const failed = read([meta], [{ error: { message: 'Actor run timed out' } }], p);
+    expect((failed.ads as Json[]).map((a) => a.id)).toEqual(['777']);
+    expect(failed.sources).toEqual({ meta: 1, linkedin: 0, linkedin_error: 'Actor run timed out' });
+    // Nothing in either: why, for each library.
+    expect(() => read([], [li('3001', 'Someone Else Entirely', 'Not theirs.')], p)).toThrow(/Meta's Ad Library has no active ads for "Horizon Visa"\. LinkedIn's Ad Library has ads for "Horizon Visa", but none from an advertiser named Horizon Visa\./);
   });
 });
 
