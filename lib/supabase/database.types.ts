@@ -955,6 +955,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          removed_at: string | null
           scheduled_for: string
           thumbnail: string | null
           variant_id: string
@@ -963,6 +964,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          removed_at?: string | null
           scheduled_for: string
           thumbnail?: string | null
           variant_id: string
@@ -971,6 +973,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          removed_at?: string | null
           scheduled_for?: string
           thumbnail?: string | null
           variant_id?: string
@@ -1128,6 +1131,7 @@ export type Database = {
           page: Json | null
           pick_first: boolean
           platforms: string[]
+          removed_at: string | null
           source_report_id: string | null
           summary: string | null
           title: string
@@ -1155,6 +1159,7 @@ export type Database = {
           page?: Json | null
           pick_first?: boolean
           platforms: string[]
+          removed_at?: string | null
           source_report_id?: string | null
           summary?: string | null
           title: string
@@ -1182,6 +1187,7 @@ export type Database = {
           page?: Json | null
           pick_first?: boolean
           platforms?: string[]
+          removed_at?: string | null
           source_report_id?: string | null
           summary?: string | null
           title?: string
@@ -1755,6 +1761,8 @@ export type Database = {
         Returns: undefined
       }
       remove_picture: { Args: { p_variant_id: string }; Returns: string }
+      remove_post: { Args: { p_post_id: string }; Returns: string[] }
+      remove_run: { Args: { p_run_id: string }; Returns: string[] }
       report_continue_failure: {
         Args: { p_error: string; p_run_id: string; p_stage: string }
         Returns: undefined

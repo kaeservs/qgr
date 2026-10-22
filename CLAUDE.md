@@ -221,7 +221,7 @@ X's ads APIs, which each need their own access.
   `update_lead_criteria`, `set_leads_source`, `set_lead_verdict`,
   `judge_leads_again`, `set_post_link`, `video_budget`, `set_video_settings`,
   `ask_for_video`, `remove_ai_video`, `set_pictures_quality`, `save_long_video_edit`,
-  `update_long_video`, `save_moment`, `remove_moment`.
+  `update_long_video`, `save_moment`, `remove_moment`, `remove_run`, `remove_post`.
   The advisor warns
   that signed-in users can call them; that is the point, and the check inside
   is the guard. What only n8n calls (`agent_*`, `pipeline_next`,
@@ -739,6 +739,22 @@ X's ads APIs, which each need their own access.
   "not asked". The publish dialog marks each place "Goes out for real" or
   "Stand-in", and Settings shows each as posting for real, for real but not
   tried yet, or a stand-in.
+- A run or a post can be deleted (the team's ask, 2026-10-22): a mark
+  (`runs.removed_at`, `posts.removed_at`), not a delete, so leads tied to a
+  run's variants, the month's Higgsfield spending and a post's history keep
+  what they rest on, and every read in `lib/data/live.ts` leaves it out
+  (a run's strategy, ad set and competitor report through their run, `!inner`
+  and `runs.removed_at` is null). Delete asks first (`window.confirm`) with
+  `deletePostQuestion` or `deleteRunQuestion` in `lib/posts.ts`, tested: when
+  and where a scheduled place was to go out (deleting cancels it), a place
+  going out right now (refused), and a place that went out for real, which
+  stays on its platform. `remove_post` and `remove_run` cancel what is still
+  waiting, hand back the files no open post needs, and refuse while a place
+  is `posting`; `remove_run` also refuses while an agent works on the run
+  (`private.run_at_work`: one running, or the pipeline between agents within
+  the last half hour) and stops its pictures and AI videos not yet sent.
+  The run page has Delete beside its status, each post in the list, the
+  Scheduled view and the calendar's dialog too.
 - An approved variant that is edited loses its approval (`save_variant_words`,
   `save_video_edit`), and one waiting to post cannot be edited until its post
   is cancelled. Saving the same words again changes nothing.

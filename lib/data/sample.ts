@@ -30,6 +30,7 @@ const store = globalThis as typeof globalThis & {
   __qgrPosts?: Post[];
   __qgrSettings?: TeamSettings;
   __qgrUntracked?: Set<string>;
+  __qgrRemovedRuns?: Set<string>;
   __qgrMemory?: BrandMemory;
   __qgrExamples?: BrandExample[];
   __qgrLongVideos?: LongVideoWithTranscript[];
@@ -43,6 +44,9 @@ const leadSettings = (): LeadSettings => (store.__qgrLeadSettings ??= structured
 /** AI video's switch and limit, as changed this session; the sample spends nothing. */
 const videoBudget = (): VideoBudget => (store.__qgrVideoBudget ??= { live: false, cap: 100, spent: 0, pictures: 0 });
 const postList = (): Post[] => (store.__qgrPosts ??= structuredClone(mock.posts));
+/** Runs deleted this session: their strategies and ad sets leave the lists too. */
+const removedRuns = (): Set<string> => (store.__qgrRemovedRuns ??= new Set());
+const kept = (item: { runId: string }): boolean => !removedRuns().has(item.runId);
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
 const memory = (): BrandMemory => (store.__qgrMemory ??= structuredClone(mock.brandMemory));
@@ -89,17 +93,28 @@ export const sampleData: DataSource = {
   getNow: async () => mock.NOW,
   getCurrentUser: async () => mock.user,
   getRuns: async () => runList().map(withStatus).sort(byNewest),
+  removeRun: async (runId) => {
+    const list = runList();
+    const at = list.findIndex((r) => r.id === runId);
+    if (at === -1) return { ok: false, status: 404, error: 'That run no longer exists.' };
+    if (withStatus(list[at]!).status === 'running') return { ok: false, status: 409, error: 'An agent is working on this run: wait for it to finish, then delete it.' };
+    list.splice(at, 1);
+    removedRuns().add(runId);
+    const sets = new Set(mock.adSets.filter((a) => a.runId === runId).map((a) => a.id));
+    store.__qgrPosts = postList().filter((p) => !sets.has(p.adSetId));
+    return { ok: true, value: null, sample: true };
+  },
   getRun: async (id) => {
     const run = runList().find((r) => r.id === id);
     return run ? withStatus(run) : null;
   },
   getCompetitors: async () => competitorList().sort((a, b) => b.lastScanAt.localeCompare(a.lastScanAt)),
   getCompetitor: async (id) => competitorList().find((c) => c.id === id) ?? null,
-  getStrategies: async () => [...mock.strategies].sort(byNewest),
-  getStrategy: async (id) => mock.strategies.find((s) => s.id === id) ?? null,
-  getStrategyForCompetitor: async (competitorId) => [...mock.strategies].sort(byNewest).find((s) => s.competitorIds.includes(competitorId)) ?? null,
-  getAdSets: async () => [...mock.adSets].sort(byNewest),
-  getAdSet: async (id) => mock.adSets.find((a) => a.id === id) ?? null,
+  getStrategies: async () => mock.strategies.filter(kept).sort(byNewest),
+  getStrategy: async (id) => mock.strategies.filter(kept).find((s) => s.id === id) ?? null,
+  getStrategyForCompetitor: async (competitorId) => mock.strategies.filter(kept).sort(byNewest).find((s) => s.competitorIds.includes(competitorId)) ?? null,
+  getAdSets: async () => mock.adSets.filter(kept).sort(byNewest),
+  getAdSet: async (id) => mock.adSets.filter(kept).find((a) => a.id === id) ?? null,
   getAgents: async () =>
     toAgents(settings(), { competitors: competitorList().filter((c) => c.tracked).length, strategies: mock.strategies.length }, mock.adSets.filter((a) => a.status === 'review')),
   getNextScan: async () => nextScanAt(settings(), mock.NOW),
@@ -450,6 +465,13 @@ export const sampleData: DataSource = {
       })),
     });
     return { ok: true, value: { id }, sample: true };
+  },
+  removePost: async (postId) => {
+    const post = postList().find((p) => p.id === postId);
+    if (!post) return { ok: false, status: 404, error: 'That post no longer exists.' };
+    if (post.targets.some((t) => t.status === 'posting')) return { ok: false, status: 409, error: 'This post is going out right now: wait for it to finish, then delete it.' };
+    store.__qgrPosts = postList().filter((p) => p.id !== postId);
+    return { ok: true, value: null, sample: true };
   },
   cancelPost: async (postId) => {
     const post = postList().find((p) => p.id === postId);

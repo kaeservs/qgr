@@ -1,6 +1,6 @@
 'use server';
 
-import { cancelPost, rememberPost, reschedulePost, retryPost, schedulePost } from '@/lib/data';
+import { cancelPost, rememberPost, removePost, reschedulePost, retryPost, schedulePost } from '@/lib/data';
 import type { Saved } from '@/lib/data';
 import { isRecordId } from '@/lib/edit-input';
 import { parseNewPost } from '@/lib/post-input';
@@ -25,6 +25,14 @@ export async function rememberPostAction(postId: unknown, place: unknown): Promi
   if (!isRecordId(postId)) return { ok: false, status: 404, error: 'That post no longer exists.' };
   if (!PLACES.includes(place as Place)) return { ok: false, status: 400, error: 'Posts go to Facebook, Instagram or LinkedIn.' };
   return rememberPost(postId, place as Place);
+}
+
+/** Deletes a post once a person confirmed it: its places still waiting are cancelled; one already posted stays on its platform. */
+export async function removePostAction(postId: unknown): Promise<Saved> {
+  const team = await checkTeam();
+  if (!team.ok) return team;
+  if (!isRecordId(postId)) return { ok: false, status: 404, error: 'That post no longer exists.' };
+  return removePost(postId);
 }
 
 export async function cancelPostAction(postId: unknown): Promise<Saved> {

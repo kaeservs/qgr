@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, CalendarClock, Send, X as Close } from 'lucide-react';
+import { ArrowRight, CalendarClock, Send, Trash2, X as Close } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { cancellable, movable, postState } from '@/lib/posts';
@@ -123,6 +123,10 @@ export function PostDialog({ post, timeZone, actions, onClose }: { post: Post; t
             {postState(post) === 'waiting' ? 'Cancel post' : 'Dismiss'}
           </button>
         )}
+        <button type="button" className="btn btn-quiet" disabled={busy} aria-busy={busy && actions.doing === 'remove'} onClick={() => void actions.remove(post).then((ok) => ok && onClose())}>
+          <Trash2 size={16} aria-hidden />
+          Delete
+        </button>
         {canMove && (
           <>
             <button type="button" className="btn btn-ghost" disabled={busy} aria-busy={busy && actions.doing === 'now'} onClick={() => void move(null)}>
