@@ -395,14 +395,14 @@
   filter: brightness(0.62);
 }
 
-/* With a picture, every style's words are gold on it, and the mark sits on
-   white: the spotlight's light ground and indigo words are the design's. The
-   post's picture is drawn the same way (lib/creative/draw.ts). */
+/* With a picture, every style's words are white on it: the spotlight's light
+   ground and indigo words are the design's. The post's picture is drawn the
+   same way (lib/creative/draw.ts). */
 .withImage .creativeText,
 .withImage.creative-spotlight .creativeText {
   padding-bottom: 0;
   background: none;
-  color: var(--gold);
+  color: #fff;
 }
 
 .withImage.creative-spotlight .creativeField {
@@ -420,21 +420,23 @@
   padding: 7cqi 8cqi;
 }
 
-/* The full logo on a white plate, as lib/creative/draw.ts draws it: 46 of 440 pixels tall. */
+/* The full logo, transparent, top right, as lib/creative/draw.ts draws it:
+   52 of 440 pixels tall on the square, 34 on the wide shape. */
 .creativeBrand {
   position: absolute;
-  top: 5cqi;
-  left: 6cqi;
+  top: 4.5cqi;
+  right: 5cqi;
   display: inline-flex;
-  padding: 1.7cqi;
-  border-radius: 2.4cqi;
-  background: rgb(255 255 255 / 0.96);
 }
 
 .creativeBrand img {
   display: block;
   width: auto;
-  height: 10.45cqi;
+  height: 11.82cqi;
+}
+
+.ratio-wide .creativeBrand img {
+  height: 7.73cqi;
 }
 
 /* A thumbnail is too small to carry the chip; the words matter more. */
@@ -446,12 +448,13 @@
 
 .creativeText {
   display: block;
-  font-family: var(--font-display);
-  font-size: var(--type);
+  /* Lexend, at 0.78 of the size the types were set for in Oswald (WORD_FONT_FACE). */
+  font-family: 'Lexend Variable', Lexend, system-ui, sans-serif;
+  font-size: calc(var(--type) * 0.78);
   font-weight: 600;
   line-height: 1.12;
   letter-spacing: 0.005em;
-  color: var(--gold);
+  color: #fff;
   text-wrap: balance;
 }
 
@@ -489,13 +492,13 @@
 
 .creative-arcs .creativeInner {
   justify-content: flex-start;
-  padding-top: 18cqi;
+  padding-top: 20cqi;
   text-align: center;
   align-items: center;
 }
 
 .ratio-wide.creative-arcs .creativeInner {
-  padding-top: 13cqi;
+  padding-top: 15cqi;
 }
 
 /* Split: indigo copy panel beside a gold panel with the arcs. */

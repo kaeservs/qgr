@@ -129,7 +129,7 @@ const creativeLines = clip
   : [
       aiVideo ? '- creative_text: the words shown over the ad\'s video, eight words at most.' : '- creative_text: the words on the image, eight words at most.',
       '- creative_style: arcs, split or spotlight, each used once across the three variants.',
-      '- image_prompt: the ad\'s picture, described for an image model as a real photograph that tells a story: real-looking people in a moment the audience lives or hopes for (a family at home planning their future, a parent with their child, a student on a campus or arriving somewhere new, grandparents with the grandchildren), chosen for this variant\'s angle and showing the feeling behind it: hope, relief, pride, togetherness. Say who is in it (ages, family, what they are doing), the emotion on their faces, the place, the light and the camera (candid, eye level, natural light, shallow depth of field). Each variant its own people and scene. The people are made up, never real or famous. A U.S. flag in the room, or passports, a folder or a gavel on a table, may sit in the scene as quiet symbols of the journey, never with readable writing on them. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result). QGR indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches (clothing, a cushion, evening light), never a tint over the picture.' +
+      '- image_prompt: the ad\'s picture, described for an image model as a real photograph that tells a story: real-looking people interacting with each other in a moment the audience lives or hopes for (a parent lifting a child onto their shoulders, a family laughing together on a waterfront walk, a father playing with his children in a park, a couple hugging their grown-up child, a student greeted on arrival), chosen for this variant\'s angle and showing the feeling behind it: hope, relief, pride, togetherness. They touch, play, hug or talk to each other, never pose at the camera. Say who is in it (ages, family, what they are doing together), the emotion on their faces, the place, the light and the camera (candid, eye level, warm golden-hour light, shallow depth of field). A U.S. landmark such as the Statue of Liberty or a city skyline may sit softly in the background. Each variant its own people and scene. The people are made up, never real or famous. A U.S. flag in the room, or passports, a folder or a gavel on a table, may sit in the scene as quiet symbols of the journey, never with readable writing on them. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result). QGR indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches (clothing, a cushion, evening light), never a tint over the picture.' +
         (brand.picture_style ? ' Keep to picture_style.' : ''),
     ].concat(aiVideo
       ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ': one continuous shot, the scene and how the camera moves, in under 600 characters. No words, captions or logos in it (the words go over it later), no real or identifiable people, no flags. Each variant\'s video is its own.']
@@ -192,6 +192,9 @@ const system = [
 // The team's direction for the run, in their words. Only when they gave one;
 // without it the request is exactly as before.
 const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their own words: follow it in the ads (the hooks, the focus, what to leave out) within the strategy. The rules above win wherever it conflicts with them.";
+// A run from QGR's own clip or source: the ads say what it says.
+const CLIP_RULE = "clip.what_is_said is what is said in the team's video, which every ad shows. Write each variant from it: its words, its moments, and any event, date, place or offer it names, so the copy and posts match what people see and hear. Do not add claims it does not make.";
+const SOURCE_RULE = "source is QGR's own material this run is made from. Write each variant from it: its specifics (what it explains, who it is for, any event, date, place or offer it names), not generic EB-5 lines.";
 
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
@@ -233,7 +236,10 @@ return [{
       max_tokens: 32000,
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
-      system: run.guidance ? system + '\n\n' + DIRECTION_RULE : system,
+      system: [system].concat(
+        material.clip ? [CLIP_RULE] : material.source ? [SOURCE_RULE] : [],
+        run.guidance ? [DIRECTION_RULE] : [],
+      ).join('\n\n'),
       messages: [{ role: 'user', content: 'The brand, the strategy and what it came from, as JSON:\n' + JSON.stringify(material) }],
     },
   },

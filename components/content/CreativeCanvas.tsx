@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { CreativeDesign } from '@/lib/creative/design';
-import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
-import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
+import { drawCreative, loadLogos, loadWordFont, PICTURE_SIZE } from '@/lib/creative/draw';
+import type { CreativeLogos, CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import type { Hit } from '@/lib/spot';
 import type { CreativeStyle } from '@/lib/types';
-import { loadFrameFonts, loadMark } from '@/lib/video/draw';
+import { loadFrameFonts } from '@/lib/video/draw';
 import styles from './previews.module.css';
 
-let mark: Promise<HTMLImageElement | null> | null = null;
+let logos: Promise<CreativeLogos | null> | null = null;
 let fonts: Promise<void> | null = null;
 const pictures = new Map<string, Promise<CreativePicture | null>>();
 
@@ -46,26 +46,27 @@ export interface DrawnCreative {
  */
 export function useDrawnCreative(canvas: RefObject<HTMLCanvasElement | null>, art: DrawnCreative): Hit[] {
   const [hits, setHits] = useState<Hit[]>([]);
-  const [assets, setAssets] = useState<{ mark: HTMLImageElement | null; picture: CreativePicture | null; ready: boolean }>({ mark: null, picture: null, ready: false });
+  const [assets, setAssets] = useState<{ logos: CreativeLogos | null; picture: CreativePicture | null; ready: boolean }>({ logos: null, picture: null, ready: false });
+  const font = art.design?.font;
 
   useEffect(() => {
     let live = true;
-    mark ??= loadMark();
+    logos ??= loadLogos();
     fonts ??= loadFrameFonts();
-    void Promise.all([mark, art.image ? pictureAt(art.image) : null, fonts]).then(([m, picture]) => {
-      if (live) setAssets({ mark: m, picture, ready: true });
+    void Promise.all([logos, art.image ? pictureAt(art.image) : null, fonts, loadWordFont(font)]).then(([l, picture]) => {
+      if (live) setAssets({ logos: l, picture, ready: true });
     });
     return () => {
       live = false;
     };
-  }, [art.image]);
+  }, [art.image, font]);
 
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d');
     if (!ctx || !assets.ready) return;
     const size = PICTURE_SIZE[art.ratio];
     ctx.clearRect(0, 0, size.width, size.height);
-    setHits(drawCreative(ctx, size, { text: art.text, style: art.style, ratio: art.ratio }, { name: art.brandName, mark: assets.mark }, assets.picture, art.design));
+    setHits(drawCreative(ctx, size, { text: art.text, style: art.style, ratio: art.ratio }, { name: art.brandName, logos: assets.logos }, assets.picture, art.design));
   }, [canvas, assets, art.text, art.style, art.ratio, art.design, art.brandName]);
 
   return hits;

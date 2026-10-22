@@ -8,13 +8,12 @@
 
 import type { Hit, Spot } from '../spot';
 import type { CreativeStyle } from '../types';
-import { BRAND_COLORS, logoPlate, logoPlateSize, wrap } from '../video/draw';
+import { aspectOf, BRAND_COLORS, loadMark, wrap } from '../video/draw';
 import type { Ctx } from '../video/draw';
 import type { Size } from '../video/edit';
-import { LOGO, WORDS } from './design';
+import { DEFAULT_FONT, LOGO, WORD_FONT_FACE, WORDS } from './design';
 import type { CreativeDesign, DesignText } from './design';
 
-const DISPLAY = '"Oswald Variable", Oswald, Impact, "Arial Narrow", sans-serif';
 const TEXT = '"Lexend Variable", Lexend, system-ui, sans-serif';
 
 const COLORS = {
@@ -43,10 +42,45 @@ const TYPE: Record<CreativeStyle, Record<CreativeRatio, number>> = {
 /** The preview the chip's fixed pixel sizes were set at; a bigger picture scales them up. */
 const PREVIEW_WIDTH = 440;
 
+/** The logo's height on a 440-pixel preview, as previews.module.css sets it: smaller on the wide shape, which is half as tall. */
+const LOGO_TALL: Record<CreativeRatio, number> = { square: 52, wide: 34 };
+
 export interface CreativeArt {
   text: string;
   style: CreativeStyle;
   ratio: CreativeRatio;
+}
+
+/**
+ * The full logo, transparent, in the version each ground needs (made from the
+ * client's file, 2026-10-22): as given (gold Q, indigo words) on the
+ * spotlight's light ground, with white words on indigo or a photograph, and
+ * all indigo on the split's gold panel, where its gold half would vanish.
+ */
+export const LOGOS = {
+  colour: '/brand/qgr-logo-full.png',
+  light: '/brand/qgr-logo-full-light.png',
+  indigo: '/brand/qgr-logo-full-indigo.png',
+} as const;
+export type CreativeLogos = Record<keyof typeof LOGOS, CanvasImageSource>;
+
+/** The three logos, decoded; null if any could not be loaded, and the page's name shows instead. */
+export async function loadLogos(): Promise<CreativeLogos | null> {
+  const [colour, light, indigo] = await Promise.all([loadMark(LOGOS.colour), loadMark(LOGOS.light), loadMark(LOGOS.indigo)]);
+  return colour && light && indigo ? { colour, light, indigo } : null;
+}
+
+/** Loads the font a design's words are set in. A canvas draws in a fallback font until it has loaded. */
+export async function loadWordFont(font: CreativeDesign['font']): Promise<void> {
+  if (typeof document === 'undefined' || !('fonts' in document)) return;
+  const face = WORD_FONT_FACE[font ?? DEFAULT_FONT];
+  await document.fonts.load(`${face.weight} 40px ${face.family}`).catch(() => undefined);
+}
+
+/** Which logo sits on a style's top right corner. */
+export function logoFor(style: CreativeStyle, picture: boolean): keyof typeof LOGOS {
+  if (picture) return 'light';
+  return style === 'spotlight' ? 'colour' : style === 'split' ? 'indigo' : 'light';
 }
 
 /** A picture an image model made, drawn under the words in place of the design. */
@@ -121,29 +155,24 @@ export function balanced(ctx: Ctx, text: string, width: number, max: number): st
 }
 
 /** The brand's chip, measured: its size at `scale` of the usual. */
-function chipSize(ctx: Ctx, size: Size, mark: CanvasImageSource | null, name: string, scale: number) {
+function chipSize(ctx: Ctx, size: Size, name: string, scale: number) {
   const k = (size.width / PREVIEW_WIDTH) * scale;
   const font = 11 * k;
-  const markSize = mark ? 18 * k : 0;
   ctx.font = `500 ${font}px ${TEXT}`;
   const textWidth = ctx.measureText(name).width;
-  const height = Math.max(markSize, font * 1.4) + 8 * k;
-  const width = 5 * k + (mark ? markSize + 6 * k : 0) + textWidth + 10 * k;
-  return { k, font, markSize, width, height };
+  const height = font * 1.4 + 8 * k;
+  const width = 10 * k + textWidth + 10 * k;
+  return { k, font, width, height };
 }
 
-/** The brand's chip with its top left at (x, y): white, or indigo on the spotlight's light ground. */
-function chip(ctx: Ctx, size: Size, light: boolean, mark: CanvasImageSource | null, name: string, x: number, y: number, scale: number): Hit {
-  const { k, font, markSize, width, height } = chipSize(ctx, size, mark, name, scale);
+/** The page's name in a chip with its top left at (x, y), when the logo could not be loaded: white, or indigo on the spotlight's light ground. */
+function chip(ctx: Ctx, size: Size, light: boolean, name: string, x: number, y: number, scale: number): Hit {
+  const { k, font, width, height } = chipSize(ctx, size, name, scale);
   ctx.fillStyle = light ? BRAND_COLORS.indigo : 'rgb(255 255 255 / 0.95)';
   ctx.beginPath();
   ctx.roundRect(x, y, width, height, height / 2);
   ctx.fill();
-  let cursor = x + 5 * k;
-  if (mark) {
-    ctx.drawImage(mark, cursor, y + (height - markSize) / 2, markSize, markSize);
-    cursor += markSize + 6 * k;
-  }
+  const cursor = x + 10 * k;
   ctx.font = `500 ${font}px ${TEXT}`;
   ctx.fillStyle = light ? BRAND_COLORS.white : COLORS.indigoInk;
   ctx.textAlign = 'left';
@@ -160,11 +189,13 @@ const LOOK: Record<DesignText['look'], { color: string; band: string | null }> =
   banner: { color: BRAND_COLORS.gold, band: 'rgb(28 27 157 / 0.92)' },
 };
 
-/** An added text centred on (cx, cy), up to three lines. */
-function addedText(ctx: Ctx, size: Size, t: DesignText, cx: number, cy: number, scale: number): Hit {
+type Face = (typeof WORD_FONT_FACE)[keyof typeof WORD_FONT_FACE];
+
+/** An added text centred on (cx, cy), up to three lines, in the words' font. */
+function addedText(ctx: Ctx, size: Size, t: DesignText, face: Face, cx: number, cy: number, scale: number): Hit {
   const look = LOOK[t.look];
-  const fontSize = size.width * 0.046 * scale;
-  ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+  const fontSize = size.width * 0.046 * face.scale * scale;
+  ctx.font = `${face.weight} ${fontSize}px ${face.family}`;
   const lines = balanced(ctx, t.text, size.width * 0.84, 3);
   const lineHeight = fontSize * 1.15;
   const pad = look.band ? { x: fontSize * 0.55, y: fontSize * 0.3 } : { x: 0, y: 0 };
@@ -195,7 +226,7 @@ export function drawCreative(
   ctx: Ctx,
   size: Size,
   creative: CreativeArt,
-  brand: { name: string; mark: CanvasImageSource | null },
+  brand: { name: string; logos: CreativeLogos | null },
   picture: CreativePicture | null = null,
   design: CreativeDesign | null = null,
 ): Hit[] {
@@ -205,20 +236,22 @@ export function drawCreative(
   const hits: Hit[] = [];
   if (picture) cover(ctx, size, picture);
   else art(ctx, size, creative.style);
-  // On a picture the spotlight's indigo words and rule give way to gold, as in the studio.
+  // The spotlight's light ground takes indigo words; everything else white,
+  // unless the design picks a colour. Its gold rule stays on the light ground.
   const light = creative.style === 'spotlight' && !picture;
+  const face = WORD_FONT_FACE[design?.font ?? DEFAULT_FONT];
 
   const text = creative.text.trim();
   if (text) {
     const placed = spots[WORDS];
-    const fontSize = TYPE[creative.style][creative.ratio] * w * (placed?.scale ?? 1);
+    const fontSize = TYPE[creative.style][creative.ratio] * face.scale * w * (placed?.scale ?? 1);
     const lineHeight = fontSize * 1.12;
     const padX = 8 * cq;
     const padY = 7 * cq;
     const left = padX;
     const right = creative.style === 'split' ? 46 * cq : padX;
     const maxWidth = w - left - right;
-    ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+    ctx.font = `${face.weight} ${fontSize}px ${face.family}`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
     const maxLines = placed ? 6 : Math.max(1, Math.floor((h - padY * 2) / lineHeight));
     const lines = balanced(ctx, text, placed ? Math.min(w * 0.92, maxWidth * Math.max(1, placed.scale)) : maxWidth, maxLines);
@@ -236,11 +269,11 @@ export function drawCreative(
       top = placed.y * h - block / 2;
       blockLeft = placed.x * w - widest / 2;
     } else {
-      top = creative.style === 'arcs' ? (creative.ratio === 'wide' ? 13 : 18) * cq : padY + (h - padY * 2 - block) / 2;
+      top = creative.style === 'arcs' ? (creative.ratio === 'wide' ? 15 : 20) * cq : padY + (h - padY * 2 - block) / 2;
       blockLeft = centred ? w / 2 - widest / 2 : left;
     }
 
-    ctx.fillStyle = light ? BRAND_COLORS.indigo : BRAND_COLORS.gold;
+    ctx.fillStyle = design?.color ?? (light ? BRAND_COLORS.indigo : BRAND_COLORS.white);
     ctx.textBaseline = 'middle';
     ctx.textAlign = centred ? 'center' : 'left';
     const x = centred ? blockLeft + widest / 2 : blockLeft;
@@ -259,40 +292,42 @@ export function drawCreative(
   for (const t of design?.texts ?? []) {
     const placed = spots[t.id];
     if (placed) {
-      hits.push(addedText(ctx, size, t, placed.x * w, placed.y * h, placed.scale));
+      hits.push(addedText(ctx, size, t, face, placed.x * w, placed.y * h, placed.scale));
       continue;
     }
     // Measured where it would sit, then drawn there: its height is known only once wrapped.
-    const probe = measureText(ctx, size, t);
-    const hit = addedText(ctx, size, t, w / 2, bottom - probe / 2, 1);
+    const probe = measureText(ctx, size, t, face);
+    const hit = addedText(ctx, size, t, face, w / 2, bottom - probe / 2, 1);
     bottom = hit.y - 1.6 * cq;
     hits.push(hit);
   }
 
-  if ((design?.logo ?? true) && brand.mark) {
-    // The full logo on its white plate, 46 preview pixels tall at its usual size.
+  if ((design?.logo ?? true) && brand.logos) {
+    // The full logo, transparent, top right, at its usual size LOGO_TALL preview pixels tall.
+    const image = brand.logos[logoFor(creative.style, Boolean(picture))];
     const placed = spots[LOGO];
-    const tall = 46 * (w / PREVIEW_WIDTH) * (placed?.scale ?? 1);
-    const { width, height } = logoPlateSize(brand.mark, tall);
-    const x = placed ? placed.x * w - width / 2 : w * 0.06;
-    const y = placed ? placed.y * h - height / 2 : w * 0.05;
-    hits.push(logoPlate(ctx, brand.mark, x, y, tall));
+    const height = LOGO_TALL[creative.ratio] * (w / PREVIEW_WIDTH) * (placed?.scale ?? 1);
+    const width = height * aspectOf(image);
+    const x = placed ? placed.x * w - width / 2 : w - w * 0.05 - width;
+    const y = placed ? placed.y * h - height / 2 : w * 0.045;
+    ctx.drawImage(image, x, y, width, height);
+    hits.push({ id: LOGO, x, y, width, height });
   } else if (design?.logo ?? true) {
     // Without the logo (it could not be loaded), the page's name in a chip.
     const placed = spots[LOGO];
     const scale = placed?.scale ?? 1;
-    const { width, height } = chipSize(ctx, size, brand.mark, brand.name, scale);
-    const x = placed ? placed.x * w - width / 2 : w * 0.06;
-    const y = placed ? placed.y * h - height / 2 : w * 0.05;
-    hits.push(chip(ctx, size, light, brand.mark, brand.name, x, y, scale));
+    const { width, height } = chipSize(ctx, size, brand.name, scale);
+    const x = placed ? placed.x * w - width / 2 : w - w * 0.05 - width;
+    const y = placed ? placed.y * h - height / 2 : w * 0.045;
+    hits.push(chip(ctx, size, light, brand.name, x, y, scale));
   }
   return hits;
 }
 
 /** An added text's height at its usual size, before it is drawn. */
-function measureText(ctx: Ctx, size: Size, t: DesignText): number {
-  const fontSize = size.width * 0.046;
-  ctx.font = `600 ${fontSize}px ${DISPLAY}`;
+function measureText(ctx: Ctx, size: Size, t: DesignText, face: Face): number {
+  const fontSize = size.width * 0.046 * face.scale;
+  ctx.font = `${face.weight} ${fontSize}px ${face.family}`;
   const lines = balanced(ctx, t.text, size.width * 0.84, 3);
   return lines.length * fontSize * 1.15 + (LOOK[t.look].band ? fontSize * 0.6 : 0);
 }

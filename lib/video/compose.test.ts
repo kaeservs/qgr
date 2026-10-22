@@ -37,7 +37,7 @@ const centre = (hits: ReturnType<typeof hitsAt>, id: string) => {
 };
 
 describe('a frame’s words, logo and texts', () => {
-  const edit: VideoEdit = { ...defaultEdit(20), aspect: '9:16', overlays: [overlay] };
+  const edit: VideoEdit = { ...defaultEdit(20), logo: 'top-left', aspect: '9:16', overlays: [overlay] };
 
   it('says where it drew each thing a person can drag', () => {
     const hits = hitsAt(edit);

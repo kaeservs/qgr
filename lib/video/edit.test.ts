@@ -150,6 +150,10 @@ describe('the frame', () => {
 describe('parseVideoEdit', () => {
   const edit = (change: Partial<VideoEdit> = {}): VideoEdit => ({ ...defaultEdit(30), ...change });
 
+  it('starts a video with no logo: most clips carry one already, and the Q goes on only when picked', () => {
+    expect(defaultEdit(30).logo).toBeNull();
+  });
+
   it('accepts an edit and tidies it', () => {
     const r = parseVideoEdit(
       edit({

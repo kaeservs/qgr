@@ -1,5 +1,7 @@
 import '@fontsource-variable/lexend';
+import '@fontsource-variable/montserrat';
 import '@fontsource-variable/oswald';
+import '@fontsource-variable/playfair-display';
 import './globals.css';
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';

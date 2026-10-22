@@ -3,8 +3,8 @@
 import { CalendarClock, Clapperboard, Link2, LoaderCircle, Send, X as Close } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { schedulePostAction } from '@/app/(app)/posts/actions';
-import { drawCreative, PICTURE_SIZE } from '@/lib/creative/draw';
-import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
+import { drawCreative, loadLogos, loadWordFont, PICTURE_SIZE } from '@/lib/creative/draw';
+import type { CreativeLogos, CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import { cx } from '@/lib/cx';
 import type { NewPostTarget } from '@/lib/data/source';
 import { INSTAGRAM_MAX } from '@/lib/guardrails';
@@ -14,7 +14,7 @@ import { MAX_THUMBNAIL, PLACE_LABEL } from '@/lib/post-input';
 import { formatInZone, localTime, wallTime, zonedToUtc, zoneLabel } from '@/lib/schedule';
 import { PLACES } from '@/lib/types';
 import type { Clip, Place, PostPages, Variant } from '@/lib/types';
-import { loadFrameFonts, loadMark } from '@/lib/video/draw';
+import { loadFrameFonts } from '@/lib/video/draw';
 import { ASPECT_INFO, defaultEdit, editedSeconds, frameSize, length } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
 import { removePostFile, UploadError, uploadPostFile } from '@/lib/video/upload';
@@ -66,14 +66,14 @@ async function loadPicture(url: string): Promise<CreativePicture> {
   return { image, width: image.naturalWidth, height: image.naturalHeight };
 }
 
-async function drawPicture(ratio: CreativeRatio, variant: Variant, brandName: string, mark: CanvasImageSource | null, picture: CreativePicture | null): Promise<Picture> {
+async function drawPicture(ratio: CreativeRatio, variant: Variant, brandName: string, logos: CreativeLogos | null, picture: CreativePicture | null): Promise<Picture> {
   const size = PICTURE_SIZE[ratio];
   const canvas = document.createElement('canvas');
   canvas.width = size.width;
   canvas.height = size.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new RenderError('This browser can’t draw the picture.');
-  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, mark }, picture, variant.design ?? null);
+  drawCreative(ctx, size, { text: variant.creative.text, style: variant.creative.style, ratio }, { name: brandName, logos }, picture, variant.design ?? null);
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
   if (!blob) throw new RenderError('This browser can’t make the picture.');
   return { blob, url: URL.createObjectURL(blob), canvas };
@@ -149,13 +149,13 @@ export function PublishDialog({
     let live = true;
     const made: Picture[] = [];
     void (async () => {
-      const [mark, under] = await Promise.all([loadMark(), variant.imageUrl ? loadPicture(variant.imageUrl).catch((err: unknown) => err as RenderError) : null, loadFrameFonts()]);
+      const [logos, under] = await Promise.all([loadLogos(), variant.imageUrl ? loadPicture(variant.imageUrl).catch((err: unknown) => err as RenderError) : null, loadFrameFonts(), loadWordFont(variant.design?.font)]);
       if (under instanceof RenderError) {
         if (live) setProblem(under.message);
         return;
       }
       for (const ratio of ['square', 'wide'] as const) {
-        const picture = await drawPicture(ratio, variant, brand.name, mark, under).catch(() => null);
+        const picture = await drawPicture(ratio, variant, brand.name, logos, under).catch(() => null);
         if (!picture) continue;
         made.push(picture);
         if (live) setPictures((p) => ({ ...p, [ratio]: picture }));

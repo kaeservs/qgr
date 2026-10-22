@@ -204,7 +204,7 @@ const clipEdit = (edit: Partial<VideoEdit>): VideoEdit => ({
   focus: { x: 0.5, y: 0.5 },
   text: { show: true, place: 'top', until: null },
   captions: [],
-  logo: 'top-left',
+  logo: null,
   volume: 1,
   endCard: null,
   cover: 0,
