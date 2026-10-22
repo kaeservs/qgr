@@ -6,14 +6,15 @@
 // run's reference pictures when Higgsfield is given some, then the rules
 // every picture keeps: no words (the ad's words go over the picture), people
 // who are made up rather than anyone real or famous, and the flag and props
-// the team allowed (2026-10-22) with no writing on them. Cloudflare's
+// the team allowed (2026-10-22) with no writing on them, and people who are
+// Indian, as most of QGR's market is (the client's ask, 2026-10-22). Cloudflare's
 // FLUX takes 2,048 characters at most; Higgsfield's GPT Image far more, so
 // its scripts pass HIGGSFIELD_PROMPT_MAX. The scene is shortened first, at a
 // word, then a long picture style; the rules never are.
 const PROMPT_MAX = 2048;
 const HIGGSFIELD_PROMPT_MAX = 6000;
 const PHOTO_LOOK = 'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Where there are people, they interact with each other (embracing, playing, laughing, talking) rather than pose for the camera. Not an illustration, a 3D render or a stock-photo pose.';
-const PICTURE_RULES = 'No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.';
+const PICTURE_RULES = 'The people are Indian: Indian families, parents, children and professionals, as most of QGR\'s clients are. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.';
 const SCENE_MIN = 300;
 
 const REFERENCES_RULE = 'Use the reference pictures given for what they show: the real place, product or look to keep to.';

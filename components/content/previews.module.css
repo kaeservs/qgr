@@ -497,8 +497,17 @@
   align-items: center;
 }
 
+/* The words start below the logo, so nothing overlaps it (drawCreative does the same). */
+.creative-spotlight .creativeInner {
+  padding-top: 19.3cqi;
+}
+
+.ratio-wide.creative-spotlight .creativeInner {
+  padding-top: 15.2cqi;
+}
+
 .ratio-wide.creative-arcs .creativeInner {
-  padding-top: 15cqi;
+  padding-top: 15.2cqi;
 }
 
 /* Split: indigo copy panel beside a gold panel with the arcs. */

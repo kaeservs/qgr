@@ -23,7 +23,8 @@ const system = [
   "- guardrails: at most two rules specific to this strategy; the brand's own guardrails always apply on top.",
   '- title: a short name for this push. summary: the strategy in under 90 characters.',
   '',
-  'EB-5 is an investment with risk: nothing may promise an outcome, a timeline or a return.',
+  'Nothing may promise an outcome, a timeline or a return.',
+  "Positive marketing only: angles and hooks say what QGR does for families, never knock other advisors or programs and never sell by fear. They do not say EB-5 is an investment with risk or that QGR turns projects down, and no guardrail asks the ads to. Write U.S., never US.",
 ].join('\n');
 
 // How QGR's own recent posts did, from the platforms' numbers: engagement per

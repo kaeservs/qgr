@@ -52,35 +52,20 @@ export interface CreativeArt {
 }
 
 /**
- * The full logo, transparent, in the version each ground needs (made from the
- * client's file, 2026-10-22): as given (gold Q, indigo words) on the
- * spotlight's light ground, with white words on indigo or a photograph, and
- * all indigo on the split's gold panel, where its gold half would vanish.
+ * The client's full logo exactly as given (gold Q, indigo words), transparent,
+ * on every ground: the client asked for it unchanged (2026-10-22), so no
+ * white-word or all-indigo version is drawn.
  */
-export const LOGOS = {
-  colour: '/brand/qgr-logo-full.png',
-  light: '/brand/qgr-logo-full-light.png',
-  indigo: '/brand/qgr-logo-full-indigo.png',
-} as const;
-export type CreativeLogos = Record<keyof typeof LOGOS, CanvasImageSource>;
+export const LOGO_FILE = '/brand/qgr-logo-full.png';
 
-/** The three logos, decoded; null if any could not be loaded, and the page's name shows instead. */
-export async function loadLogos(): Promise<CreativeLogos | null> {
-  const [colour, light, indigo] = await Promise.all([loadMark(LOGOS.colour), loadMark(LOGOS.light), loadMark(LOGOS.indigo)]);
-  return colour && light && indigo ? { colour, light, indigo } : null;
-}
+/** The logo, decoded; null if it could not be loaded, and the page's name shows instead. */
+export const loadLogo = (): Promise<CanvasImageSource | null> => loadMark(LOGO_FILE);
 
 /** Loads the font a design's words are set in. A canvas draws in a fallback font until it has loaded. */
 export async function loadWordFont(font: CreativeDesign['font']): Promise<void> {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
   const face = WORD_FONT_FACE[font ?? DEFAULT_FONT];
   await document.fonts.load(`${face.weight} 40px ${face.family}`).catch(() => undefined);
-}
-
-/** Which logo sits on a style's top right corner. */
-export function logoFor(style: CreativeStyle, picture: boolean): keyof typeof LOGOS {
-  if (picture) return 'light';
-  return style === 'spotlight' ? 'colour' : style === 'split' ? 'indigo' : 'light';
 }
 
 /** A picture an image model made, drawn under the words in place of the design. */
@@ -226,7 +211,7 @@ export function drawCreative(
   ctx: Ctx,
   size: Size,
   creative: CreativeArt,
-  brand: { name: string; logos: CreativeLogos | null },
+  brand: { name: string; logo: CanvasImageSource | null },
   picture: CreativePicture | null = null,
   design: CreativeDesign | null = null,
 ): Hit[] {
@@ -241,23 +226,44 @@ export function drawCreative(
   const light = creative.style === 'spotlight' && !picture;
   const face = WORD_FONT_FACE[design?.font ?? DEFAULT_FONT];
 
+  // Where the logo goes: top right unless moved. Computed first so the words keep clear of it.
+  const showLogo = design?.logo ?? true;
+  const logoSpot = spots[LOGO];
+  let logoBox: { x: number; y: number; width: number; height: number } | null = null;
+  if (showLogo) {
+    const scale = logoSpot?.scale ?? 1;
+    const tall = LOGO_TALL[creative.ratio] * (w / PREVIEW_WIDTH) * scale;
+    const { width, height } = brand.logo ? { width: tall * aspectOf(brand.logo), height: tall } : chipSize(ctx, size, brand.name, scale);
+    logoBox = { x: logoSpot ? logoSpot.x * w - width / 2 : w - w * 0.05 - width, y: logoSpot ? logoSpot.y * h - height / 2 : w * 0.045, width, height };
+  }
+
   const text = creative.text.trim();
   if (text) {
     const placed = spots[WORDS];
-    const fontSize = TYPE[creative.style][creative.ratio] * face.scale * w * (placed?.scale ?? 1);
-    const lineHeight = fontSize * 1.12;
     const padX = 8 * cq;
     const padY = 7 * cq;
     const left = padX;
     const right = creative.style === 'split' ? 46 * cq : padX;
     const maxWidth = w - left - right;
-    ctx.font = `${face.weight} ${fontSize}px ${face.family}`;
-    if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
-    const maxLines = placed ? 6 : Math.max(1, Math.floor((h - padY * 2) / lineHeight));
-    const lines = balanced(ctx, text, placed ? Math.min(w * 0.92, maxWidth * Math.max(1, placed.scale)) : maxWidth, maxLines);
     const ruleGap = 3 * cq;
     const ruleHeight = 1.2 * cq;
     const rule = light ? ruleGap + ruleHeight : 0;
+    // Nothing overlaps the logo (the client's ask, 2026-10-22): words that reach
+    // under it start below it, set smaller where they must be to fit.
+    const below = !placed && logoBox && !logoSpot && left + maxWidth > logoBox.x ? logoBox.y + logoBox.height + 3 * cq : null;
+    const room = h - padY - (below ?? padY);
+    const usual = TYPE[creative.style][creative.ratio] * face.scale * w * (placed?.scale ?? 1);
+    let fontSize = usual;
+    const setFont = () => (ctx.font = `${face.weight} ${fontSize}px ${face.family}`);
+    setFont();
+    while (below !== null && fontSize > usual * 0.6 && wrap(ctx, text, maxWidth, 99).length * fontSize * 1.12 + rule > room) {
+      fontSize *= 0.92;
+      setFont();
+    }
+    const lineHeight = fontSize * 1.12;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${fontSize * 0.005}px`;
+    const maxLines = placed ? 6 : Math.max(1, Math.floor(room / lineHeight));
+    const lines = balanced(ctx, text, placed ? Math.min(w * 0.92, maxWidth * Math.max(1, placed.scale)) : maxWidth, maxLines);
     const block = lines.length * lineHeight + rule;
     const centred = creative.style === 'arcs';
     const widest = Math.max(...lines.map((l) => ctx.measureText(l).width));
@@ -269,7 +275,8 @@ export function drawCreative(
       top = placed.y * h - block / 2;
       blockLeft = placed.x * w - widest / 2;
     } else {
-      top = creative.style === 'arcs' ? (creative.ratio === 'wide' ? 15 : 20) * cq : padY + (h - padY * 2 - block) / 2;
+      const roomTop = below ?? padY;
+      top = creative.style === 'arcs' ? Math.max((creative.ratio === 'wide' ? 15 : 20) * cq, roomTop) : roomTop + (room - block) / 2;
       blockLeft = centred ? w / 2 - widest / 2 : left;
     }
 
@@ -302,24 +309,13 @@ export function drawCreative(
     hits.push(hit);
   }
 
-  if ((design?.logo ?? true) && brand.logos) {
-    // The full logo, transparent, top right, at its usual size LOGO_TALL preview pixels tall.
-    const image = brand.logos[logoFor(creative.style, Boolean(picture))];
-    const placed = spots[LOGO];
-    const height = LOGO_TALL[creative.ratio] * (w / PREVIEW_WIDTH) * (placed?.scale ?? 1);
-    const width = height * aspectOf(image);
-    const x = placed ? placed.x * w - width / 2 : w - w * 0.05 - width;
-    const y = placed ? placed.y * h - height / 2 : w * 0.045;
-    ctx.drawImage(image, x, y, width, height);
-    hits.push({ id: LOGO, x, y, width, height });
-  } else if (design?.logo ?? true) {
+  if (logoBox && brand.logo) {
+    // The full logo, transparent, at its usual size LOGO_TALL preview pixels tall.
+    ctx.drawImage(brand.logo, logoBox.x, logoBox.y, logoBox.width, logoBox.height);
+    hits.push({ id: LOGO, ...logoBox });
+  } else if (logoBox) {
     // Without the logo (it could not be loaded), the page's name in a chip.
-    const placed = spots[LOGO];
-    const scale = placed?.scale ?? 1;
-    const { width, height } = chipSize(ctx, size, brand.name, scale);
-    const x = placed ? placed.x * w - width / 2 : w - w * 0.05 - width;
-    const y = placed ? placed.y * h - height / 2 : w * 0.045;
-    hits.push(chip(ctx, size, light, brand.name, x, y, scale));
+    hits.push(chip(ctx, size, light, brand.name, logoBox.x, logoBox.y, logoSpot?.scale ?? 1));
   }
   return hits;
 }

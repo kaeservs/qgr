@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import type { CreativeDesign } from '@/lib/creative/design';
-import { drawCreative, loadLogos, loadWordFont, PICTURE_SIZE } from '@/lib/creative/draw';
-import type { CreativeLogos, CreativePicture, CreativeRatio } from '@/lib/creative/draw';
+import { drawCreative, loadLogo, loadWordFont, PICTURE_SIZE } from '@/lib/creative/draw';
+import type { CreativePicture, CreativeRatio } from '@/lib/creative/draw';
 import type { Hit } from '@/lib/spot';
 import type { CreativeStyle } from '@/lib/types';
 import { loadFrameFonts } from '@/lib/video/draw';
 import styles from './previews.module.css';
 
-let logos: Promise<CreativeLogos | null> | null = null;
+let logo: Promise<CanvasImageSource | null> | null = null;
 let fonts: Promise<void> | null = null;
 const pictures = new Map<string, Promise<CreativePicture | null>>();
 
@@ -46,15 +46,15 @@ export interface DrawnCreative {
  */
 export function useDrawnCreative(canvas: RefObject<HTMLCanvasElement | null>, art: DrawnCreative): Hit[] {
   const [hits, setHits] = useState<Hit[]>([]);
-  const [assets, setAssets] = useState<{ logos: CreativeLogos | null; picture: CreativePicture | null; ready: boolean }>({ logos: null, picture: null, ready: false });
+  const [assets, setAssets] = useState<{ logo: CanvasImageSource | null; picture: CreativePicture | null; ready: boolean }>({ logo: null, picture: null, ready: false });
   const font = art.design?.font;
 
   useEffect(() => {
     let live = true;
-    logos ??= loadLogos();
+    logo ??= loadLogo();
     fonts ??= loadFrameFonts();
-    void Promise.all([logos, art.image ? pictureAt(art.image) : null, fonts, loadWordFont(font)]).then(([l, picture]) => {
-      if (live) setAssets({ logos: l, picture, ready: true });
+    void Promise.all([logo, art.image ? pictureAt(art.image) : null, fonts, loadWordFont(font)]).then(([l, picture]) => {
+      if (live) setAssets({ logo: l, picture, ready: true });
     });
     return () => {
       live = false;
@@ -66,7 +66,7 @@ export function useDrawnCreative(canvas: RefObject<HTMLCanvasElement | null>, ar
     if (!ctx || !assets.ready) return;
     const size = PICTURE_SIZE[art.ratio];
     ctx.clearRect(0, 0, size.width, size.height);
-    setHits(drawCreative(ctx, size, { text: art.text, style: art.style, ratio: art.ratio }, { name: art.brandName, logos: assets.logos }, assets.picture, art.design));
+    setHits(drawCreative(ctx, size, { text: art.text, style: art.style, ratio: art.ratio }, { name: art.brandName, logo: assets.logo }, assets.picture, art.design));
   }, [canvas, assets, art.text, art.style, art.ratio, art.design, art.brandName]);
 
   return hits;
