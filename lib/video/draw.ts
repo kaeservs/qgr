@@ -24,12 +24,16 @@ export const TEXT = '"Lexend Variable", Lexend, system-ui, sans-serif';
 export interface FrameBrand {
   name: string;
   website: string;
-  /** The full logo (public/brand/qgr-logo-full.png); without it, the page's name in a pill. */
+  /** The Q (public/brand/qgr-q.png); without it, the page's name in a pill. */
   mark: CanvasImageSource | null;
 }
 
-/** The QGR logo as the client gave it (2026-10-22): the Q above "Quantum Global, Residency and Citizenship". */
-export const LOGO_SRC = '/brand/qgr-logo-full.png';
+/**
+ * A video's logo: the Q alone, transparent, as the client gave it
+ * (2026-10-22). Most of their videos carry a logo already, so an edit starts
+ * with none (defaultEdit) and the Q goes on only when a person picks a corner.
+ */
+export const LOGO_SRC = '/brand/qgr-q.png';
 
 /** An image's width over its height, read off whatever kind of image it is. */
 export function aspectOf(image: CanvasImageSource): number {
@@ -37,27 +41,6 @@ export function aspectOf(image: CanvasImageSource): number {
   const w = i.naturalWidth || (typeof i.width === 'number' ? i.width : 0);
   const h = i.naturalHeight || (typeof i.height === 'number' ? i.height : 0);
   return w > 0 && h > 0 ? w / h : 1;
-}
-
-/**
- * The logo on a white plate with its top left at (x, y), the logo `height`
- * tall: its indigo words need a light ground on a photograph or a video.
- */
-export function logoPlate(ctx: Ctx, image: CanvasImageSource, x: number, y: number, height: number): Hit {
-  const pad = height * 0.16;
-  const width = height * aspectOf(image) + pad * 2;
-  const plate = height + pad * 2;
-  ctx.fillStyle = 'rgb(255 255 255 / 0.96)';
-  roundedRect(ctx, x, y, width, plate, plate * 0.18);
-  ctx.fill();
-  ctx.drawImage(image, x + pad, y + pad, width - pad * 2, height);
-  return { id: LOGO, x, y, width, height: plate };
-}
-
-/** The plate's size for a logo `height` tall, before it is drawn. */
-export function logoPlateSize(image: CanvasImageSource, height: number): { width: number; height: number } {
-  const pad = height * 0.16;
-  return { width: height * aspectOf(image) + pad * 2, height: height + pad * 2 };
 }
 
 /** A decoded frame of the clip, at whatever size it was decoded. */
@@ -129,10 +112,13 @@ export function logo(ctx: Ctx, size: Size, frameUnit: number, corner: Corner, br
   const unit = frameUnit * (at?.scale ?? 1);
   const margin = frameUnit * 5;
   if (brand.mark) {
-    const plate = logoPlateSize(brand.mark, unit * 9);
-    const px = at ? at.x * size.width - plate.width / 2 : corner.endsWith('left') ? margin : size.width - margin - plate.width;
-    const py = at ? at.y * size.height - plate.height / 2 : corner.startsWith('top') ? margin : size.height - margin - plate.height;
-    return logoPlate(ctx, brand.mark, px, py, unit * 9);
+    // The Q, transparent, 9 units tall: no plate or pill behind it.
+    const height = unit * 9;
+    const width = height * aspectOf(brand.mark);
+    const px = at ? at.x * size.width - width / 2 : corner.endsWith('left') ? margin : size.width - margin - width;
+    const py = at ? at.y * size.height - height / 2 : corner.startsWith('top') ? margin : size.height - margin - height;
+    ctx.drawImage(brand.mark, px, py, width, height);
+    return { id: LOGO, x: px, y: py, width, height };
   }
   const height = unit * 7;
   const markSize = unit * 4.6;
@@ -187,8 +173,8 @@ export function drawBlock(ctx: Ctx, b: Block, centerX: number, top: number, fill
 export function endCard(ctx: Ctx, size: Size, unit: number, text: string, brand: FrameBrand) {
   background(ctx, size);
   arcs(ctx, size, unit);
-  const markSize = unit * 16;
-  const plate = brand.mark ? logoPlateSize(brand.mark, markSize) : null;
+  const markSize = unit * 14;
+  const plate = brand.mark ? { width: markSize * aspectOf(brand.mark), height: markSize } : null;
   const words = block(ctx, text, `600 ${unit * 8}px ${DISPLAY}`, unit * 8, size.width * 0.84, 3, { x: 0, y: 0 });
   ctx.font = `500 ${unit * 3.6}px ${TEXT}`;
   const site = brand.website.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -196,7 +182,7 @@ export function endCard(ctx: Ctx, size: Size, unit: number, text: string, brand:
   const total = (plate ? plate.height + gap : 0) + words.height + gap + unit * 3.6;
   let y = (size.height - total) / 2;
   if (brand.mark && plate) {
-    logoPlate(ctx, brand.mark, (size.width - plate.width) / 2, y, markSize);
+    ctx.drawImage(brand.mark, (size.width - plate.width) / 2, y, plate.width, plate.height);
     y += plate.height + gap;
   }
   ctx.font = `600 ${unit * 8}px ${DISPLAY}`;

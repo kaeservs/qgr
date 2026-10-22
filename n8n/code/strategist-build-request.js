@@ -77,6 +77,10 @@ const chosenAds = (p.chosenAds || []).map(function (a) {
   return ad;
 });
 const CHOSEN_RULE = "competitor_report.chosen_ads are the competitor's ads the QGR team picked for this run. Build the angles on them first: each answers one where it can (a better version of its promise, or the gap it leaves), with based_on_hook set to that ad's opening words, word for word. The rest of the report is context.";
+// A run from QGR's own source (a clip, a page, the team's text): the ads are
+// made from it, so the strategy is too. A clip run once got one angle from the
+// clip and two from the brand's strengths, which read as generic (2026-10-22).
+const SOURCE_RULE = "source is what this run's ads are made from (from a clip, the ads are that clip). Build the strategy on it: every angle comes from what the source says (a moment, a question it answers, a promise it makes, an event, date or place it names), and why quotes or names that moment. The brand's strengths may back an angle up but never stand in for one; brand.topics, posts_that_work and our_past_posts shape how the angles are said, not what they are about. Keep the source's specifics (who it speaks to, an event and its dates, what it offers) in the positioning, the audiences and the title.";
 const RESULTS_RULE = "our_past_posts is how QGR's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
 
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
@@ -162,6 +166,7 @@ return [{
         .concat(
           run.guidance ? [DIRECTION_RULE] : [],
           p.report && chosenAds.length > 0 ? [CHOSEN_RULE] : [],
+          p.report ? [] : [SOURCE_RULE],
           p.brand && p.brand.topics && p.brand.topics.length > 0 ? [TOPICS_RULE] : [],
           examples.length > 0 ? [EXAMPLES_RULE] : [],
           pastPosts.length > 0 ? [RESULTS_RULE] : [],

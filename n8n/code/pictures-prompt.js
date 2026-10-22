@@ -12,7 +12,7 @@
 // word, then a long picture style; the rules never are.
 const PROMPT_MAX = 2048;
 const HIGGSFIELD_PROMPT_MAX = 6000;
-const PHOTO_LOOK = 'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose.';
+const PHOTO_LOOK = 'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Where there are people, they interact with each other (embracing, playing, laughing, talking) rather than pose for the camera. Not an illustration, a 3D render or a stock-photo pose.';
 const PICTURE_RULES = 'No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.';
 const SCENE_MIN = 300;
 

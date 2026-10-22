@@ -239,7 +239,7 @@ describe('saving an edit', () => {
 
 describe('what a person drags on the video', () => {
   const overlay = { id: 'o1', text: 'Ask us', start: 0, end: 5, place: 'top' as const, style: 'banner' as const, animation: 'fade' as const, size: 'medium' as const };
-  const base = { ...defaultEdit(20), overlays: [overlay] };
+  const base = { ...defaultEdit(20), logo: 'top-left' as const, overlays: [overlay] };
 
   it('puts the words, the logo and a text where they are dragged, and back in their places', () => {
     let edit = placeAt(base, 'words', { x: 0.5, y: 0.7, scale: 1.4 });

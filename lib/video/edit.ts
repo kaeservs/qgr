@@ -320,7 +320,7 @@ export function placePicture(edit: Pick<VideoEdit, 'fit' | 'focus'>, picture: Si
 
 // ---------------------------------------------------------------- whole edits
 
-/** A variant's video before anyone edits it: the whole clip, the variant's words at the top, the mark in a corner. */
+/** A variant's video before anyone edits it: the whole clip and the variant's words at the top, with no logo (most clips carry one already). */
 export function defaultEdit(duration: number): VideoEdit {
   return {
     keep: wholeClip(duration),
@@ -329,7 +329,7 @@ export function defaultEdit(duration: number): VideoEdit {
     focus: { x: 0.5, y: 0.5 },
     text: { show: true, place: 'top', until: null },
     captions: [],
-    logo: 'top-left',
+    logo: null,
     volume: 1,
     endCard: null,
     cover: 0,

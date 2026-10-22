@@ -432,7 +432,12 @@ X's ads APIs, which each need their own access.
 - The Content Agent reads the whole chain: the strategy (each angle's why and
   the competitor hook it answers), what it came from (the competitor report's
   insights and hooks, or the source's text, up to 12,000 characters, or a
-  clip's words), the team's direction and the brand memory. It writes three
+  clip's words), the team's direction and the brand memory. On a run from
+  QGR's own clip or source, the strategist builds every angle from what the
+  source says (its moments, events, dates, offers), the brand's strengths
+  backing an angle up rather than standing in for one, and the Content Agent
+  writes from it too (`SOURCE_RULE`, `CLIP_RULE`): a clip run once got one
+  angle from the clip and two generic ones (2026-10-22). It writes three
   variants, each with the ad copy for every platform the run asked for and a
   post in full for every place those platforms post to: Facebook (60 to 150
   words), Instagram (40 to 120 words, then hashtags) and LinkedIn (100 to 220
@@ -795,9 +800,12 @@ X's ads APIs, which each need their own access.
 
 - Every ad but a clip's carries an `image_prompt` from the Content Agent: a
   real photograph that tells a story (the team's choice, 2026-10-22): made-up,
-  real-looking people (a family planning their future, a parent and child, a
-  student arriving somewhere new) in a moment tied to the variant's angle, with
-  the feeling behind it; never a real or famous person, no readable words; a
+  real-looking people interacting with each other, as in the client's
+  brochure (a parent lifting a child onto their shoulders, a family laughing
+  on a waterfront walk, a student greeted on arrival; warm golden light, a
+  U.S. landmark softly behind), in a moment tied to the variant's angle, with
+  the feeling behind it, never posing at the camera
+  (`pictures-prompt.js` asks every picture the same); never a real or famous person, no readable words; a
   U.S. flag or quiet props (passports, a folder, a gavel) may sit in the
   scene with no writing on them (the team's choice, from a picture they had
   liked); nothing that shows a promised outcome (a green card or visa held up
@@ -893,7 +901,7 @@ X's ads APIs, which each need their own access.
 - The posted image is drawn by the same function as before
   (`lib/creative/draw.ts`): a picture covers the frame, cropped about its
   middle, under a 38% black wash (the studio's `brightness(0.62)`), and the
-  words are gold on it in every style. The publish dialog loads it with CORS
+  words are white on it in every style (the client's choice, 2026-10-22). The publish dialog loads it with CORS
   so the canvas can still be exported.
 - While pictures are set to the stand-in, "Image model (stand-in)" makes
   nothing and answers `stand_in: true`: the ask ends and the studio says no
@@ -994,7 +1002,10 @@ X's ads APIs, which each need their own access.
   and height, and its size against its usual one (0.4 to 3), so it holds on a
   preview and on the full-size file alike (`lib/spot.ts`, `clampSpot`).
 - A picture ad's own layout (`ad_variants.design`, `CreativeDesign`): whether
-  its logo shows, up to six texts a person adds (120 characters each; gold,
+  its logo shows, the words' font (`WORD_FONTS`: Lexend, the default and the
+  brochure's geometric sans; Oswald; Montserrat; Playfair) and colour (white
+  by default, indigo on the spotlight's light ground; gold, indigo, black or
+  any colour picked), up to six texts a person adds (120 characters each; gold,
   white, indigo or on a band) and the spots of the words, the logo and each
   text, kept per shape (Meta's square, LinkedIn's wide), since a place that
   suits one rarely suits the other. Anything without a spot sits where the
@@ -1321,13 +1332,19 @@ X's ads APIs, which each need their own access.
   in `PlatformIcon.tsx`.
 - Ad previews use the system font, as the platforms do; only the image wears
   the brand's type.
-- Every ad, picture and video, carries the client's full logo
-  (`public/brand/qgr-logo-full.png`, given 2026-10-22: the Q over "Quantum
-  Global, Residency and Citizenship") on a white plate, since its indigo
-  words need a light ground on a photograph (`logoPlate` in
-  `lib/video/draw.ts`, used by `drawCreative`, the video frame and the end
-  card; the studio's CSS preview matches it). Without the file, the page's
-  name in a pill. The platform avatar stays the Q alone (`qgr-mark.png`).
+- A picture ad carries the client's full logo (given 2026-10-22: the Q over
+  "Quantum Global, Residency and Citizenship"), transparent, top right, as in
+  their brochure, in the version its ground needs (`LOGOS`, `logoFor` in
+  `lib/creative/draw.ts`): as given on the spotlight's light ground,
+  `qgr-logo-full-light.png` (white words) on indigo or a photograph, and
+  `qgr-logo-full-indigo.png` (all indigo) on the split's gold panel, where its
+  gold half would vanish. The studio's CSS preview matches it. Without the
+  files, the page's name in a chip.
+- A video carries no logo until a person picks a corner in the editor (most
+  of the client's clips have one already; `defaultEdit`), and then the Q
+  alone, transparent (`qgr-q.png`, `LOGO_SRC` in `lib/video/draw.ts`); the
+  end card shows the Q too. The words on a video are white on the indigo
+  band. The platform avatar stays the Q in its circle (`qgr-mark.png`).
 - Layout after the "glide" reference: white icon sidebar, greeting, a tabbed
   start card, recent runs, and a right panel with a calendar and agent cards.
 - Dates render in UTC with a fixed locale so server and browser agree; scan

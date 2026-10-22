@@ -67,6 +67,15 @@ describe('a picture’s own layout', () => {
     await expect(save(id, { logo: true, texts: Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, text: 'a' })) })).rejects.toThrow(/Up to 6 texts/);
     await expect(save(id, { logo: true, texts: [{ id: 't1', text: ' ' }] })).rejects.toThrow(/1 to 120 characters/);
     await expect(save(id, { logo: true, texts: [], spots: [] })).rejects.toThrow(/layout is not readable/);
+    await expect(save(id, { logo: true, texts: [], font: 'comic' })).rejects.toThrow(/fonts offered/);
+    await expect(save(id, { logo: true, texts: [], color: 'red' })).rejects.toThrow(/colour for the words/);
+  });
+
+  it('keeps the words’ font and colour', async () => {
+    const { id } = await variant();
+    const design = { logo: true, font: 'playfair', color: '#efb74a', texts: [], spots: {} };
+    await save(id, design);
+    expect(await state(id)).toEqual({ design, approved: false });
   });
 
   it('waits while a post of the ad waits to go out', async () => {

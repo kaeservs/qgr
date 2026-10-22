@@ -534,7 +534,8 @@ export function drawTimelineFrame(ctx: Ctx, size: Size, scene: TimelineScene, pi
     const until = edit.text.until ?? scene.total - (edit.endCard?.seconds ?? 0);
     const a = animate(look.textAnimation, time, until - time, words.length);
     ctx.font = `600 ${fontSize}px ${DISPLAY}`;
-    drawAnimated(ctx, b, centre, top, 'rgb(28 27 157 / 0.92)', BRAND_COLORS.gold, unit * 2, a);
+    // White on the indigo band, as the words on a picture ad are (the client's choice, 2026-10-22).
+    drawAnimated(ctx, b, centre, top, 'rgb(28 27 157 / 0.92)', BRAND_COLORS.white, unit * 2, a);
     hits.push({ id: WORDS, x: centre - b.width / 2, y: top, width: b.width, height: b.height });
   }
 

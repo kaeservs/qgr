@@ -800,3 +800,57 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The words' font and colour in the design editor. */
+.designWordsLook {
+  display: grid;
+  gap: 10px;
+}
+
+.designColors {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.designSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.designSwatch {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.designSwatchAuto {
+  width: auto;
+  padding: 0 10px;
+  border-radius: 15px;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.designSwatchOn {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.designSwatchPick {
+  display: inline-flex;
+}
+
+.designSwatchPick input {
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}

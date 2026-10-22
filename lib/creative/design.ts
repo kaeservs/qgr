@@ -23,9 +23,39 @@ export interface DesignText {
   look: TextLook;
 }
 
+/**
+ * The fonts the words can be set in (the client asked to choose, 2026-10-22).
+ * Lexend is the default: the geometric sans of the client's brochure. Each is
+ * self-hosted (app/layout.tsx), so the canvas draws it as the page shows it.
+ */
+export const WORD_FONTS = ['lexend', 'oswald', 'montserrat', 'playfair'] as const;
+export type WordFont = (typeof WORD_FONTS)[number];
+export const DEFAULT_FONT: WordFont = 'lexend';
+export const WORD_FONT_LABEL: Record<WordFont, string> = { lexend: 'Lexend', oswald: 'Oswald (narrow)', montserrat: 'Montserrat', playfair: 'Playfair (serif)' };
+/** Each font's family, weight and size against Oswald's, which the type sizes were set for: the others are wider. */
+export const WORD_FONT_FACE: Record<WordFont, { family: string; weight: number; scale: number }> = {
+  lexend: { family: '"Lexend Variable", Lexend, system-ui, sans-serif', weight: 600, scale: 0.78 },
+  oswald: { family: '"Oswald Variable", Oswald, Impact, "Arial Narrow", sans-serif', weight: 600, scale: 1 },
+  montserrat: { family: '"Montserrat Variable", Montserrat, system-ui, sans-serif', weight: 700, scale: 0.74 },
+  playfair: { family: '"Playfair Display Variable", "Playfair Display", Georgia, serif', weight: 700, scale: 0.74 },
+};
+
+/** The colours offered for the words; any other colour can be picked too. White is the default. */
+export const WORD_COLORS = [
+  { value: '#ffffff', label: 'White' },
+  { value: '#efb74a', label: 'Gold' },
+  { value: '#1c1b9d', label: 'Indigo' },
+  { value: '#111111', label: 'Black' },
+] as const;
+const HEX = /^#[0-9a-f]{6}$/;
+
 export interface CreativeDesign {
   /** Whether the logo shows. */
   logo: boolean;
+  /** The words' font; without one, Lexend. */
+  font?: WordFont;
+  /** The words' colour as #rrggbb; without one, white (indigo on the spotlight's light ground). */
+  color?: string;
   texts: DesignText[];
   /** Where each thing sits on each shape: `words`, `logo` or a text's id. */
   spots: Partial<Record<CreativeRatio, Record<string, Spot>>>;
@@ -40,7 +70,11 @@ export const PLAIN_DESIGN: CreativeDesign = { logo: true, texts: [], spots: {} }
 
 /** Whether a design is the plain one, saved as nothing. */
 export const isPlain = (d: CreativeDesign): boolean =>
-  d.logo && d.texts.length === 0 && DESIGN_SHAPES.every((shape) => Object.keys(d.spots[shape] ?? {}).length === 0);
+  d.logo &&
+  d.font === undefined &&
+  d.color === undefined &&
+  d.texts.length === 0 &&
+  DESIGN_SHAPES.every((shape) => Object.keys(d.spots[shape] ?? {}).length === 0);
 
 export const designOf = (d: CreativeDesign | null | undefined): CreativeDesign => d ?? PLAIN_DESIGN;
 
@@ -81,6 +115,19 @@ export function removeText(d: CreativeDesign, id: string): CreativeDesign {
     spots[shape] = rest;
   }
   return { ...d, texts: d.texts.filter((t) => t.id !== id), spots };
+}
+
+/** Sets the words' font; the default is kept as no font at all. */
+export function setFont(d: CreativeDesign, font: WordFont): CreativeDesign {
+  const { font: _was, ...rest } = d;
+  return font === DEFAULT_FONT ? rest : { ...rest, font };
+}
+
+/** Sets the words' colour, or with null puts the default back. */
+export function setColor(d: CreativeDesign, color: string | null): CreativeDesign {
+  const { color: _was, ...rest } = d;
+  const hex = color?.toLowerCase();
+  return hex && HEX.test(hex) ? { ...rest, color: hex } : rest;
 }
 
 // ---------------------------------------------------------------- reading it back
@@ -126,6 +173,15 @@ export function parseDesign(raw: unknown): ParseResult<CreativeDesign | null> {
     }
     if (Object.keys(kept).length > 0) spots[shape] = kept;
   }
-  const design: CreativeDesign = { logo: raw.logo, texts, spots };
+  if (raw.font !== undefined && !(WORD_FONTS as readonly unknown[]).includes(raw.font)) return { ok: false, error: 'Pick one of the fonts offered.' };
+  const color = typeof raw.color === 'string' ? raw.color.toLowerCase() : raw.color;
+  if (color !== undefined && (typeof color !== 'string' || !HEX.test(color))) return { ok: false, error: 'Pick a colour for the words.' };
+  const design: CreativeDesign = {
+    logo: raw.logo,
+    ...(raw.font !== undefined && raw.font !== DEFAULT_FONT ? { font: raw.font as WordFont } : {}),
+    ...(color !== undefined ? { color } : {}),
+    texts,
+    spots,
+  };
   return { ok: true, value: isPlain(design) ? null : design };
 }

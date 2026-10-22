@@ -3,8 +3,8 @@
 import { Plus, Redo2, RotateCcw, Trash2, TriangleAlert, Undo2, X as Close } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { saveDesignAction, saveVariantAction } from '@/app/(app)/content/actions';
-import { addText, changeText, DESIGN_LIMITS, DESIGN_SHAPES, designOf, isPlain, LOGO, moveTo, PLAIN_DESIGN, putBack, removeText, TEXT_LOOK_LABEL, TEXT_LOOKS, WORDS } from '@/lib/creative/design';
-import type { CreativeDesign, TextLook } from '@/lib/creative/design';
+import { addText, changeText, DEFAULT_FONT, DESIGN_LIMITS, DESIGN_SHAPES, designOf, isPlain, LOGO, moveTo, PLAIN_DESIGN, putBack, removeText, setColor, setFont, TEXT_LOOK_LABEL, TEXT_LOOKS, WORD_COLORS, WORD_FONT_FACE, WORD_FONT_LABEL, WORD_FONTS, WORDS } from '@/lib/creative/design';
+import type { CreativeDesign, TextLook, WordFont } from '@/lib/creative/design';
 import { PICTURE_SIZE } from '@/lib/creative/draw';
 import type { CreativeRatio } from '@/lib/creative/draw';
 import { cx } from '@/lib/cx';
@@ -203,6 +203,43 @@ export function DesignEditor({
               <span className="label">Words on the picture</span>
               <textarea className="textarea" rows={2} maxLength={LIMITS.creativeText} value={words} disabled={locked} onChange={(e) => setWords(e.target.value)} onFocus={() => setSelected(WORDS)} />
             </label>
+
+            <div className={styles.designWordsLook}>
+              <label className="field">
+                <span className="label">Font</span>
+                <select className="select" value={design.font ?? DEFAULT_FONT} disabled={locked} onChange={(e) => history.set(setFont(design, e.target.value as WordFont))}>
+                  {WORD_FONTS.map((f) => (
+                    <option key={f} value={f} style={{ fontFamily: WORD_FONT_FACE[f].family }}>
+                      {WORD_FONT_LABEL[f]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <fieldset className={styles.designColors}>
+                <legend className="label">Colour of the words</legend>
+                <div className={styles.designSwatches}>
+                  <button type="button" className={cx(styles.designSwatch, styles.designSwatchAuto, !design.color && styles.designSwatchOn)} aria-pressed={!design.color} disabled={locked} onClick={() => history.set(setColor(design, null))} title={variant.creative.style === 'spotlight' && !variant.imageUrl ? 'Indigo on this light design' : 'White'}>
+                    Default
+                  </button>
+                  {WORD_COLORS.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      className={cx(styles.designSwatch, design.color === c.value && styles.designSwatchOn)}
+                      style={{ background: c.value }}
+                      aria-label={c.label}
+                      aria-pressed={design.color === c.value}
+                      title={c.label}
+                      disabled={locked}
+                      onClick={() => history.set(setColor(design, c.value))}
+                    />
+                  ))}
+                  <label className={styles.designSwatchPick} title="Any colour">
+                    <input type="color" aria-label="Any colour" value={design.color ?? '#ffffff'} disabled={locked} onChange={(e) => history.preview(setColor(design, e.target.value))} onBlur={() => history.settle(design)} />
+                  </label>
+                </div>
+              </fieldset>
+            </div>
 
             <div className={styles.designRow}>
               <Toggle checked={design.logo} label="Show the logo" disabled={locked} onChange={(on) => history.set({ ...design, logo: on })} />

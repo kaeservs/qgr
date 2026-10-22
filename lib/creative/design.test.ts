@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Ctx } from '../video/draw';
-import { addText, changeText, DESIGN_LIMITS, isPlain, LOGO, moveTo, parseDesign, PLAIN_DESIGN, putBack, removeText, WORDS } from './design';
+import { addText, changeText, DESIGN_LIMITS, isPlain, LOGO, moveTo, parseDesign, PLAIN_DESIGN, putBack, removeText, setColor, setFont, WORDS } from './design';
 import type { CreativeDesign } from './design';
 import { drawCreative, PICTURE_SIZE } from './draw';
 
@@ -31,7 +31,7 @@ function fakeCtx(): Ctx {
 }
 
 const art = { text: 'Plan your family’s move, step by step.', style: 'split' as const, ratio: 'square' as const };
-const brand = { name: 'Quantum Global', mark: null };
+const brand = { name: 'Quantum Global', logos: null };
 const square = PICTURE_SIZE.square;
 
 describe('a picture’s design', () => {
@@ -86,6 +86,16 @@ describe('a picture’s design', () => {
     expect(error(parseDesign({ logo: true, texts: [{ id: 't1', text: 'a' }, { id: 't1', text: 'b' }] }))).toBe('A text on the picture is there twice.');
     expect(error(parseDesign({ logo: true, texts: Array.from({ length: 7 }, (_, i) => ({ id: `t${i}`, text: 'a' })) }))).toBe('Up to 6 texts on a picture.');
     expect(error(parseDesign({ logo: true, texts: [], spots: { square: { words: { x: 'left', y: 0 } } } }))).toBe('A place on the picture is not readable.');
+    expect(error(parseDesign({ logo: true, texts: [], font: 'comic' }))).toBe('Pick one of the fonts offered.');
+    expect(error(parseDesign({ logo: true, texts: [], color: 'red' }))).toBe('Pick a colour for the words.');
+  });
+
+  it('keeps a font and a colour, the default font as none, and a colour put back as plain', () => {
+    expect(parseDesign({ logo: true, texts: [], font: 'oswald', color: '#EFB74A' })).toEqual({ ok: true, value: { logo: true, font: 'oswald', color: '#efb74a', texts: [], spots: {} } });
+    expect(parseDesign({ logo: true, texts: [], font: 'lexend' })).toEqual({ ok: true, value: null });
+    const d = setColor(setFont(PLAIN_DESIGN, 'montserrat'), '#123456');
+    expect(d).toMatchObject({ font: 'montserrat', color: '#123456' });
+    expect(isPlain(setColor(setFont(d, 'lexend'), null))).toBe(true);
   });
 });
 
@@ -93,21 +103,52 @@ describe('drawing a design', () => {
   it('draws a plain design where the style puts things, and says where', () => {
     const hits = drawCreative(fakeCtx(), square, art, brand);
     expect(hits.map((h) => h.id)).toEqual([WORDS, LOGO]);
-    // The logo's chip sits in the top left, as it always has.
-    expect(hits[1]).toMatchObject({ x: square.width * 0.06, y: square.width * 0.05 });
+    // Without the logo loaded, the page's name in a chip, top right.
+    const chip = hits[1]!;
+    expect(chip.y).toBeCloseTo(square.width * 0.045);
+    expect(chip.x + chip.width).toBeCloseTo(square.width * 0.95);
   });
 
-  it('draws the full logo on its plate, kept to the logo’s shape, and scales it where moved', () => {
-    const logoImage = { width: 438, height: 252 } as unknown as CanvasImageSource;
-    const withLogo = { name: 'Quantum Global', mark: logoImage };
-    const plate = drawCreative(fakeCtx(), square, art, withLogo).find((h) => h.id === LOGO)!;
-    const tall = 46 * (square.width / 440);
-    expect(plate).toMatchObject({ x: square.width * 0.06, y: square.width * 0.05 });
-    expect(plate.height).toBeCloseTo(tall * 1.32);
-    expect(plate.width).toBeCloseTo(tall * (438 / 252) + tall * 0.32);
+  it('draws the full logo with no plate, top right, in the version its ground needs, and scales it where moved', () => {
+    const image = (name: string) => ({ width: 438, height: 252, name }) as unknown as CanvasImageSource;
+    const logos = { colour: image('colour'), light: image('light'), indigo: image('indigo') };
+    const drawn: unknown[] = [];
+    const ctx = Object.assign(fakeCtx(), { drawImage: (i: unknown) => drawn.push(i) });
+    const withLogo = { name: 'Quantum Global', logos };
+    const logo = drawCreative(ctx, square, art, withLogo).find((h) => h.id === LOGO)!;
+    const tall = 52 * (square.width / 440);
+    expect(logo.height).toBeCloseTo(tall);
+    expect(logo.width).toBeCloseTo(tall * (438 / 252));
+    expect(logo.x + logo.width).toBeCloseTo(square.width * 0.95);
+    expect(logo.y).toBeCloseTo(square.width * 0.045);
+    expect(drawn.at(-1)).toBe(logos.indigo);
+    drawCreative(ctx, square, { ...art, style: 'arcs' }, withLogo);
+    expect(drawn.at(-1)).toBe(logos.light);
+    drawCreative(ctx, square, { ...art, style: 'spotlight' }, withLogo, { image: logos.colour, width: 10, height: 10 });
+    expect(drawn.at(-1)).toBe(logos.light);
+    drawCreative(ctx, square, { ...art, style: 'spotlight' }, withLogo);
+    expect(drawn.at(-1)).toBe(logos.colour);
     const moved = drawCreative(fakeCtx(), square, art, withLogo, null, moveTo(PLAIN_DESIGN, 'square', LOGO, { x: 0.5, y: 0.5, scale: 2 })).find((h) => h.id === LOGO)!;
-    expect(moved.height).toBeCloseTo(plate.height * 2);
+    expect(moved.height).toBeCloseTo(logo.height * 2);
     expect(moved.x + moved.width / 2).toBeCloseTo(540);
+  });
+
+  it('draws the words white by default, indigo on the light spotlight, and in the font and colour a design picks', () => {
+    const seen: { font: string; fill: string }[] = [];
+    const ctx = fakeCtx();
+    const record = Object.assign(ctx, {
+      fillText: () => seen.push({ font: (ctx as unknown as { font: string }).font, fill: String((ctx as unknown as { fillStyle: string }).fillStyle) }),
+    });
+    drawCreative(record, square, art, brand);
+    expect(seen[0]).toMatchObject({ fill: '#ffffff' });
+    expect(seen[0]!.font).toContain('Lexend');
+    seen.length = 0;
+    drawCreative(record, square, { ...art, style: 'spotlight' }, brand);
+    expect(seen[0]!.fill).toBe('#1c1b9d');
+    seen.length = 0;
+    drawCreative(record, square, { ...art, style: 'spotlight' }, brand, null, setColor(setFont(PLAIN_DESIGN, 'playfair'), '#EFB74A'));
+    expect(seen[0]!.fill).toBe('#efb74a');
+    expect(seen[0]!.font).toContain('Playfair');
   });
 
   it('centres a moved thing on its spot, at its size', () => {
@@ -123,7 +164,8 @@ describe('drawing a design', () => {
     expect(hits.find((h) => h.id === LOGO)!.height).toBeCloseTo(plainLogo.height * 2);
     // The wide shape keeps its own layout.
     const wide = drawCreative(fakeCtx(), PICTURE_SIZE.wide, { ...art, ratio: 'wide' }, brand, null, design);
-    expect(wide.find((h) => h.id === LOGO)).toMatchObject({ x: PICTURE_SIZE.wide.width * 0.06 });
+    const wideLogo = wide.find((h) => h.id === LOGO)!;
+    expect(wideLogo.x + wideLogo.width).toBeCloseTo(PICTURE_SIZE.wide.width * 0.95);
   });
 
   it('stacks added texts from the bottom, and leaves the logo off when asked', () => {

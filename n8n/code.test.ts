@@ -627,8 +627,15 @@ describe('Ad Strategist', () => {
     expect(String(body.system)).toContain('brand.topics is what QGR usually posts about');
     expect(String(body.system)).toContain('posts_that_work are posts the team kept');
     const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
-    expect(String(plain.system)).not.toContain('brand.topics');
+    expect(String(plain.system)).not.toContain('brand.topics is what QGR');
     expect(materialOf(plain)).not.toHaveProperty('posts_that_work');
+  });
+
+  it('builds every angle from the source on a run from QGR’s own material, and not on a competitor’s', () => {
+    const custom = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
+    expect(String(custom.system)).toContain('every angle comes from what the source says');
+    const competitor = (run('strategist-build-request.js', run('strategist-plan.js', competitorCtx)) as { body: Json }).body;
+    expect(String(competitor.system)).not.toContain('source is what');
   });
 
   it('builds from the team’s notes on an uploaded clip', () => {
@@ -845,6 +852,7 @@ describe('Content Agent', () => {
     const page = { ok: true, url: 'https://journal.example/post', title: 'A post', text: 'What the source says.', words: 4 };
     const { body } = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'blog', title: 'Blog: A post', page } }) as { body: Json };
     expect(materialOf(body).source).toEqual({ type: 'blog', title: 'A post', text: 'What the source says.' });
+    expect(String(body.system)).toContain('source is QGR\'s own material this run is made from');
     const pasted = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'text', title: 'Text', excerpt: 'Pasted words.' } }) as { body: Json };
     expect(materialOf(pasted.body).source).toEqual({ type: 'text', title: 'Text', text: 'Pasted words.' });
     // Without memory, nothing of it is asked for.
@@ -860,9 +868,12 @@ describe('Content Agent', () => {
     expect(String(body.system)).not.toContain('a real photograph that tells a story');
     const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
     expect(material.clip).toEqual({ length: '0:43', what_is_said: 'Our founder explains concurrent filing.' });
+    expect(String(body.system)).toContain('clip.what_is_said is what is said in the team\'s video');
     // A run without a clip is asked for images, as before.
     const plain = run('content-build-request.js', ctx) as { body: Json };
     expect(String(plain.body.system)).toContain('a real photograph that tells a story');
+    expect(String(plain.body.system)).not.toContain('clip.what_is_said');
+    expect(String(plain.body.system)).not.toContain('source is QGR');
     expect(String(plain.body.system)).toContain('The people are made up, never real or famous');
     expect(String(plain.body.system)).toContain('nothing that shows a promised outcome');
     expect(String(plain.body.system)).toContain('A U.S. flag in the room');
