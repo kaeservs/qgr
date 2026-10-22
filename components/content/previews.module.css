@@ -405,11 +405,6 @@
   color: var(--gold);
 }
 
-.withImage.creative-spotlight .creativeBrand {
-  background: rgb(255 255 255 / 0.95);
-  color: var(--indigo-ink);
-}
-
 .withImage.creative-spotlight .creativeField {
   outline-color: rgb(255 255 255 / 0.55);
   background-color: rgb(255 255 255 / 0.06);
@@ -425,21 +420,21 @@
   padding: 7cqi 8cqi;
 }
 
+/* The full logo on a white plate, as lib/creative/draw.ts draws it: 46 of 440 pixels tall. */
 .creativeBrand {
   position: absolute;
   top: 5cqi;
   left: 6cqi;
   display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px 4px 5px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.95);
-  color: var(--indigo-ink);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
+  padding: 1.7cqi;
+  border-radius: 2.4cqi;
+  background: rgb(255 255 255 / 0.96);
+}
+
+.creativeBrand img {
+  display: block;
+  width: auto;
+  height: 10.45cqi;
 }
 
 /* A thumbnail is too small to carry the chip; the words matter more. */
@@ -541,11 +536,6 @@
   color: var(--indigo);
   padding-bottom: 3cqi;
   background: linear-gradient(var(--gold), var(--gold)) left bottom / 18cqi 1.2cqi no-repeat;
-}
-
-.creative-spotlight .creativeBrand {
-  background: var(--indigo);
-  color: #fff;
 }
 
 .creative-spotlight .creativeField {

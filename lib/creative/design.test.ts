@@ -97,6 +97,19 @@ describe('drawing a design', () => {
     expect(hits[1]).toMatchObject({ x: square.width * 0.06, y: square.width * 0.05 });
   });
 
+  it('draws the full logo on its plate, kept to the logo’s shape, and scales it where moved', () => {
+    const logoImage = { width: 438, height: 252 } as unknown as CanvasImageSource;
+    const withLogo = { name: 'Quantum Global', mark: logoImage };
+    const plate = drawCreative(fakeCtx(), square, art, withLogo).find((h) => h.id === LOGO)!;
+    const tall = 46 * (square.width / 440);
+    expect(plate).toMatchObject({ x: square.width * 0.06, y: square.width * 0.05 });
+    expect(plate.height).toBeCloseTo(tall * 1.32);
+    expect(plate.width).toBeCloseTo(tall * (438 / 252) + tall * 0.32);
+    const moved = drawCreative(fakeCtx(), square, art, withLogo, null, moveTo(PLAIN_DESIGN, 'square', LOGO, { x: 0.5, y: 0.5, scale: 2 })).find((h) => h.id === LOGO)!;
+    expect(moved.height).toBeCloseTo(plate.height * 2);
+    expect(moved.x + moved.width / 2).toBeCloseTo(540);
+  });
+
   it('centres a moved thing on its spot, at its size', () => {
     const design = moveTo(moveTo(PLAIN_DESIGN, 'square', WORDS, { x: 0.5, y: 0.75, scale: 0.8 }), 'square', LOGO, { x: 0.8, y: 0.9, scale: 2 });
     const hits = drawCreative(fakeCtx(), square, art, brand, null, design);

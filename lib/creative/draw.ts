@@ -8,7 +8,7 @@
 
 import type { Hit, Spot } from '../spot';
 import type { CreativeStyle } from '../types';
-import { BRAND_COLORS, wrap } from '../video/draw';
+import { BRAND_COLORS, logoPlate, logoPlateSize, wrap } from '../video/draw';
 import type { Ctx } from '../video/draw';
 import type { Size } from '../video/edit';
 import { LOGO, WORDS } from './design';
@@ -269,7 +269,16 @@ export function drawCreative(
     hits.push(hit);
   }
 
-  if (design?.logo ?? true) {
+  if ((design?.logo ?? true) && brand.mark) {
+    // The full logo on its white plate, 46 preview pixels tall at its usual size.
+    const placed = spots[LOGO];
+    const tall = 46 * (w / PREVIEW_WIDTH) * (placed?.scale ?? 1);
+    const { width, height } = logoPlateSize(brand.mark, tall);
+    const x = placed ? placed.x * w - width / 2 : w * 0.06;
+    const y = placed ? placed.y * h - height / 2 : w * 0.05;
+    hits.push(logoPlate(ctx, brand.mark, x, y, tall));
+  } else if (design?.logo ?? true) {
+    // Without the logo (it could not be loaded), the page's name in a chip.
     const placed = spots[LOGO];
     const scale = placed?.scale ?? 1;
     const { width, height } = chipSize(ctx, size, brand.mark, brand.name, scale);

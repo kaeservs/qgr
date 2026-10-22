@@ -5,14 +5,15 @@
 // 2026-10-22), the brand's picture style from brand memory, a line on the
 // run's reference pictures when Higgsfield is given some, then the rules
 // every picture keeps: no words (the ad's words go over the picture), people
-// who are made up rather than anyone real or famous, no flags. Cloudflare's
+// who are made up rather than anyone real or famous, and the flag and props
+// the team allowed (2026-10-22) with no writing on them. Cloudflare's
 // FLUX takes 2,048 characters at most; Higgsfield's GPT Image far more, so
 // its scripts pass HIGGSFIELD_PROMPT_MAX. The scene is shortened first, at a
 // word, then a long picture style; the rules never are.
 const PROMPT_MAX = 2048;
 const HIGGSFIELD_PROMPT_MAX = 6000;
 const PHOTO_LOOK = 'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose.';
-const PICTURE_RULES = 'No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.';
+const PICTURE_RULES = 'No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.';
 const SCENE_MIN = 300;
 
 const REFERENCES_RULE = 'Use the reference pictures given for what they show: the real place, product or look to keep to.';

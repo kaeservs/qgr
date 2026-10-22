@@ -1309,7 +1309,7 @@ export const brandMemory: BrandMemory = {
     linkedin: 'A strong first line, then short paragraphs written for professionals on H-1B visas. At most three hashtags.',
     x: 'One idea in plain words. No hashtags.',
   },
-  pictureStyle: 'Real families and students in warm natural light: at home, on campus, arriving somewhere new. Candid and emotional, never posed. QGR indigo and gold only as small touches. No flags, no money.',
+  pictureStyle: 'Real families and students in warm natural light: at home, on campus, arriving somewhere new. Candid and emotional, never posed. QGR indigo and gold only as small touches. A U.S. flag or passports may sit in the room, with no writing. No money.',
 };
 
 /** Posts that work for the team: one pasted, one marked "This worked" on a post that went out. */

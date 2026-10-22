@@ -95,7 +95,7 @@ describe('the request and its price', () => {
     const [written] = runJson('pictures-higgsfield-request.js', [ask({ quality: 'medium' })]);
     expect(written!.params).toEqual({
       model: 'gpt_image_2_5',
-      prompt: 'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.',
+      prompt: 'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.',
       aspect_ratio: '1:1',
       resolution: '1k',
       quality: 'medium',
@@ -120,7 +120,7 @@ describe('the request and its price', () => {
       { role: 'image_references', value: 'media-brochure' },
     ]);
     expect(params.prompt).toBe(
-      'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. Use the reference pictures given for what they show: the real place, product or look to keep to. No text, letters, numbers, logos or watermarks anywhere. Everyone shown is a made-up person: never a real, famous or recognisable one. No flags.',
+      'A calm skyline at dusk, indigo and gold. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. Picture style: Warm natural light, indigo and gold accents. Use the reference pictures given for what they show: the real place, product or look to keep to. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them; never a green card or visa held up as approved, never money.',
     );
     expect(JSON.parse(written!.quote_input as string)).toEqual({ params: { ...params, get_cost: true }, get_cost: true });
     // Without references the request is exactly as before.

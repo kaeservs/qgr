@@ -36,8 +36,7 @@ export function Creative({
       )}
       <div className={styles.creativeInner}>
         <span className={styles.creativeBrand}>
-          <Image src="/brand/qgr-mark.png" alt="" width={18} height={18} />
-          Quantum Global
+          <Image src="/brand/qgr-logo-full.png" alt="Quantum Global, Residency and Citizenship" width={80} height={46} />
         </span>
         {editable && onChange ? (
           <AutoTextarea className={cx(styles.creativeText, styles.creativeField)} value={text} onChange={onChange} aria-label="Text on the image" singleLine />
