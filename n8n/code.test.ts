@@ -559,7 +559,8 @@ describe('Competitor Tracker, reading their LinkedIn ads through Apify', () => {
     const prepared = run('tracker-prepare-ads.js', out);
     const prepAds = prepared.ads as Json[];
     expect(prepAds.map((a) => [a.platform, a.days_running, a.active, a.impressions])).toEqual([
-      ['linkedin', 40, true, '10k-20k'],
+      // Still showing: counted from its start date to now, so the hour of the day can round it up.
+      ['linkedin', Math.round((Date.now() - Date.parse(iso(40))) / 86_400_000), true, '10k-20k'],
       ['linkedin', 20, false, '<1k'],
       ['linkedin', 0, true, undefined],
     ]);

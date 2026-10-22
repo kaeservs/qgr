@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LOGO, WORDS } from '../spot';
-import { drawTimelineFrame } from './compose';
+import { bandFor, drawTimelineFrame } from './compose';
 import type { Ctx } from './draw';
 import { defaultEdit } from './edit';
 import { layout, placeAt, sequenceOf } from './timeline';
@@ -62,5 +62,14 @@ describe('a frame’s words, logo and texts', () => {
   it('draws nothing to drag on the end card, and only the texts on screen', () => {
     expect(hitsAt({ ...edit, endCard: { text: 'Book a call', seconds: 3 } }, 21)).toEqual([]);
     expect(hitsAt(edit, 6).map((h) => h.id)).toEqual([LOGO, WORDS]);
+  });
+});
+
+describe('the band behind a video’s words', () => {
+  it('is indigo under white or gold words, and light under dark ones, so they always read', () => {
+    expect(bandFor('#ffffff')).toBe('rgb(28 27 157 / 0.92)');
+    expect(bandFor('#efb74a')).toBe('rgb(28 27 157 / 0.92)');
+    expect(bandFor('#1c1b9d')).toBe('rgb(255 255 255 / 0.92)');
+    expect(bandFor('#111111')).toBe('rgb(255 255 255 / 0.92)');
   });
 });

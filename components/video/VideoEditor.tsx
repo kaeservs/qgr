@@ -9,7 +9,8 @@ import { LIMITS } from '@/lib/edit-input';
 import { describeWarning, guardrailWarnings, videoWarnings } from '@/lib/guardrails';
 import type { Clip, Platform, Variant } from '@/lib/types';
 import { shapeForEdit } from '@/lib/video/ai-pieces';
-import { addCaption, captionsFromTranscript, ASPECT_INFO, ASPECTS, clock, CORNERS, defaultEdit, END_CARD, frameSize, isUntouched, length, parseSubtitles, TEXT_LIMITS, TEXT_PLACES, withCutawaysFitted } from '@/lib/video/edit';
+import { DEFAULT_FONT, WORD_COLORS, WORD_FONT_LABEL, WORD_FONTS } from '@/lib/creative/design';
+import { addCaption, ASPECT_INFO, ASPECTS, captionsFromTranscript, clock, CORNERS, defaultEdit, END_CARD, frameSize, isUntouched, length, parseSubtitles, TEXT_LIMITS, TEXT_PLACES, withColor, withCutawaysFitted, withFont } from '@/lib/video/edit';
 import type { Caption, Corner, VideoEdit } from '@/lib/video/edit';
 import { RenderError } from '@/lib/video/errors';
 import {
@@ -663,6 +664,42 @@ export function VideoEditor({
                       <span className="muted small">The agents write each ad’s words; here you choose where and how long they show. Your own words go under Texts on the video.</span>
                     )}
                     <Choices label="Where" options={TEXT_PLACES} value={edit.text.place} name={(p) => PLACE_LABEL[p]} disabled={!edit.text.show} onPick={(p) => history.set({ ...placeAt(edit, WORDS, null), text: { ...placeAt(edit, WORDS, null).text, place: p } })} />
+                    <Choices label="Font" options={WORD_FONTS} value={edit.text.font ?? DEFAULT_FONT} name={(f) => WORD_FONT_LABEL[f]} disabled={!edit.text.show} onPick={(f) => change({ text: withFont(edit.text, f) })} />
+                    <div className="field">
+                      <span className="label">Colour of the words</span>
+                      <div className={styles.choices} role="radiogroup" aria-label="Colour of the words">
+                        <button type="button" role="radio" aria-checked={!edit.text.color} className={cx(styles.choice, !edit.text.color && styles.choiceOn)} disabled={!edit.text.show} onClick={() => change({ text: withColor(edit.text, null) })}>
+                          White
+                        </button>
+                        {WORD_COLORS.filter((c) => c.value !== '#ffffff').map((c) => (
+                          <button
+                            key={c.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={edit.text.color === c.value}
+                            className={cx(styles.choice, edit.text.color === c.value && styles.choiceOn)}
+                            disabled={!edit.text.show}
+                            onClick={() => change({ text: withColor(edit.text, c.value) })}
+                          >
+                            <span className={styles.swatch} style={{ background: c.value }} aria-hidden />
+                            {c.label}
+                          </button>
+                        ))}
+                        <label className={styles.choice} title="Any colour">
+                          <input
+                            type="color"
+                            className={styles.colorPick}
+                            aria-label="Any colour"
+                            value={edit.text.color ?? '#ffffff'}
+                            disabled={!edit.text.show}
+                            onChange={(e) => history.preview({ ...edit, text: withColor(edit.text, e.target.value) })}
+                            onBlur={settle}
+                          />
+                          Any
+                        </label>
+                      </div>
+                      <span className="muted small">On a band that keeps them readable: indigo under light colours, white under dark ones.</span>
+                    </div>
                     <div className="field">
                       <span className="label">How long</span>
                       <div className={styles.choices} role="radiogroup" aria-label="How long the words stay up">

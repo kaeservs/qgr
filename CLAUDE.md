@@ -1343,8 +1343,11 @@ X's ads APIs, which each need their own access.
 - A video carries no logo until a person picks a corner in the editor (most
   of the client's clips have one already; `defaultEdit`), and then the Q
   alone, transparent (`qgr-q.png`, `LOGO_SRC` in `lib/video/draw.ts`); the
-  end card shows the Q too. The words on a video are white on the indigo
-  band. The platform avatar stays the Q in its circle (`qgr-mark.png`).
+  end card shows the Q too. The words on a video are white in Lexend on the
+  indigo band unless the editor's Text tab picks a font and colour (the same
+  ones as a picture ad: `text.font`, `text.color`, checked by
+  `parseVideoEdit` and `private.check_video_edit`); a dark colour goes on a
+  near-white band (`bandFor` in `lib/video/compose.ts`), so they always read. The platform avatar stays the Q in its circle (`qgr-mark.png`).
 - Layout after the "glide" reference: white icon sidebar, greeting, a tabbed
   start card, recent runs, and a right panel with a calendar and agent cards.
 - Dates render in UTC with a fixed locale so server and browser agree; scan

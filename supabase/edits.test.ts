@@ -46,6 +46,12 @@ describe('a long video edited whole', () => {
     expect(await longEdit(id)).toMatchObject({ keep: [{ start: 0, end: 180 }, { start: 300, end: 540 }] });
     await expect(saveLong(id, { ...edit(), keep: [{ start: 0, end: 700 }] })).rejects.toThrow(/outside the clip/);
     await expect(saveLong(id, edit(), outsider)).rejects.toThrow(/Only the QGR team/);
+    // The words' font and colour, kept when they are one of the app's, refused otherwise.
+    const text = { show: true, place: 'top', until: null };
+    await saveLong(id, { ...edit(), text: { ...text, font: 'playfair', color: '#efb74a' } });
+    expect(await longEdit(id)).toMatchObject({ text: { font: 'playfair', color: '#efb74a' } });
+    await expect(saveLong(id, { ...edit(), text: { ...text, font: 'comic' } })).rejects.toThrow(/fonts offered/);
+    await expect(saveLong(id, { ...edit(), text: { ...text, color: 'red' } })).rejects.toThrow(/colour for the words/);
     // Back to the video as it is.
     await saveLong(id, null);
     expect(await longEdit(id)).toBeNull();

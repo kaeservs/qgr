@@ -1,8 +1,9 @@
 // The pieces a frame of an edited video is drawn with: the brand's colours and
-// type, its background, the logo on its plate, blocks of words and the end card.
+// type, its background, the logo (the Q, transparent), blocks of words and the end card.
 // lib/video/compose.ts draws whole frames from them. Every size is a share of
 // the frame, so a small preview and a 1080p export look the same.
 
+import { WORD_FONT_FACE } from '../creative/design';
 import { LOGO } from '../spot';
 import type { Hit, Spot } from '../spot';
 import type { Corner, Size } from './edit';
@@ -199,7 +200,9 @@ export function endCard(ctx: Ctx, size: Size, unit: number, text: string, brand:
 /** Loads the fonts a frame is drawn in. A canvas draws in a fallback font until they have loaded. */
 export async function loadFrameFonts(): Promise<void> {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
-  await Promise.all([document.fonts.load(`600 40px ${DISPLAY}`), document.fonts.load(`500 20px ${TEXT}`), document.fonts.load(`600 20px ${TEXT}`)]).catch(() => undefined);
+  // The words' fonts too (lib/creative/design.ts), so a font picked draws at once.
+  const words = Object.values(WORD_FONT_FACE).map((f) => document.fonts.load(`${f.weight} 40px ${f.family}`));
+  await Promise.all([document.fonts.load(`600 40px ${DISPLAY}`), document.fonts.load(`500 20px ${TEXT}`), document.fonts.load(`600 20px ${TEXT}`), ...words]).catch(() => undefined);
 }
 
 /** The logo, decoded, for drawing; null if it could not be loaded. */
