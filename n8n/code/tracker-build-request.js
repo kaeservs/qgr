@@ -33,8 +33,8 @@ const fromLinkedIn = shots.length === 0 && (p.ads || []).some(function (a) { ret
 const LINKEDIN_RULE = "Ads with platform linkedin come from LinkedIn's Ad Library, which publishes an impressions range for some ads (impressions, as written, for example 10k-20k): the one figure of reach you may cite, exactly as written. stopped marks an ad LinkedIn showed in the last 30 days and has stopped; its days_running is how long it ran.";
 const system = [
   shots.length > 0
-    ? "You analyse a competitor's marketing for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get screenshots of the competitor's marketing that the QGR team saved, numbered: mostly paid ads, sometimes organic posts, emails or web pages; and sometimes text from their website."
-    : "You analyse a competitor's paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. You get the competitor's active ads, each with an id, the number of days it has been running and, when Meta says, how many copies of it they run (versions) and where Meta shows it (placements); and sometimes text from their website.",
+    ? "You analyse a competitor's marketing for Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm. You get screenshots of the competitor's marketing that the Quantum Global team saved, numbered: mostly paid ads, sometimes organic posts, emails or web pages; and sometimes text from their website."
+    : "You analyse a competitor's paid social ads for Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm. You get the competitor's active ads, each with an id, the number of days it has been running and, when Meta says, how many copies of it they run (versions) and where Meta shows it (placements); and sometimes text from their website.",
   '',
 ].concat(shots.length > 0 ? READ : [], [
   "Report what is working for them. The public signs of an ad that works are how long it has run, how many versions they run of it and how widely it is placed, and, on a screenshot, the reactions, comments and shares it shows; nothing else is known of an ad's results, so never claim spend, clicks or reach.",
@@ -49,12 +49,12 @@ const system = [
   'Work only from the material given.',
 ]).join('\n');
 
-// Who reads the report: QGR, as its brand memory has it. The insights are for it to act on.
-const BRAND_RULE = 'our_brand is QGR, who reads this report: make the insights ones QGR can act on with what it offers and posts about, never claims the ads do not show.';
+// Who reads the report: Quantum Global, as its brand memory has it. The insights are for it to act on.
+const BRAND_RULE = 'our_brand is Quantum Global, who reads this report: make the insights ones Quantum Global can act on with what it offers and posts about, never claims the ads do not show.';
 
 // The team's direction for the run, in their words: what to look for. Only when
 // they gave one; without it the request is exactly as before.
-const DIRECTION_RULE = "direction is the QGR team's note on what to look for in these ads. Let it decide which hooks and insights come first, but report only what the ads show.";
+const DIRECTION_RULE = "direction is the Quantum Global team's note on what to look for in these ads. Let it decide which hooks and insights come first, but report only what the ads show.";
 
 const material = {
   competitor: { domain: p.domain, name_hint: p.competitorHint },

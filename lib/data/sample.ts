@@ -16,7 +16,7 @@ import type { RunMediaInput } from '../run-media';
 import { nextScanAt, zonedToUtc } from '../schedule';
 import { PLACE_LABEL } from '../post-input';
 import { taggedLink } from '../leads';
-import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, RunMedia, TeamSettings, VideoBudget } from '../types';
+import type { ActivityItem, BrandExample, BrandMemory, BrandProfile, ContentRules, Competitor, Lead, LeadSettings, LongVideoWithTranscript, Post, Run, RunMedia, TeamSettings, VideoBudget } from '../types';
 import { length } from '../video/edit';
 import { toAgents } from './map';
 import { searchIndex, summarizePage } from './source';
@@ -32,6 +32,7 @@ const store = globalThis as typeof globalThis & {
   __qgrUntracked?: Set<string>;
   __qgrRemovedRuns?: Set<string>;
   __qgrMemory?: BrandMemory;
+  __qgrRules?: ContentRules;
   __qgrExamples?: BrandExample[];
   __qgrLongVideos?: LongVideoWithTranscript[];
   __qgrLeads?: Lead[];
@@ -50,6 +51,7 @@ const kept = (item: { runId: string }): boolean => !removedRuns().has(item.runId
 const settings = (): TeamSettings => (store.__qgrSettings ??= structuredClone(mock.settings));
 const untracked = (): Set<string> => (store.__qgrUntracked ??= new Set(mock.competitors.filter((c) => !c.tracked).map((c) => c.id)));
 const memory = (): BrandMemory => (store.__qgrMemory ??= structuredClone(mock.brandMemory));
+const contentRules = (): ContentRules => (store.__qgrRules ??= structuredClone(mock.contentRules));
 const examples = (): BrandExample[] => (store.__qgrExamples ??= structuredClone(mock.brandExamples));
 const longVideos = (): LongVideoWithTranscript[] => (store.__qgrLongVideos ??= [mock.sampleLongVideo()]);
 const competitorList = (): Competitor[] => mock.competitors.map((c) => ({ ...c, tracked: !untracked().has(c.id) }));
@@ -135,6 +137,7 @@ export const sampleData: DataSource = {
   getSearchIndex: async () => searchIndex(mock.competitors, mock.strategies, mock.adSets, runList()),
   getBrandProfile: async () => brand,
   getBrandMemory: async () => ({ memory: memory(), examples: [...examples()].sort(byNewest) }),
+  getContentRules: async () => contentRules(),
 
   createRun: async (input, page) => {
     const now = new Date().toISOString();
@@ -200,12 +203,16 @@ export const sampleData: DataSource = {
   deleteShot: async () => ({ ok: true, value: null, sample: true }),
   createReferenceUpload: async (extension) => ({ ok: true, value: { path: `refs/00000000-0000-4000-8000-000000000000/${crypto.randomUUID()}.${extension}`, url: null }, sample: true }),
   deleteReference: async () => ({ ok: true, value: null, sample: true }),
-  saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy), edit.posts) }, sample: true }),
+  saveVariant: async (_id, edit) => ({ ok: true, value: { warnings: guardrailWarnings(edit.creativeText, edit.copy, copyPlatforms(edit.copy), edit.posts, contentRules().flagPhrases) }, sample: true }),
   approveVariant: async () => ({ ok: true, value: null, sample: true }),
   saveBrandProfile: async () => ({ ok: true, value: null, sample: true }),
   // Brand memory changes last this session, so the page shows what was saved.
   saveBrandMemory: async (next) => {
     store.__qgrMemory = next;
+    return { ok: true, value: null, sample: true };
+  },
+  saveContentRules: async (next) => {
+    store.__qgrRules = next;
     return { ok: true, value: null, sample: true };
   },
   addBrandExample: async (example) => {

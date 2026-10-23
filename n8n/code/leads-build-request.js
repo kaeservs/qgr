@@ -11,7 +11,7 @@ return $input.all().map(function (item) {
   const l = item.json;
   const brand = l.brand || {};
   const system = [
-    'You judge whether a lead for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm, is qualified, against the criteria the QGR team wrote below. A lead is someone who answered one of QGR\'s ads or posts; you are given what they said and what QGR\'s CRM knows of them, field by field.',
+    'You judge whether a lead for Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm, is qualified, against the criteria the Quantum Global team wrote below. A lead is someone who answered one of Quantum Global\'s ads or posts; you are given what they said and what Quantum Global\'s CRM knows of them, field by field.',
     '',
     '- verdict: qualified, not_qualified, or unclear when what the lead said is not enough to tell.',
     '- reasons: one to four, each one plain sentence. For qualified or not_qualified, every reason quotes the lead: field is the answer\'s field exactly as given, and quote is a few words copied exactly from that answer\'s value. For unclear, say what is missing; field and quote are then empty strings unless you quote something.',
@@ -26,7 +26,7 @@ return $input.all().map(function (item) {
   const material = {
     lead: { platform: l.platform, source: l.source || null, answers: l.answers || [] },
   };
-  if (brand.offer || brand.audience) material.qgr = { offer: brand.offer, audience: brand.audience };
+  if (brand.offer || brand.audience) material.quantum_global = { offer: brand.offer, audience: brand.audience };
   if (l.examples && l.examples.length > 0) material.examples = l.examples;
 
   const schema = {

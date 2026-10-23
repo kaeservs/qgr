@@ -429,6 +429,18 @@ export interface BrandMemory {
   pictureStyle: string;
 }
 
+/**
+ * How content is made (Brand memory), the team's to edit: the rules for the
+ * words, for pictures and for videos, and the phrases the checks flag. What
+ * keeps an ad legally safe is not here: it stays in code.
+ */
+export interface ContentRules {
+  copyRules: string[];
+  pictureRules: string[];
+  videoRules: string[];
+  flagPhrases: string[];
+}
+
 /** A post that works: pasted by the team, or marked "This worked" on one that went out. */
 export interface BrandExample {
   id: string;

@@ -345,7 +345,7 @@ describe('the prompt writer: an AI video’s prompt from what is said around a p
       mode: 'cover',
       idea: '',
       lines: [{ start: 180, end: 184, text: 'Many of our families send a child to study in the U.S.' }],
-      brand: { company: 'Quantum Global Residency', offer: 'EB-5', audience: 'Families', guardrails: ['No promises of a green card'], look: null },
+      brand: { company: 'Quantum Global Residency', offer: 'EB-5', audience: 'Families', guardrails: ['No promises of a green card'], look: null, rules: ['No identifiable people: never an identifiable face.', 'No flags.'] },
       ...over,
     },
   });
@@ -361,7 +361,9 @@ describe('the prompt writer: an AI video’s prompt from what is said around a p
     expect(req.body.output_config).toMatchObject({ effort: 'low', format: { type: 'json_schema' } });
     expect(req.body.system).toMatch(/plays over the video while the speaker goes on talking/);
     expect(req.body.system).toMatch(/5 seconds, wide \(16:9\)/);
-    expect(req.body.system).toMatch(/never an identifiable face/);
+    expect(req.body.system).toMatch(/Never a real or famous person/);
+    // The team's video rules (Brand memory), one a line.
+    expect(req.body.system).toMatch(/\n- No identifiable people: never an identifiable face\.\n- No flags\./);
     expect(req.body.system).toMatch(/No promises of a green card/);
     expect(req.body.messages[0]!.content).toMatch(/\[3:00\] Many of our families send a child to study in the U\.S\./);
     expect(req.body.messages[0]!.content).toMatch(/"idea":"a student on campus"/);

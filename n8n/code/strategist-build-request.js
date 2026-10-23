@@ -13,21 +13,28 @@ const GOALS = {
   guide: 'Guide downloads',
 };
 
+// The team's content rules (Brand memory, "How content is made"): the words'
+// tone, the company's name and what makes an ad clear at a glance. Only when
+// there are some; what keeps an ad legally safe is written above, in code.
+const copyRules = ((p.brand && p.brand.copy_rules) || []).filter(function (r) { return String(r || '').trim(); });
+const COPY_RULES = copyRules.length > 0
+  ? "The team's content rules (Brand memory), which every angle, hook and the positioning follow, and that no guardrail of the strategy may break:\n" + copyRules.map(function (r) { return '- ' + String(r).trim(); }).join('\n')
+  : null;
+
 const system = [
-  "You are the ad strategist for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. From the material given (a report on a competitor's ads, or QGR's own content), write the strategy QGR's next ads follow.",
+  "You are the ad strategist for Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm. From the material given (a report on a competitor's ads, or Quantum Global's own content), write the strategy Quantum Global's next ads follow.",
   '',
-  "- positioning: one sentence QGR can own, built on its real strengths in the brand profile. Never borrow a competitor's claim.",
-  "- angles: exactly three, strongest first. For each: a short name; why it should work, naming the evidence (a competitor hook that keeps running, a gap no one covers, or a moment in the source); and one hook to test, in QGR's voice. With a competitor report, set based_on_hook to the competitor hook the angle answers, word for word, or null when the angle exploits a gap. Without one, based_on_hook is null.",
+  "- positioning: one sentence Quantum Global can own, built on its real strengths in the brand profile. Never borrow a competitor's claim.",
+  "- angles: exactly three, strongest first. For each: a short name; why it should work, naming the evidence (a competitor hook that keeps running, a gap no one covers, or a moment in the source); and one hook to test, in Quantum Global's voice. With a competitor report, set based_on_hook to the competitor hook the angle answers, word for word, or null when the angle exploits a gap. Without one, based_on_hook is null.",
   '- audiences: one to three, specific enough to target.',
   "- channels: one for each platform in the run, with its share of the budget, its role and the formats to use.",
   "- guardrails: at most two rules specific to this strategy; the brand's own guardrails always apply on top.",
   '- title: a short name for this push. summary: the strategy in under 90 characters.',
   '',
   'Nothing may promise an outcome, a timeline or a return.',
-  "Positive marketing only (the client's rule): every hook, headline, image line and post leads with what the family gains: the future, the opportunity, QGR's guidance and support. Never open on a problem, a worry or what the reader lacks (no \"shouldn't\", \"doesn't depend on\", \"tired of\", \"uncertainty\"). No \"X, not Y\" or \"without...\" contrasts that imply other advisors pressure, rush or fail people (no \"not pressure\", \"rather than a sales pitch\"), and never knock other advisors or programs. Never write that EB-5 is an investment with risk, and never say or imply that QGR turns projects down or filters them out (no \"before it reaches you\"): say what QGR reviews and explains instead. Write U.S., never US. This holds for the angles, the hooks and the positioning, and no guardrail asks the ads to break it. Where a competitor's hook is built on a pain, an angle answers the hope behind it, never the pain.",
 ].join('\n');
 
-// How QGR's own recent posts did, from the platforms' numbers: engagement per
+// How Quantum Global's own recent posts did, from the platforms' numbers: engagement per
 // person reached (per view where a platform gives no reach), computed here and
 // never by the model. The dashboard computes it the same way (lib/results.ts).
 // Only when there are some: without them the request is exactly as before.
@@ -57,16 +64,16 @@ const pastPosts = shown.map(function (x) {
 });
 // The team's direction for the run, in their words: the brief. Only when they
 // gave one; without it the request is exactly as before.
-const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their own words. Follow it where the material allows: the angles it asks for, the hooks it wants tested, what to leave out. Where it asks for a promise of an outcome, a timeline or a return, the rule above wins.";
-// Brand memory: what QGR usually posts about (brand.topics) and the posts the
+const DIRECTION_RULE = "direction is the Quantum Global team's brief for this run, in their own words. Follow it where the material allows: the angles it asks for, the hooks it wants tested, what to leave out. Where it asks for a promise of an outcome, a timeline or a return, the rule above wins.";
+// Brand memory: what Quantum Global usually posts about (brand.topics) and the posts the
 // team keeps as ones that work. Each rule only when there is something for it.
 const examples = (p.examples || []).slice(0, 8).map(function (e) {
   const example = { place: e.place, text: e.text };
   if (e.note) example.why_it_worked = e.note;
   return example;
 });
-const TOPICS_RULE = 'brand.topics is what QGR usually posts about: keep the angles within it unless the material points somewhere better, and say so in why.';
-const EXAMPLES_RULE = 'posts_that_work are posts the team kept because they worked for QGR: let them inform the angles and hooks, without copying them.';
+const TOPICS_RULE = 'brand.topics is what Quantum Global usually posts about: keep the angles within it unless the material points somewhere better, and say so in why.';
+const EXAMPLES_RULE = 'posts_that_work are posts the team kept because they worked for Quantum Global: let them inform the angles and hooks, without copying them.';
 // The competitor's ads the team picked for this run, from the report. Only
 // when they picked some: without them the request is exactly as before.
 const chosenAds = (p.chosenAds || []).map(function (a) {
@@ -77,12 +84,12 @@ const chosenAds = (p.chosenAds || []).map(function (a) {
   if (a.days_running !== null && a.days_running !== undefined) ad.days_running = a.days_running;
   return ad;
 });
-const CHOSEN_RULE = "competitor_report.chosen_ads are the competitor's ads the QGR team picked for this run. Build the angles on them first: each answers one where it can (a better version of its promise, or the gap it leaves), with based_on_hook set to that ad's opening words, word for word. The rest of the report is context.";
-// A run from QGR's own source (a clip, a page, the team's text): the ads are
+const CHOSEN_RULE = "competitor_report.chosen_ads are the competitor's ads the Quantum Global team picked for this run. Build the angles on them first: each answers one where it can (a better version of its promise, or the gap it leaves), with based_on_hook set to that ad's opening words, word for word. The rest of the report is context.";
+// A run from Quantum Global's own source (a clip, a page, the team's text): the ads are
 // made from it, so the strategy is too. A clip run once got one angle from the
 // clip and two from the brand's strengths, which read as generic (2026-10-22).
 const SOURCE_RULE = "source is what this run's ads are made from (from a clip, the ads are that clip). Build the strategy on it: every angle comes from what the source says (a moment, a question it answers, a promise it makes, an event, date or place it names), and why quotes or names that moment. The brand's strengths may back an angle up but never stand in for one; brand.topics, posts_that_work and our_past_posts shape how the angles are said, not what they are about. Keep the source's specifics (who it speaks to, an event and its dates, what it offers) in the positioning, the audiences and the title.";
-const RESULTS_RULE = "our_past_posts is how QGR's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
+const RESULTS_RULE = "our_past_posts is how Quantum Global's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
 
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
 if (run.guidance) material.direction = run.guidance;
@@ -165,6 +172,7 @@ return [{
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
       system: [system]
         .concat(
+          COPY_RULES ? [COPY_RULES] : [],
           run.guidance ? [DIRECTION_RULE] : [],
           p.report && chosenAds.length > 0 ? [CHOSEN_RULE] : [],
           p.report ? [] : [SOURCE_RULE],

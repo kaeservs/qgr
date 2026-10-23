@@ -55,7 +55,7 @@ export default async function LeadsPage({ searchParams }: { searchParams: Promis
       <header className="page-head">
         <div>
           <h1 className="display h1">Leads</h1>
-          <p className="lead">Who answered QGR’s ads and posts, which campaign and ad brought them, and how many qualify.</p>
+          <p className="lead">Who answered Quantum Global’s ads and posts, which campaign and ad brought them, and how many qualify.</p>
         </div>
         <ScrollingNav className={styles.views} label="Show leads as" current={view}>
           <Link href={href({ view: null, verdict: null, campaign: null })} aria-current={view === 'campaigns' ? 'page' : undefined}>

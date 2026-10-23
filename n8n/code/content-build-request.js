@@ -1,11 +1,11 @@
 // The Claude request: Haiku 5.5 at high effort, because this copy goes out in
-// QGR's name under strict rules (high is Anthropic's advice for Haiku on
+// Quantum Global's name under strict rules (high is Anthropic's advice for Haiku on
 // strict instruction following). The schema asks only for the platforms this
 // run selected, with each platform's own call-to-action buttons, and a post in
 // full for each place those platforms post to. Lengths are in the prompt; the
 // editor flags anything long. No temperature. The Content Agent reads the
 // whole chain: the strategy, what it came from (the competitor report or
-// QGR's own source), and the brand memory.
+// Quantum Global's own source), and the brand memory.
 const MODEL = 'claude-haiku-5-5';
 const EFFORT = 'high';
 const ctx = $input.first().json;
@@ -34,7 +34,7 @@ function inWords(list) {
   return list.length === 1 ? list[0] : list.slice(0, -1).join(', ') + ' and ' + list[list.length - 1];
 }
 const whatToWrite = picked
-  ? 'Write three variants from the angles the QGR team picked: ' + picked.map(function (a) {
+  ? 'Write three variants from the angles the Quantum Global team picked: ' + picked.map(function (a) {
       const labels = LABELS.filter(function (l, i) { return spread[i] === a; });
       return inWords(labels) + (labels.length === 1 ? ' follows' : ' follow') + ' the angle "' + a.name + '"';
     }).join(', ') + '. Variants that share an angle are each a different take on it, with their own hook and words.'
@@ -129,16 +129,16 @@ const creativeLines = clip
   : [
       aiVideo ? '- creative_text: the words shown over the ad\'s video, eight words at most.' : '- creative_text: the words on the image, eight words at most.',
       '- creative_style: arcs, split or spotlight, each used once across the three variants.',
-      '- image_prompt: the ad\'s picture, described for an image model as a real photograph that tells a story: real-looking people interacting with each other in a moment the audience lives or hopes for (a parent lifting a child onto their shoulders, a family laughing together on a waterfront walk, a father playing with his children in a park, a couple hugging their grown-up child, a student greeted on arrival), chosen for this variant\'s angle and showing the feeling behind it: hope, relief, pride, togetherness. They touch, play, hug or talk to each other, never pose at the camera. The people are Indian (Indian families, parents, children, students and professionals), as most of QGR\'s clients are. Say who is in it (ages, family, what they are doing together), the emotion on their faces, the place, the light and the camera (candid, eye level, warm golden-hour light, shallow depth of field). A U.S. landmark such as the Statue of Liberty or a city skyline may sit softly in the background. Each variant its own people and scene. The people are made up, never real or famous. A U.S. flag in the room, or passports, a folder or a gavel on a table, may sit in the scene as quiet symbols of the journey, never with readable writing on them. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result). QGR indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches (clothing, a cushion, evening light), never a tint over the picture.' +
+      '- image_prompt: the ad\'s picture, described for an image model as one real scene that tells a story for this variant\'s angle: who is in it (ages, family, what they are doing together), the emotion on their faces, the place, the light and the camera. Each variant its own people and scene. Follow picture_rules, where given. The people are made up, never real or famous. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result).' +
         (brand.picture_style ? ' Keep to picture_style.' : ''),
     ].concat(aiVideo
-      ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ': one continuous shot, the scene and how the camera moves, in under 600 characters. No words, captions or logos in it (the words go over it later), no real or identifiable people, no flags. Each variant\'s video is its own.']
+      ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ', in under 600 characters. Follow video_rules, where given. No words, captions or logos in it (the words go over it later), never a real or famous person, and nothing that shows a promised outcome. Each variant\'s video is its own.']
       : []);
 const postLines = places.length > 0
   ? ['- posts: the same idea written in full as an organic post for each place, not the ad copy cut down:'].concat(places.map(function (p) { return '  ' + POSTS[p]; }))
   : [];
 
-// How QGR's own recent posts did, from the platforms' numbers: engagement per
+// How Quantum Global's own recent posts did, from the platforms' numbers: engagement per
 // person reached (per view where a platform gives no reach), computed here and
 // never by the model, as the strategist's code and lib/results.ts do. The best
 // three, with their words, are examples to write like.
@@ -170,8 +170,16 @@ const references = clip ? [] : (Array.isArray(ctx.references) ? ctx.references :
   return r.note ? { number: r.number, shows: r.note } : { number: r.number };
 });
 
+// The team's content rules (Brand memory, "How content is made"): the words'
+// tone, the company's name and what makes an ad clear at a glance. Only when
+// there are some; what keeps an ad legally safe is written above, in code.
+const copyRules = ((brand && brand.copy_rules) || []).filter(function (r) { return String(r || '').trim(); });
+const COPY_RULES = copyRules.length > 0
+  ? "The team's content rules (Brand memory), which every hook, headline, image line and post follows:\n" + copyRules.map(function (r) { return '- ' + String(r).trim(); }).join('\n')
+  : null;
+
 const system = [
-  'You write paid social ads for Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm. ' + whatToWrite,
+  'You write paid social ads for Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm. ' + whatToWrite,
   '',
   'For each variant:',
   '- copy for each of these platforms, written for that platform rather than one text cut down, within these lengths:',
@@ -181,21 +189,20 @@ const system = [
   'Voice: ' + (brand.voice || []).join(', ') + '. Every ad leads to ' + GOALS[run.goal] + '.',
   'Rules every ad follows: ' + strategy.guardrails.join('; ') + '.',
   'Never say guaranteed, never promise approval, a timeline or a return, and never name a competitor. Processing times are estimates.',
-  "Positive marketing only (the client's rule): every hook, headline, image line and post leads with what the family gains: the future, the opportunity, QGR's guidance and support. Never open on a problem, a worry or what the reader lacks (no \"shouldn't\", \"doesn't depend on\", \"tired of\", \"uncertainty\"). No \"X, not Y\" or \"without...\" contrasts that imply other advisors pressure, rush or fail people (no \"not pressure\", \"rather than a sales pitch\"), and never knock other advisors or programs. Never write that EB-5 is an investment with risk, and never say or imply that QGR turns projects down or filters them out (no \"before it reaches you\"): say what QGR reviews and explains instead. Write U.S., never US. Where the strategy or the brand profile words something negatively, say it positively.",
   '',
-  'The material holds the strategy and what it came from: the competitor report, or QGR\'s own source. Use their specifics (a question the source answers, a gap in the competitor\'s ads), never a competitor\'s claim or name.',
+  'The material holds the strategy and what it came from: the competitor report, or Quantum Global\'s own source. Use their specifics (a question the source answers, a gap in the competitor\'s ads), never a competitor\'s claim or name.',
 ]).concat(hasMemory
   ? ['Brand memory: follow post_formats for each place, and write like posts_that_work and our_best_posts (their format, length and tone) without copying their words.']
   : []).concat(references.length > 0
-  ? ['references are the QGR team\'s reference pictures, which the image model is given with every picture' + (aiVideo ? ' and video' : '') + ' of this run, each with what it shows where the team said. Write ' + (aiVideo ? 'image_prompt and video_prompt' : 'image_prompt') + ' to use them where they fit, naming each as reference 1, reference 2 and so on.']
+  ? ['references are the Quantum Global team\'s reference pictures, which the image model is given with every picture' + (aiVideo ? ' and video' : '') + ' of this run, each with what it shows where the team said. Write ' + (aiVideo ? 'image_prompt and video_prompt' : 'image_prompt') + ' to use them where they fit, naming each as reference 1, reference 2 and so on.']
   : []).join('\n');
 
 // The team's direction for the run, in their words. Only when they gave one;
 // without it the request is exactly as before.
-const DIRECTION_RULE = "direction is the QGR team's brief for this run, in their own words: follow it in the ads (the hooks, the focus, what to leave out) within the strategy. The rules above win wherever it conflicts with them.";
-// A run from QGR's own clip or source: the ads say what it says.
+const DIRECTION_RULE = "direction is the Quantum Global team's brief for this run, in their own words: follow it in the ads (the hooks, the focus, what to leave out) within the strategy. The rules above win wherever it conflicts with them.";
+// A run from Quantum Global's own clip or source: the ads say what it says.
 const CLIP_RULE = "clip.what_is_said is what is said in the team's video, which every ad shows. Write each variant from it: its words, its moments, and any event, date, place or offer it names, so the copy and posts match what people see and hear. Do not add claims it does not make.";
-const SOURCE_RULE = "source is QGR's own material this run is made from. Write each variant from it: its specifics (what it explains, who it is for, any event, date, place or offer it names), not generic EB-5 lines.";
+const SOURCE_RULE = "source is Quantum Global's own material this run is made from. Write each variant from it: its specifics (what it explains, who it is for, any event, date, place or offer it names), not generic EB-5 lines.";
 
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
@@ -226,6 +233,11 @@ if (clip) {
 if (run.guidance) material.direction = run.guidance;
 if (Object.keys(formats).length > 0) material.post_formats = formats;
 if (brand.picture_style && !clip) material.picture_style = brand.picture_style;
+// The team's rules for pictures and videos (Brand memory), only when there are some.
+const pictureRules = (brand.picture_rules || []).filter(function (r) { return String(r || '').trim(); });
+const videoRules = (brand.video_rules || []).filter(function (r) { return String(r || '').trim(); });
+if (pictureRules.length > 0 && !clip) material.picture_rules = pictureRules;
+if (videoRules.length > 0 && aiVideo) material.video_rules = videoRules;
 if (examples.length > 0) material.posts_that_work = examples;
 if (bestPosts.length > 0) material.our_best_posts = bestPosts;
 if (references.length > 0) material.references = references;
@@ -238,6 +250,7 @@ return [{
       fallbacks: 'default',
       output_config: { effort: EFFORT, format: { type: 'json_schema', schema: schema } },
       system: [system].concat(
+        COPY_RULES ? [COPY_RULES] : [],
         material.clip ? [CLIP_RULE] : material.source ? [SOURCE_RULE] : [],
         run.guidance ? [DIRECTION_RULE] : [],
       ).join('\n\n'),

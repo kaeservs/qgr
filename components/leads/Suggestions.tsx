@@ -65,7 +65,7 @@ export function Suggestions({ suggestions }: { suggestions: LeadSuggestion[] }) 
                   <span className="muted small">Starts a run from its words{s.angle ? ` (angle: ${s.angle})` : ''}, with these counts as the agents’ direction.</span>
                 </div>
               ) : (
-                <p className="muted small">This ad is not one of QGR’s runs, so there are no words to start from: act on it in Ads Manager. Name an ad “qgr-&lt;run&gt;-&lt;variant&gt;” there to tie its leads to a run.</p>
+                <p className="muted small">This ad is not one of Quantum Global’s runs, so there are no words to start from: act on it in Ads Manager. Name an ad “qgr-&lt;run&gt;-&lt;variant&gt;” there to tie its leads to a run.</p>
               )}
               {error?.id === s.id && (
                 <p className="error-text" role="alert">

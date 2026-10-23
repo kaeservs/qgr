@@ -166,3 +166,25 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* A content rule is edited where it is listed. */
+.ruleList li {
+  align-items: flex-start;
+  padding: 8px 6px 8px 8px;
+}
+
+.ruleText {
+  flex: 1;
+  min-height: 0;
+  border-color: transparent;
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.45;
+  resize: none;
+}
+
+.ruleText:hover,
+.ruleText:focus {
+  border-color: var(--line);
+  background: var(--surface);
+}

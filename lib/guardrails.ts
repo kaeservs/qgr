@@ -6,21 +6,34 @@ import type { Place, Platform, PlatformCopy } from './types';
 // (n8n/code/content-read-answer.js), run again here whenever a person edits a
 // variant, so the flags always describe the words on screen. They flag a
 // phrase for a person to judge; they never change a word. n8n/code.test.ts
-// keeps the two in step.
+// keeps the two in step, the team's phrases to flag included.
 
-const RULES: readonly (readonly [RegExp, string])[] = [
+type Rule = readonly [RegExp, string];
+
+// What keeps an ad legally safe, fixed in code. Everything else the checks
+// flag is the team's own list (Brand memory, "Phrases to flag"), so they can
+// add or take out a phrase without a change here.
+const RULES: readonly Rule[] = [
   [/guarantee/i, 'says "guarantee"'],
   [/risk[\s-]?free/i, 'says "risk-free"'],
   [/\b100\s?%/, 'says "100%"'],
   [/\bassured\b/i, 'says "assured"'],
   [/\bin\s+\d+\s+(days|weeks|months)\b/i, 'promises a timeline'],
-  [/investment with risk/i, 'says "an investment with risk"'],
-  [/\bturn(s|ed|ing)? (them |it |projects? )?down\b|\bwould(n['’]t| not) back\b|\bbefore (it|they) reach(es)? you\b|\bfalls? short\b/i, 'says QGR turns projects down'],
-  [/\bshould(n['’]t| not)\b|\b(doesn['’]t|does not|don['’]t|do not) (have to )?(depend|hinge|rest)\b/i, 'leads with a problem ("shouldn\'t", "doesn\'t depend")'],
-  [/\b(not|without|rather than|no)\s+(any\s+)?(pressure|pushing|rush(ing)?|sales pitch|hard sell)\b/i, 'contrasts with other advisors ("not pressure")'],
-  [/\btired of\b|\buncertaint(y|ies)\b|\bworr(y|ied|ies)\b|\banxi(ety|ous)\b|\bstress(ed|ful)?\b|\bfears?\b/i, 'sells by worry ("uncertainty", "tired of")'],
   [/\bUS\b(?!\$)/, 'writes "US" for "U.S."'],
 ];
+
+/** The team's phrases as rules: each matched whole, in any case, with either apostrophe. */
+export function phraseRules(phrases: readonly string[]): Rule[] {
+  return phrases
+    .map((p) => p.trim())
+    .filter((p) => p.length > 1)
+    .map((p) => {
+      const body = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/['’]/g, "['’]");
+      return [new RegExp(`${/^\w/.test(p) ? '\\b' : ''}${body}${/\w$/.test(p) ? '\\b' : ''}`, 'i'), `says "${p}"`] as const;
+    });
+}
+
+const rulesWith = (phrases: readonly string[]): readonly Rule[] => (phrases.length > 0 ? [...RULES, ...phraseRules(phrases)] : RULES);
 
 const FIELDS = ['text', 'headline', 'description'] as const;
 
@@ -43,7 +56,9 @@ export function guardrailWarnings(
   copy: Partial<Record<Platform, PlatformCopy>>,
   platforms: readonly Platform[],
   posts: Partial<Record<Place, string>> = {},
+  phrases: readonly string[] = [],
 ): string[] {
+  const RULES = rulesWith(phrases);
   const warnings: string[] = [];
   for (const p of platforms) {
     const c = copy[p];
@@ -79,8 +94,10 @@ export function videoWarnings(
         sequence?: readonly ({ kind: 'title'; text: string; subtext: string } | { kind: 'clip' | 'image' })[] | undefined;
       }
     | undefined,
+  phrases: readonly string[] = [],
 ): string[] {
   if (!edit) return [];
+  const RULES = rulesWith(phrases);
   const warnings: string[] = [];
   const titles = (edit.sequence ?? []).flatMap((s) => (s.kind === 'title' ? [s.text, s.subtext] : []));
   for (const [rule, says] of RULES) {
@@ -93,16 +110,17 @@ export function videoWarnings(
 }
 
 /** The same checks on the texts a person adds to a picture ad's design. */
-export function designWarnings(design: { texts: readonly { text: string }[] } | undefined): string[] {
+export function designWarnings(design: { texts: readonly { text: string }[] } | undefined, phrases: readonly string[] = []): string[] {
   if (!design) return [];
+  const RULES = rulesWith(phrases);
   const warnings: string[] = [];
   for (const [rule, says] of RULES) if (design.texts.some((t) => rule.test(t.text))) warnings.push(`a text on the picture ${says}`);
   return warnings;
 }
 
 /** The same checks on a long video's moment's hook, worded as the Moments agent's script words them (moments-read-answer.js). */
-export function hookWarnings(hook: string): string[] {
-  return RULES.filter(([rule]) => rule.test(hook)).map(([, says]) => `Hook ${says}`);
+export function hookWarnings(hook: string, phrases: readonly string[] = []): string[] {
+  return rulesWith(phrases).filter(([rule]) => rule.test(hook)).map(([, says]) => `Hook ${says}`);
 }
 
 /** The platforms a copy object covers, in the dashboard's order. */

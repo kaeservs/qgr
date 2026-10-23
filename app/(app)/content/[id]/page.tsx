@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { AdStudio } from '@/components/content/AdStudio';
 import { LiveRefresh } from '@/components/ui/LiveRefresh';
-import { getAdSet, getBrandMemory, getBrandProfile, getClipUrl, getPosts, getRun, getStrategy, getTeamSettings, usingSampleData } from '@/lib/data';
+import { getAdSet, getBrandMemory, getBrandProfile, getClipUrl, getContentRules, getPosts, getRun, getStrategy, getTeamSettings, usingSampleData } from '@/lib/data';
 import { PLATFORMS } from '@/lib/types';
 import styles from '@/components/content/content.module.css';
 
@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AdSetPage({ params }: Props) {
   const set = await getAdSet((await params).id);
   if (!set) notFound();
-  const [run, strategy, brand, clipUrl, posts, settings, memory] = await Promise.all([
+  const [run, strategy, brand, clipUrl, posts, settings, memory, rules] = await Promise.all([
     getRun(set.runId),
     getStrategy(set.strategyId),
     getBrandProfile(),
@@ -26,6 +26,7 @@ export default async function AdSetPage({ params }: Props) {
     getPosts(),
     getTeamSettings(),
     set.clip ? null : getBrandMemory(),
+    getContentRules(),
   ]);
 
   if (set.status === 'generating' || set.variants.length === 0) {
@@ -66,6 +67,7 @@ export default async function AdSetPage({ params }: Props) {
         posts={posts.filter((p) => p.adSetId === set.id)}
         publishing={{ timeZone: settings.timeZone, pages: settings.pages, forReal: settings.postForReal, postLink: settings.postLink }}
         pictures={{ style: memory?.memory.pictureStyle ?? '', model: settings.pictureModel, quality: settings.picturesQuality, sample: usingSampleData() }}
+        flagPhrases={rules.flagPhrases}
       />
     </>
   );

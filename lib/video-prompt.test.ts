@@ -14,7 +14,7 @@ const PAYLOAD: VideoPromptPayload = {
   mode: 'insert',
   idea: '',
   lines: [{ start: 178, end: 182, text: 'Many of our families send a child to study in the U.S.' }],
-  brand: { company: 'QGR', offer: 'EB-5', audience: 'Families', guardrails: [], look: null },
+  brand: { company: 'QGR', offer: 'EB-5', audience: 'Families', guardrails: [], look: null, rules: [] },
 };
 
 describe('what is said around the point', () => {

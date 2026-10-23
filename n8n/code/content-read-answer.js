@@ -41,19 +41,23 @@ try {
   return fail('Claude did not return readable ads.');
 }
 
+// What keeps an ad legally safe, fixed here and in lib/guardrails.ts; then the
+// team's phrases to flag (Brand memory), each matched whole, in any case,
+// with either apostrophe.
 const RULES = [
   [/guarantee/i, 'says "guarantee"'],
   [/risk[\s-]?free/i, 'says "risk-free"'],
   [/\b100\s?%/, 'says "100%"'],
   [/\bassured\b/i, 'says "assured"'],
   [/\bin\s+\d+\s+(days|weeks|months)\b/i, 'promises a timeline'],
-  [/investment with risk/i, 'says "an investment with risk"'],
-  [/\bturn(s|ed|ing)? (them |it |projects? )?down\b|\bwould(n['’]t| not) back\b|\bbefore (it|they) reach(es)? you\b|\bfalls? short\b/i, 'says QGR turns projects down'],
-  [/\bshould(n['’]t| not)\b|\b(doesn['’]t|does not|don['’]t|do not) (have to )?(depend|hinge|rest)\b/i, 'leads with a problem ("shouldn\'t", "doesn\'t depend")'],
-  [/\b(not|without|rather than|no)\s+(any\s+)?(pressure|pushing|rush(ing)?|sales pitch|hard sell)\b/i, 'contrasts with other advisors ("not pressure")'],
-  [/\btired of\b|\buncertaint(y|ies)\b|\bworr(y|ied|ies)\b|\banxi(ety|ous)\b|\bstress(ed|ful)?\b|\bfears?\b/i, 'sells by worry ("uncertainty", "tired of")'],
   [/\bUS\b(?!\$)/, 'writes "US" for "U.S."'],
-];
+].concat(((ctx.brand && ctx.brand.flag_phrases) || [])
+  .map(function (p) { return String(p || '').trim(); })
+  .filter(function (p) { return p.length > 1; })
+  .map(function (p) {
+    const body = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/['’]/g, "['’]");
+    return [new RegExp((/^\w/.test(p) ? '\\b' : '') + body + (/\w$/.test(p) ? '\\b' : ''), 'i'), 'says "' + p + '"'];
+  }));
 const PLACE_PLATFORM = { facebook: 'meta', instagram: 'meta', linkedin: 'linkedin' };
 const PLACE_NAME = { facebook: 'Facebook', instagram: 'Instagram', linkedin: 'LinkedIn' };
 const places = ['facebook', 'instagram', 'linkedin'].filter(function (p) { return run.platforms.indexOf(PLACE_PLATFORM[p]) !== -1; });

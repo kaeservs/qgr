@@ -13,6 +13,7 @@ import type {
   AiVideo,
   BrandExample,
   BrandMemory,
+  ContentRules,
   BrandProfile,
   Competitor,
   ExamplePlace,
@@ -138,6 +139,8 @@ export interface DataSource {
   getBrandProfile(): Promise<BrandProfile>;
   /** What the team posts about, how it formats posts, how its pictures look; and the posts that work, newest first. */
   getBrandMemory(): Promise<{ memory: BrandMemory; examples: BrandExample[] }>;
+  /** How content is made (Brand memory): the agents' rules and the phrases the checks flag. */
+  getContentRules(): Promise<ContentRules>;
 
   /** Records a run, with what was read from its link, and hands it to the agents. */
   createRun(input: NewRunInput, page: PageRead | null): Promise<Saved<{ id: string }>>;
@@ -156,6 +159,7 @@ export interface DataSource {
   approveVariant(variantId: string): Promise<Saved>;
   saveBrandProfile(profile: BrandProfile): Promise<Saved>;
   saveBrandMemory(memory: BrandMemory): Promise<Saved>;
+  saveContentRules(rules: ContentRules): Promise<Saved>;
   addBrandExample(example: NewBrandExample): Promise<Saved<{ id: string }>>;
   /** Takes a post out of brand memory: the agents no longer read it. */
   removeBrandExample(id: string): Promise<Saved>;
