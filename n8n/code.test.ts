@@ -121,17 +121,17 @@ describe('Competitor Tracker', () => {
     const directed = run('tracker-prepare-ads.js', run('tracker-placeholder-ads.js', run('tracker-plan.js', { ...ctx, run: { ...ctx.run, guidance: 'Watch how they talk about age-out.' } })));
     const { body } = run('tracker-build-request.js', directed) as { body: Json };
     expect(materialOf(body).direction).toBe('Watch how they talk about age-out.');
-    expect(String(body.system)).toContain("direction is the QGR team's note on what to look for");
+    expect(String(body.system)).toContain("direction is the Quantum Global team's note on what to look for");
     const plain = (run('tracker-build-request.js', prepared) as { body: Json }).body;
     expect(materialOf(plain)).not.toHaveProperty('direction');
     expect(String(plain.system)).not.toContain('direction');
   });
 
-  it('writes its insights for QGR, from the brand memory', () => {
+  it('writes its insights for Quantum Global, from the brand memory', () => {
     const withMemory = run('tracker-prepare-ads.js', run('tracker-placeholder-ads.js', run('tracker-plan.js', { ...ctx, brand: { ...brand, topics: ['EB-5 basics'] } })));
     const { body } = run('tracker-build-request.js', withMemory) as { body: Json };
     expect(materialOf(body).our_brand).toEqual({ company: 'Quantum Global Residency', offer: 'EB-5 guidance', audience: 'Indian families', topics: ['EB-5 basics'] });
-    expect(String(body.system)).toContain('our_brand is QGR, who reads this report');
+    expect(String(body.system)).toContain('our_brand is Quantum Global, who reads this report');
   });
 
   it('builds hooks and angle counts from the ads, not from the model', () => {
