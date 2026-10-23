@@ -612,7 +612,7 @@ describe('Ad Strategist', () => {
   it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {
     const directed = run('strategist-build-request.js', run('strategist-plan.js', { ...customCtx, run: { ...customCtx.run, guidance: 'Lead with the family angle.' } })) as { body: Json };
     expect(materialOf(directed.body).direction).toBe('Lead with the family angle.');
-    expect(String(directed.body.system)).toContain("direction is the QGR team's brief for this run");
+    expect(String(directed.body.system)).toContain("direction is the Quantum Global team's brief for this run");
     expect(String(directed.body.system)).toContain('the rule above wins');
     const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
     expect(materialOf(plain)).not.toHaveProperty('direction');
@@ -625,7 +625,7 @@ describe('Ad Strategist', () => {
     expect(body.max_tokens).toBe(24000);
     expect(materialOf(body).posts_that_work).toEqual([{ place: 'linkedin', text: 'A post that worked.' }]);
     expect((materialOf(body).brand as Json).topics).toEqual(['EB-5 basics']);
-    expect(String(body.system)).toContain('brand.topics is what QGR usually posts about');
+    expect(String(body.system)).toContain('brand.topics is what Quantum Global usually posts about');
     expect(String(body.system)).toContain('posts_that_work are posts the team kept');
     const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
     expect(String(plain.system)).not.toContain('brand.topics is what QGR');
@@ -670,7 +670,7 @@ describe('Ad Strategist', () => {
       { platform: 'meta', format: 'image', text: 'Your kids should not age out.', headline: 'Plan now', cta: 'Learn more', angle: 'Family & education' },
       { platform: 'meta', format: 'video', text: 'The H-1B lottery is not a plan.', days_running: 41 },
     ]);
-    expect(String(body.system)).toContain("competitor_report.chosen_ads are the competitor's ads the QGR team picked");
+    expect(String(body.system)).toContain("competitor_report.chosen_ads are the competitor's ads the Quantum Global team picked");
     const plain = (run('strategist-build-request.js', run('strategist-plan.js', competitorCtx)) as { body: Json }).body;
     const empty = (run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, chosen_ads: null })) as { body: Json }).body;
     expect(empty).toEqual(plain);
@@ -700,7 +700,7 @@ describe('Ad Strategist', () => {
         const r = results.find((y) => y.angle === x.angle)!;
         expect(x.engagement).toBe(formatRate(engagementRate({ ...r, at: '' } as never)!));
       }
-      expect(String(body.system)).toMatch(/our_past_posts is how QGR's own recent posts did/);
+      expect(String(body.system)).toMatch(/our_past_posts is how Quantum Global's own recent posts did/);
       expect(String(body.system)).toMatch(/no ad may quote them\.$/);
     });
 
@@ -803,6 +803,23 @@ describe('Content Agent', () => {
       const agent = variants.find((x) => x.label === v.label)!;
       expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'], agent.posts)).toEqual(agent.warnings);
     }
+
+    // With the team's phrases to flag (Brand memory), both flag them, the same way.
+    const phrases = ["shouldn't", 'not pressure', 'QGR'];
+    const worded = {
+      variants: [
+        { label: 'A', creative_text: 'Your plans shouldn’t wait', creative_style: 'arcs', image_prompt: 'p', copy: copy('Decide with clarity, not pressure.'), posts: posts('QGR walks with you.') },
+        { label: 'B', creative_text: 'B', creative_style: 'split', image_prompt: 'p', copy: copy('Plan early.'), posts: posts('Plan early.') },
+        { label: 'C', creative_text: 'C', creative_style: 'spotlight', image_prompt: 'p', copy: copy('Plan early.'), posts: posts('Plan early.') },
+      ],
+    };
+    const flagged = run('content-read-answer.js', reply(worded), { 'Begin: load the run': { ...ctx, brand: { ...ctx.brand, flag_phrases: phrases } } });
+    const ads = (flagged.p_ad_set as { variants: { label: string; warnings: string[]; posts: Record<string, string> }[] }).variants;
+    expect(ads[0]!.warnings).toEqual(['meta text says "not pressure"', 'x text says "not pressure"', 'image text says "shouldn\'t"', 'facebook post says "QGR"']);
+    for (const v of worded.variants) {
+      const agent = ads.find((x) => x.label === v.label)!;
+      expect(guardrailWarnings(v.creative_text, v.copy as Partial<Record<Platform, PlatformCopy>>, ['meta', 'x'], agent.posts, phrases)).toEqual(agent.warnings);
+    }
   });
 
   it('fails when a variant’s post for a place is missing, or past what any place takes', () => {
@@ -853,7 +870,7 @@ describe('Content Agent', () => {
     const page = { ok: true, url: 'https://journal.example/post', title: 'A post', text: 'What the source says.', words: 4 };
     const { body } = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'blog', title: 'Blog: A post', page } }) as { body: Json };
     expect(materialOf(body).source).toEqual({ type: 'blog', title: 'A post', text: 'What the source says.' });
-    expect(String(body.system)).toContain('source is QGR\'s own material this run is made from');
+    expect(String(body.system)).toContain('source is Quantum Global\'s own material this run is made from');
     const pasted = run('content-build-request.js', { ...ctx, run: { ...ctx.run, kind: 'custom', input: 'text', title: 'Text', excerpt: 'Pasted words.' } }) as { body: Json };
     expect(materialOf(pasted.body).source).toEqual({ type: 'text', title: 'Text', text: 'Pasted words.' });
     // Without memory, nothing of it is asked for.
@@ -872,18 +889,34 @@ describe('Content Agent', () => {
     expect(String(body.system)).toContain('clip.what_is_said is what is said in the team\'s video');
     // A run without a clip is asked for images, as before.
     const plain = run('content-build-request.js', ctx) as { body: Json };
-    expect(String(plain.body.system)).toContain('a real photograph that tells a story');
+    expect(String(plain.body.system)).toContain('one real scene that tells a story');
     expect(String(plain.body.system)).not.toContain('clip.what_is_said');
     expect(String(plain.body.system)).not.toContain('source is QGR');
     expect(String(plain.body.system)).toContain('The people are made up, never real or famous');
     expect(String(plain.body.system)).toContain('nothing that shows a promised outcome');
-    expect(String(plain.body.system)).toContain('A U.S. flag in the room');
+    expect(String(plain.body.system)).toContain('Follow picture_rules, where given.');
+    expect(materialOf(plain.body)).not.toHaveProperty('picture_rules');
+  });
+
+  it('writes to the team’s content rules from Brand memory, and asks exactly as before without them', () => {
+    const rules = { copy_rules: ['Call the company Quantum Global, never QGR.'], picture_rules: ['The people are Indian.'], video_rules: ['No flags.'] };
+    const ruled = (run('content-build-request.js', { ...ctx, brand: { ...ctx.brand, ...rules } }) as { body: Json }).body;
+    expect(String(ruled.system)).toContain("The team's content rules (Brand memory), which every hook, headline, image line and post follows:\n- Call the company Quantum Global, never QGR.");
+    expect(materialOf(ruled).picture_rules).toEqual(['The people are Indian.']);
+    // Video rules go only with a video run's prompts.
+    expect(materialOf(ruled)).not.toHaveProperty('video_rules');
+    const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
+    expect(String(plain.system)).not.toContain("The team's content rules");
+    const textCtx = { run: { id: 'run-9', kind: 'custom', input: 'text', title: 'Notes', excerpt: 'Our webinar on the 24th.', platforms: ['meta'], goal: 'webinar' }, brand, report: null };
+    const strategy = (run('strategist-build-request.js', run('strategist-plan.js', { ...textCtx, brand: { ...brand, ...rules } })) as { body: Json }).body;
+    expect(String(strategy.system)).toContain('- Call the company Quantum Global, never QGR.');
+    expect(String((run('strategist-build-request.js', run('strategist-plan.js', textCtx)) as { body: Json }).body.system)).not.toContain("The team's content rules");
   });
 
   it('follows the team’s direction when they gave one, and asks exactly as before when not', () => {
     const directed = run('content-build-request.js', { ...ctx, run: { ...ctx.run, guidance: 'Short lines. Mention the webinar on the 24th.' } }) as { body: Json };
     expect(materialOf(directed.body).direction).toBe('Short lines. Mention the webinar on the 24th.');
-    expect(String(directed.body.system)).toContain("direction is the QGR team's brief for this run");
+    expect(String(directed.body.system)).toContain("direction is the Quantum Global team's brief for this run");
     const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
     expect(materialOf(plain)).not.toHaveProperty('direction');
     expect(String(plain.system)).not.toContain('direction');
@@ -901,7 +934,7 @@ describe('Content Agent', () => {
     };
 
     const one = namesFor([1]);
-    expect(one.system).toContain('Write three variants from the angles the QGR team picked: A, B and C follow the angle "Family first". Variants that share an angle are each a different take on it');
+    expect(one.system).toContain('Write three variants from the angles the Quantum Global team picked: A, B and C follow the angle "Family first". Variants that share an angle are each a different take on it');
     expect(one.angles).toEqual(['Family first']);
     expect(one.variants).toEqual(['Family first', 'Family first', 'Family first']);
 
@@ -932,7 +965,7 @@ describe('Content Agent', () => {
     expect(schema).toContain('"video_prompt":{"type":"string"}');
     expect(schema).toContain('"required":["label","creative_text","creative_style","image_prompt","copy","video_prompt","posts"]');
     expect(String(body.system)).toContain('- creative_text: the words shown over the ad\'s video, eight words at most.');
-    expect(String(body.system)).toContain('- video_prompt: the ad\'s video, for a video model making 4 seconds at 1:1: one continuous shot');
+    expect(String(body.system)).toContain('- video_prompt: the ad\'s video, for a video model making 4 seconds at 1:1, in under 600 characters. Follow video_rules, where given.');
     expect(String(body.system)).toContain('Write image_prompt and video_prompt to use them where they fit, naming each as reference 1, reference 2 and so on.');
     expect(materialOf(body).references).toEqual([{ number: 1, shows: 'Our Miami office' }, { number: 2 }]);
 

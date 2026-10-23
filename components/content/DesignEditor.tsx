@@ -40,6 +40,7 @@ export function DesignEditor({
   variant,
   brandName,
   waitingToPost,
+  flagPhrases = [],
   onClose,
   onSaved,
 }: {
@@ -47,6 +48,8 @@ export function DesignEditor({
   /** The name the logo shows, as on the posted picture. */
   brandName: string;
   waitingToPost: boolean;
+  /** The team's phrases to flag (Brand memory). */
+  flagPhrases?: readonly string[];
   onClose: () => void;
   onSaved: (saved: SavedDesign) => void;
 }) {
@@ -89,7 +92,7 @@ export function DesignEditor({
     else history.preview(next);
   };
 
-  const flags = [...guardrailWarnings(words, variant.copy, []).filter((f) => f.startsWith('image text')), ...designWarnings(design)];
+  const flags = [...guardrailWarnings(words, variant.copy, [], {}, flagPhrases).filter((f) => f.startsWith('image text')), ...designWarnings(design, flagPhrases)];
   const changed = JSON.stringify(design) !== JSON.stringify(started) || words.trim() !== variant.creative.text;
   const chosen = selected && (selected === WORDS || selected === LOGO || design.texts.some((t) => t.id === selected)) ? selected : null;
   const chosenText = design.texts.find((t) => t.id === chosen);

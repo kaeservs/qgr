@@ -18,25 +18,27 @@ describe('guardrailWarnings', () => {
     ]);
   });
 
-  it('flags what the client asked the copy to leave out, and "US" for "U.S."', () => {
-    const posts = { facebook: 'EB-5 is an investment with risk. We turn down what we wouldn’t back.', instagram: 'Move to the U.S. with a plan.' };
-    expect(guardrailWarnings('Your US future', copy('Projects that fail our checks are turned down.'), ['meta'], posts)).toEqual([
-      'meta text says QGR turns projects down',
-      'image text writes "US" for "U.S."',
-      'facebook post says "an investment with risk"',
-      'facebook post says QGR turns projects down',
-    ]);
+  it('flags "US" for "U.S.", but not "US$"', () => {
+    expect(guardrailWarnings('Your US future', copy('From US$800,000, in the U.S.'), ['meta'])).toEqual(['image text writes "US" for "U.S."']);
   });
 
-  it('flags negative framing: a problem first, a dig at other advisors, a worry, a filter', () => {
-    const posts = { facebook: 'Decide with clarity, not pressure. Every project checked before it reaches you.', instagram: 'Tired of the uncertainty? Your plans shouldn’t hang on one employer.' };
-    expect(guardrailWarnings('A path that doesn’t depend on one employer', copy('Your family’s future in the U.S., planned with QGR.'), ['meta'], posts)).toEqual([
-      'image text leads with a problem ("shouldn\'t", "doesn\'t depend")',
-      'facebook post says QGR turns projects down',
-      'facebook post contrasts with other advisors ("not pressure")',
-      'instagram post leads with a problem ("shouldn\'t", "doesn\'t depend")',
-      'instagram post sells by worry ("uncertainty", "tired of")',
+  it('flags the team’s phrases (Brand memory) whole, in any case, with either apostrophe, after the fixed checks', () => {
+    const phrases = ['investment with risk', 'turned down', 'before it reaches you', "shouldn't", "doesn't depend", 'not pressure', 'uncertainty', 'QGR'];
+    const posts = { facebook: 'Decide with clarity, not pressure. Every project checked before it reaches you.', instagram: 'The uncertainty ends here. Your plans shouldn’t hang on one employer.' };
+    expect(guardrailWarnings('A path that doesn’t depend on one employer', copy('EB-5 is an Investment With Risk. QGR guarantees nothing.'), ['meta'], posts, phrases)).toEqual([
+      'meta text says "guarantee"',
+      'meta text says "investment with risk"',
+      'meta text says "QGR"',
+      'image text says "doesn\'t depend"',
+      'facebook post says "before it reaches you"',
+      'facebook post says "not pressure"',
+      'instagram post says "shouldn\'t"',
+      'instagram post says "uncertainty"',
     ]);
+    // Whole words only: "QGRs" or "turned downtown" are not the phrase.
+    expect(guardrailWarnings('Turned downtown', copy('QGRs'), ['meta'], {}, phrases)).toEqual([]);
+    // Without phrases, only the fixed checks.
+    expect(guardrailWarnings('A path that doesn’t depend on one employer', copy('Plan it.'), ['meta'], posts)).toEqual([]);
   });
 
   it('holds X to its hard limit and nothing else to a length', () => {

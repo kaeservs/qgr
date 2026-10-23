@@ -123,7 +123,7 @@ export function MediaChoice({ setup, draft, setDraft, disabled = false }: { setu
   const setVideo = (change: Partial<RunVideo>) => setDraft((d) => ({ ...d, video: { ...d.video, ...change } }));
 
   const options: { kind: RunMediaKind; title: string; detail: string; off?: string }[] = [
-    { kind: 'design', title: 'The drawn design', detail: 'Each ad’s words on QGR’s own artwork. Free, and ready as soon as the ads are written.' },
+    { kind: 'design', title: 'The drawn design', detail: 'Each ad’s words on Quantum Global’s own artwork. Free, and ready as soon as the ads are written.' },
     { kind: 'pictures', title: 'An AI picture for each ad', detail: 'The Content Agent describes a scene for each ad and an image model draws it; the words go over it.' },
     {
       kind: 'video',

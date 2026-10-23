@@ -14,23 +14,28 @@ function clock(seconds) {
   return (h > 0 ? h + ':' + pad(m) : String(m)) + ':' + pad(s % 60);
 }
 
-const DIRECTION_RULE = "direction is the QGR team's brief for this video, in their own words: favour the moments it asks for. The rules above win wherever it conflicts with them.";
+const DIRECTION_RULE = "direction is the Quantum Global team's brief for this video, in their own words: favour the moments it asks for. The rules above win wherever it conflicts with them.";
 
 return $input.all().map(function (item) {
   const v = item.json;
   const brand = v.brand || {};
   const rules = (brand.guardrails || []).join('; ');
+  // The team's content rules (Brand memory), which every hook follows, when there are some.
+  const copyRules = (brand.copy_rules || []).map(function (r) { return String(r || '').trim(); }).filter(Boolean);
   const system = [
-    "You pick the moments in a long video of Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm, that would each make a short ad on their own: a webinar, a talk or an interview, given as its transcript, one numbered line at a time with the time it starts.",
+    "You pick the moments in a long video of Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm, that would each make a short ad on their own: a webinar, a talk or an interview, given as its transcript, one numbered line at a time with the time it starts.",
     '',
     '- moments: five to ten, the strongest first, each named by its first and last line (both included).',
     '- Each runs about 15 to 90 seconds, starts where a thought starts and ends where it finishes, and makes sense to someone who has seen nothing else of the video.',
     '- Good moments: a clear answer to a question people ask about EB-5 or U.S. residency, a plain explanation, a short story, a strong line. Leave out greetings, housekeeping, questions about the session itself, and anything that leans on what came before.',
     '- Moments never overlap.',
-    '- title: what the moment is, under 60 characters. why: why it would work as an ad, naming what is said in it. hook: one opening line for its ad, in QGR\'s voice (' + ((brand.voice || []).join(', ') || 'calm, expert, plain English') + ').',
+    '- title: what the moment is, under 60 characters. why: why it would work as an ad, naming what is said in it. hook: one opening line for its ad, in Quantum Global\'s voice (' + ((brand.voice || []).join(', ') || 'calm, expert, plain English') + ').',
     '',
-    'EB-5 is an investment with risk: never pick a moment for a promise of an outcome, a timeline or a return, and no hook makes one. Never name another company in a hook.' + (rules ? ' QGR\'s rules: ' + rules + '.' : ''),
-  ].concat(v.guidance ? ['', DIRECTION_RULE] : []).join('\n');
+    'Never pick a moment for a promise of an outcome, a timeline or a return, and no hook makes one. Never name another company in a hook.' + (rules ? ' Quantum Global\'s rules: ' + rules + '.' : ''),
+  ].concat(
+    copyRules.length > 0 ? ['', "The team's content rules (Brand memory), which every hook follows:"].concat(copyRules.map(function (r) { return '- ' + r; })) : [],
+    v.guidance ? ['', DIRECTION_RULE] : [],
+  ).join('\n');
 
   const lines = (v.transcript || []).map(function (l, i) { return i + ' [' + clock(l.start) + '] ' + l.text; });
   const material = {

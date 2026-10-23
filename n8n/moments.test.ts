@@ -64,7 +64,7 @@ describe('the Moments request', () => {
   it('follows the team’s direction when they gave one, and says the hour', () => {
     const [out] = runAll('moments-build-request.js', [video({ guidance: 'Find the moments about families.', duration: 3725 })]);
     const body = out!.body as Json;
-    expect(String(body.system)).toContain("direction is the QGR team's brief");
+    expect(String(body.system)).toContain("direction is the Quantum Global team's brief");
     expect(JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n')[1]!)).toMatchObject({ video: { length: '1:02:05' }, direction: 'Find the moments about families.' });
   });
 

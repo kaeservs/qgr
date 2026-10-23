@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultEdit } from '../video/edit';
-import { clipOf, copyOf, one, runMediaOf, sourceOf, toActivity, toAdSet, toAgents, toAiVideo, toVideoBudget, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser } from './map';
+import { clipOf, copyOf, one, runMediaOf, sourceOf, toActivity, toAdSet, toAgents, toAiVideo, toVideoBudget, toBrandExample, toBrandMemory, toCompetitor, toCreateRunArgs, toLead, toLeadSettings, toNotices, toPost, toRun, toStrategy, toUser, toContentRules } from './map';
 import type { ActivityRows, AdSetRow, AiVideoRow, BrandRow, CompetitorRow, LeadRow, PostRow, RunRow, SettingsRow, StageRow, StrategyRow } from './map';
 import type { Json } from '../supabase/database.types';
 
@@ -649,7 +649,15 @@ describe('brand memory', () => {
     topics: ['EB-5 basics'],
     post_formats: { instagram: 'Hashtags last.', tiktok: 'No.', linkedin: '  ' },
     picture_style: null,
+    copy_rules: ['Write U.S., never US.'],
+    picture_rules: ['The people are Indian.'],
+    video_rules: ['No flags.'],
+    flag_phrases: ['QGR'],
   };
+
+  it('gives the team’s content rules as Brand memory edits them', () => {
+    expect(toContentRules(row)).toEqual({ copyRules: ['Write U.S., never US.'], pictureRules: ['The people are Indian.'], videoRules: ['No flags.'], flagPhrases: ['QGR'] });
+  });
 
   it('reads the topics, the format notes for known places, and an empty picture style', () => {
     expect(toBrandMemory(row)).toEqual({ topics: ['EB-5 basics'], postFormats: { instagram: 'Hashtags last.' }, pictureStyle: '' });

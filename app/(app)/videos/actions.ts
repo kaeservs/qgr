@@ -1,7 +1,7 @@
 'use server';
 
 import { MIN_VIDEO_PROMPT, parseVideoRequest } from '@/lib/ai-video';
-import { askForVideo, askMomentsAgain, getAiVideos, getAiVideosById, getLongVideo, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo, removeMoment, saveLongVideoEdit, saveMoment, updateLongVideo, writeVideoPrompt } from '@/lib/data';
+import { askForVideo, askMomentsAgain, getAiVideos, getAiVideosById, getContentRules, getLongVideo, getVideoBudget, priceVideo, recordMomentRun, removeAiVideo, removeLongVideo, removeMoment, saveLongVideoEdit, saveMoment, updateLongVideo, writeVideoPrompt } from '@/lib/data';
 import { hookWarnings } from '@/lib/guardrails';
 import { parseLongVideoDetails, parseMoment } from '@/lib/long-video';
 import type { Saved } from '@/lib/data';
@@ -49,7 +49,7 @@ export async function saveMomentAction(id: unknown, moment: unknown): Promise<Sa
   if (!isId(id)) return { ok: false, status: 400, error: 'That is not a long video.' };
   const parsed = parseMoment(moment);
   if (!parsed.ok) return { ok: false, status: 400, error: parsed.error };
-  return saveMoment(id, parsed.value, hookWarnings(parsed.value.hook));
+  return saveMoment(id, parsed.value, hookWarnings(parsed.value.hook, (await getContentRules()).flagPhrases));
 }
 
 export async function removeMomentAction(id: unknown, first: unknown, last: unknown): Promise<Saved> {

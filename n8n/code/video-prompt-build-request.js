@@ -19,21 +19,24 @@ return $input.all().map(function (item) {
   const r = (item.json && item.json.body) || {};
   const brand = r.brand || {};
   const rules = (brand.guardrails || []).join('; ');
+  // The team's video rules (Brand memory, "How content is made"), when the page sends them.
+  const videoRules = (brand.rules || []).map(function (v) { return String(v || '').trim(); }).filter(Boolean);
   const cover = r.mode === 'cover';
   const system = [
-    "You write the prompt for one short AI video (Higgsfield's video models) that goes into a video of Quantum Global Residency (QGR), an EB-5 and U.S. residency advisory firm, at a point the team chose." +
+    "You write the prompt for one short AI video (Higgsfield's video models) that goes into a video of Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm, at a point the team chose." +
       (cover
         ? ' It plays over the video while the speaker goes on talking (B-roll), so it shows what they are talking about there.'
         : ' It is inserted at that point, between what comes before and after, so it carries the thought on from what was just said.'),
     '',
     '- prompt: one continuous shot of ' + (r.seconds || 5) + ' seconds, ' + (SHAPE[r.aspect] || 'wide') + ': what is seen, how the camera moves, the light. Concrete and visual, 30 to 90 words, in English.',
     '- Show what is said around the point: the place, the people\'s situation, the feeling. If the team gave an idea, build on it first.',
-    '- People only seen from behind, in profile with the face not shown, at a distance or as hands: never an identifiable face, never a real or famous person.',
-    '- No words, signs, logos, flags, money or documents with writing in the picture: the video\'s own words go over it later.',
-    '- Nothing that promises an outcome: no approved papers, no green cards held up, no celebrations of a result. EB-5 is an investment with risk.' + (rules ? " QGR's rules: " + rules + '.' : ''),
+    '- Never a real or famous person.',
+    '- No words, signs, logos, money or documents with writing in the picture: the video\'s own words go over it later.',
+    '- Nothing that promises an outcome: no approved papers, no green cards held up, no celebrations of a result.' + (rules ? " Quantum Global's rules: " + rules + '.' : ''),
+  ].concat(videoRules.map(function (v) { return '- ' + v; }), [
     brand.look ? '- Keep to the brand\'s picture style: ' + brand.look : "- The brand's colours are indigo and warm gold: let them show in the light or the setting, never as text.",
     '- why: one short sentence saying what in the transcript the video shows, for the team.',
-  ].join('\n');
+  ]).join('\n');
 
   const lines = (r.lines || []).map(function (l) { return '[' + clock(l.start) + '] ' + l.text; });
   const material = {

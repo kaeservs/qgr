@@ -317,14 +317,18 @@ export type Database = {
         Row: {
           audience: string
           company: string
+          copy_rules: string[]
+          flag_phrases: string[]
           guardrails: string[]
           id: number
           offer: string
           page_name: string
+          picture_rules: string[]
           picture_style: string | null
           post_formats: Json
           topics: string[]
           updated_at: string
+          video_rules: string[]
           voice: string[]
           website: string
           x_handle: string
@@ -332,14 +336,18 @@ export type Database = {
         Insert: {
           audience: string
           company: string
+          copy_rules?: string[]
+          flag_phrases?: string[]
           guardrails?: string[]
           id?: number
           offer: string
           page_name: string
+          picture_rules?: string[]
           picture_style?: string | null
           post_formats?: Json
           topics?: string[]
           updated_at?: string
+          video_rules?: string[]
           voice?: string[]
           website: string
           x_handle: string
@@ -347,14 +355,18 @@ export type Database = {
         Update: {
           audience?: string
           company?: string
+          copy_rules?: string[]
+          flag_phrases?: string[]
           guardrails?: string[]
           id?: number
           offer?: string
           page_name?: string
+          picture_rules?: string[]
           picture_style?: string | null
           post_formats?: Json
           topics?: string[]
           updated_at?: string
+          video_rules?: string[]
           voice?: string[]
           website?: string
           x_handle?: string
@@ -1965,6 +1977,15 @@ export type Database = {
           p_voice: string[]
           p_website: string
           p_x_handle: string
+        }
+        Returns: undefined
+      }
+      update_content_rules: {
+        Args: {
+          p_copy_rules: string[]
+          p_flag_phrases: string[]
+          p_picture_rules: string[]
+          p_video_rules: string[]
         }
         Returns: undefined
       }

@@ -150,6 +150,7 @@ export function AdStudio({
   posts,
   publishing,
   pictures,
+  flagPhrases,
 }: {
   adSet: AdSet;
   strategy: Strategy | null;
@@ -163,6 +164,8 @@ export function AdStudio({
   publishing: { timeZone: string; pages: PostPages; forReal: Record<Place, boolean>; postLink: string | null };
   /** What every picture keeps to (the brand's picture style), what makes them, and whether this is the sample data. */
   pictures: { style: string; model: PictureModel; quality: PictureQuality; sample: boolean };
+  /** The team's phrases to flag (Brand memory), as the Content Agent flags them. */
+  flagPhrases: string[];
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -507,7 +510,7 @@ export function AdStudio({
           const copy = v.copy[platform];
           const Preview = PREVIEW[platform];
           const PostPreview = view.kind === 'post' ? POST_PREVIEW[view.place] : null;
-          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts), ...videoWarnings(v.videoEdit), ...designWarnings(v.design)];
+          const flags = [...guardrailWarnings(v.creative.text, v.copy, platforms, v.posts, flagPhrases), ...videoWarnings(v.videoEdit, flagPhrases), ...designWarnings(v.design, flagPhrases)];
           const own = clipFor(v);
           const design = v.design && !own ? { layout: v.design, brandName: frameBrand.name } : undefined;
           const state = postState(posts, v.id);
@@ -676,6 +679,7 @@ export function AdStudio({
           variant={designing}
           brandName={frameBrand.name}
           waitingToPost={postState(posts, designing.id).waiting !== null}
+          flagPhrases={flagPhrases}
           onClose={() => setDesignOf(null)}
           onSaved={(saved) => designSaved(designing.id, saved)}
         />
@@ -689,6 +693,7 @@ export function AdStudio({
           brand={frameBrand}
           setTitle={adSet.title}
           platforms={platforms}
+          flagPhrases={flagPhrases}
           onClose={() => setVideoOf(null)}
           onSaved={(saved) => videoSaved(editingVideo.id, saved)}
         />

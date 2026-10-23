@@ -25,6 +25,7 @@ import type {
   AngleShare,
   BrandExample,
   BrandMemory,
+  ContentRules,
   BrandProfile,
   ChannelPlan,
   Clip,
@@ -687,6 +688,9 @@ export const toBrandProfile = (row: BrandRow): BrandProfile => ({
 });
 
 /** What the agents read beside the profile. A picture style left empty is an empty string. */
+/** The team's content rules, as Brand memory edits them. */
+export const toContentRules = (row: BrandRow): ContentRules => ({ copyRules: row.copy_rules, pictureRules: row.picture_rules, videoRules: row.video_rules, flagPhrases: row.flag_phrases });
+
 export function toBrandMemory(row: BrandRow): BrandMemory {
   const formats: BrandMemory['postFormats'] = {};
   if (isRecord(row.post_formats)) {

@@ -35,6 +35,7 @@ export const getActivity: DataSource['getActivity'] = () => source().getActivity
 export const getSearchIndex: DataSource['getSearchIndex'] = () => source().getSearchIndex();
 export const getBrandProfile: DataSource['getBrandProfile'] = () => source().getBrandProfile();
 export const getBrandMemory: DataSource['getBrandMemory'] = () => source().getBrandMemory();
+export const getContentRules: DataSource['getContentRules'] = () => source().getContentRules();
 
 export const createRun: DataSource['createRun'] = (input, page) => source().createRun(input, page);
 export const startRunFromAds: DataSource['startRunFromAds'] = (input) => source().startRunFromAds(input);
@@ -46,6 +47,7 @@ export const saveVariant: DataSource['saveVariant'] = (id, edit) => source().sav
 export const approveVariant: DataSource['approveVariant'] = (id) => source().approveVariant(id);
 export const saveBrandProfile: DataSource['saveBrandProfile'] = (profile) => source().saveBrandProfile(profile);
 export const saveBrandMemory: DataSource['saveBrandMemory'] = (memory) => source().saveBrandMemory(memory);
+export const saveContentRules: DataSource['saveContentRules'] = (rules) => source().saveContentRules(rules);
 export const addBrandExample: DataSource['addBrandExample'] = (example) => source().addBrandExample(example);
 export const removeBrandExample: DataSource['removeBrandExample'] = (id) => source().removeBrandExample(id);
 export const rememberPost: DataSource['rememberPost'] = (postId, place, note) => source().rememberPost(postId, place, note);

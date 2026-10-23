@@ -79,7 +79,7 @@ export function parseVideoPromptRequest(raw: unknown): Parsed<VideoPromptRequest
   return { ok: true, value: { longVideoId, at: Math.round(raw.at * 10) / 10, seconds: raw.seconds, aspect, mode, idea, lines } };
 }
 
-/** What n8n is sent: the request, and the brand's words and picture style for the prompt to keep to. */
+/** What n8n is sent: the request, and the brand's words, picture style and video rules (Brand memory) for the prompt to keep to. */
 export interface VideoPromptPayload {
   long_video_id: string | null;
   at: number;
@@ -88,7 +88,7 @@ export interface VideoPromptPayload {
   mode: PromptMode;
   idea: string;
   lines: TranscriptLine[];
-  brand: { company: string; offer: string; audience: string; guardrails: string[]; look: string | null };
+  brand: { company: string; offer: string; audience: string; guardrails: string[]; look: string | null; rules: string[] };
 }
 
 export type VideoPrompt = { ok: true; prompt: string; why: string } | { ok: false; error: string };

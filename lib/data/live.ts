@@ -39,8 +39,7 @@ import {
   toAdExamples,
   toUser,
   toVideoBudget,
-  WORKING_MINUTES,
-} from './map';
+  WORKING_MINUTES, toContentRules } from './map';
 import type { AiVideoRow, BrandExampleRow, PostRow, RunRow } from './map';
 import { searchIndex } from './source';
 import type { DataSource, Saved } from './source';
@@ -434,6 +433,7 @@ export const liveData: DataSource = {
     const [row, examples] = await Promise.all([brandRow(), brandExamples()]);
     return { memory: toBrandMemory(row), examples };
   },
+  getContentRules: async () => toContentRules(await brandRow()),
 
   createRun: async (input, page) => {
     // Without n8n a run would wait forever, so it is not recorded at all.
@@ -554,7 +554,7 @@ export const liveData: DataSource = {
         ...(c.cta !== undefined ? { cta: c.cta } : {}),
       };
     }
-    const warnings = guardrailWarnings(edit.creativeText, edit.copy, platforms, edit.posts);
+    const warnings = guardrailWarnings(edit.creativeText, edit.copy, platforms, edit.posts, (await brandRow()).flag_phrases);
     const { error } = await (await db()).rpc('save_variant_words', {
       p_variant_id: variantId,
       p_creative_text: edit.creativeText,
@@ -761,7 +761,7 @@ export const liveData: DataSource = {
     const config = videoPromptConfig();
     if (!config) return { ok: false, status: 503, error: 'The prompt writer is in n8n: its webhook is not set on this server.' };
     const supabase = await db();
-    const { data: brand } = await supabase.from('brand_profile').select('company, offer, audience, guardrails, picture_style').eq('id', 1).maybeSingle();
+    const { data: brand } = await supabase.from('brand_profile').select('company, offer, audience, guardrails, picture_style, video_rules').eq('id', 1).maybeSingle();
     const answer = await askVideoPrompt(config, {
       long_video_id: request.longVideoId,
       at: request.at,
@@ -776,6 +776,7 @@ export const liveData: DataSource = {
         audience: brand?.audience ?? '',
         guardrails: brand?.guardrails ?? [],
         look: brand?.picture_style ?? null,
+        rules: brand?.video_rules ?? [],
       },
     });
     return answer.ok ? { ok: true, value: { prompt: answer.prompt, why: answer.why }, sample: false } : { ok: false, status: 502, error: answer.error };
@@ -1173,6 +1174,17 @@ export const liveData: DataSource = {
       p_picture_style: memory.pictureStyle,
     });
     if (error) return refused(error, 'Brand memory could not be saved.');
+    return { ok: true, value: null, sample: false };
+  },
+
+  saveContentRules: async (rules) => {
+    const { error } = await (await db()).rpc('update_content_rules', {
+      p_copy_rules: rules.copyRules,
+      p_picture_rules: rules.pictureRules,
+      p_video_rules: rules.videoRules,
+      p_flag_phrases: rules.flagPhrases,
+    });
+    if (error) return refused(error, 'The content rules could not be saved.');
     return { ok: true, value: null, sample: false };
   },
 

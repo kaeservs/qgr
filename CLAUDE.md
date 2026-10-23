@@ -427,6 +427,36 @@ X's ads APIs, which each need their own access.
   12 voice words (`LIMITS` in `lib/edit-input.ts`, and the database's
   functions and checks). Every agent call sends it, so it stays bounded.
 
+### How content is made (`brand_profile.copy_rules`, `picture_rules`, `video_rules`, `flag_phrases`)
+
+- The client's ask (2026-10-23): the rules the content is made by live in
+  Brand memory, where the team edits them ("How content is made",
+  `ContentRulesForm`, `update_content_rules`; up to 30 rules a list, 1,000
+  characters each, 80 phrases of 2 to 60), not in the agents' scripts. They
+  were seeded with the rules the scripts carried until then
+  (`20261023184024_content_rules.sql`, the same in `contentRules` in
+  `lib/mock-data.ts`): positive marketing, understood at first glance from
+  the picture and its words, Quantum Global never QGR, "U.S."; Indian
+  families in real, unposed photographs that read as a life in the U.S.;
+  videos in one shot with no identifiable people or flags.
+- Words and tone (`copy_rules`) go to the strategist and the Content Agent
+  as a list in their system prompt, and to the Moments agent for its hooks,
+  only when there are some; `agent_begin` hands the whole brand row, so
+  nothing else changed to carry them. Pictures (`picture_rules`) go to the
+  Content Agent with its `image_prompt` and with every picture ask
+  (`picture_take_due` → `rules`): `pictures-prompt.js` puts them after the
+  scene, before the picture style, and shortens the scene first, then the
+  style, then the rules, never `PICTURE_SAFETY` (no readable text, made-up
+  people, no approved green card, no money). Videos (`video_rules`) go to
+  the Content Agent with a video run's `video_prompt`, and to the prompt
+  writer (`brand.rules`, sent by the app).
+- Phrases to flag (`flag_phrases`) are checked whole, in any case, with
+  either apostrophe (`phraseRules` in `lib/guardrails.ts`, the same in
+  `content-read-answer.js`), after the fixed checks, by the Content Agent and
+  by the studio, the design and video editors and a saved variant
+  (`getContentRules`); a moment's hook saved by a person is checked with
+  them too. The Moments agent's own hook flags keep the fixed checks only.
+
 ### The Content Agent's chain and posts
 
 - The Content Agent reads the whole chain: the strategy (each angle's why and
@@ -815,19 +845,17 @@ X's ads APIs, which each need their own access.
 ### Pictures (`ad_variants.picture_*`, "QGR · Pictures")
 
 - Every ad but a clip's carries an `image_prompt` from the Content Agent: a
-  real photograph that tells a story (the team's choice, 2026-10-22): made-up,
-  real-looking Indian people (most of QGR's market is; the client's ask)
-  interacting with each other, as in the client's
+  real photograph that tells a story, as the team's picture rules ask (How
+  content is made, above; seeded with: made-up, real-looking Indian people,
+  most of Quantum Global's market, interacting with each other, as in the client's
   brochure (a parent lifting a child onto their shoulders, a family laughing
   on a waterfront walk, a student greeted on arrival; warm golden light, a
   U.S. landmark softly behind), in a moment tied to the variant's angle, with
-  the feeling behind it, never posing at the camera
-  (`pictures-prompt.js` asks every picture the same); never a real or famous person, no readable words; a
-  U.S. flag or quiet props (passports, a folder, a gavel) may sit in the
-  scene with no writing on them (the team's choice, from a picture they had
-  liked); nothing that shows a promised outcome (a green card or visa held up
-  as approved, money); the brand's colours only as small touches. Video
-  prompts keep to no identifiable people and no flags. The studio's Picture dialog (`PictureDialog`) shows it to edit and
+  the feeling behind it, never posing at the camera;
+  a U.S. flag or quiet props with no writing on them, the brand's colours
+  only as small touches); in code, never a real or famous person, no
+  readable words, nothing that shows a promised outcome (a green card or
+  visa held up as approved, money). The studio's Picture dialog (`PictureDialog`) shows it to edit and
   makes a picture from what is written there (`ask_for_picture`: the prompt
   becomes the variant's, up to 1,200 characters). Every new ad asks for one as
   it is saved (a trigger on `ad_variants`) when its run asked for AI pictures
@@ -1297,17 +1325,15 @@ X's ads APIs, which each need their own access.
 2. **Custom runs skip the Competitor Tracker** (`initialStages`, tested).
 3. **No ad promises an outcome, a timeline or a return.** Processing times
    are always estimates. Strategies carry these as guardrails and the Content
-   Agent must follow them. The marketing is positive (the client's rule,
-   2026-10-22): every hook, headline, image line and post leads with what
-   the family gains, never a problem, a worry or what the reader lacks
-   ("shouldn't", "doesn't depend on", "tired of", "uncertainty"); no
-   "X, not Y" or "without…" contrasts that imply other advisors pressure or
-   fail people ("not pressure", "rather than a sales pitch"); a competitor's
-   pain hook is answered with the hope behind it. The copy never says "EB-5
-   is an investment with risk" or that QGR turns projects down or filters
-   them ("before it reaches you"), and writes "U.S.", never "US". Both
-   agents carry the rule word for word and the checks flag each (rule 6);
-   a negative tone the words do not show is for the person approving.
+   Agent must follow them. Everything else about how content is made is the
+   team's, in Brand memory (How content is made, below): the positive tone,
+   the company called Quantum Global (never QGR), "U.S.", an ad understood
+   at first glance, who is in a picture, what a video avoids, and the
+   phrases the checks flag. Only what keeps an ad legally safe stays in code
+   (this rule, "guaranteed", "risk-free", "100%", "assured", a timeline in
+   days, weeks or months, "US" for "U.S.", and no approved green card or
+   money in a picture); a negative tone the words do not show is for the
+   person approving.
 4. **Validate on the server.** `parseNewRun` in `lib/run-input.ts` and
    `lib/edit-input.ts` are the rules for what the app accepts; the database
    functions check again. The forms check first only to answer faster.

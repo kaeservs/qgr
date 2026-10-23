@@ -2,7 +2,7 @@ import type { NewBrandExample, VariantEdit } from './data/source';
 import { PLATFORM_OF } from './platforms';
 import type { ParseResult } from './run-input';
 import { EXAMPLE_PLACES, PLACES, PLATFORMS } from './types';
-import type { BrandMemory, BrandProfile, ExamplePlace, Place, Platform, PlatformCopy } from './types';
+import type { BrandMemory, BrandProfile, ExamplePlace, Place, Platform, PlatformCopy, ContentRules } from './types';
 
 // What the studio and the settings page may send. Server actions are public
 // endpoints, so their input is checked here before it reaches a data source;
@@ -37,6 +37,10 @@ export const LIMITS = {
   picturePrompt: 1200,
   example: 10000,
   exampleNote: 2000,
+  contentRules: 30,
+  contentRule: 1000,
+  flagPhrases: 80,
+  flagPhrase: 60,
 } as const;
 
 
@@ -105,6 +109,20 @@ export function parseBrandMemory(body: unknown): ParseResult<BrandMemory> {
   const pictureStyle = text(body.pictureStyle);
   if (pictureStyle.length > LIMITS.pictureStyle) return { ok: false, error: `Keep the picture style under ${LIMITS.pictureStyle} characters.` };
   return { ok: true, value: { topics, postFormats, pictureStyle } };
+}
+
+/** The team's content rules: three lists of rules and the phrases to flag, each trimmed, empty ones left out. */
+export function parseContentRules(body: unknown): ParseResult<ContentRules> {
+  if (!isRecord(body)) return { ok: false, error: 'Nothing to save.' };
+  const list = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(text).filter(Boolean))] : []);
+  const value: ContentRules = { copyRules: list(body.copyRules), pictureRules: list(body.pictureRules), videoRules: list(body.videoRules), flagPhrases: list(body.flagPhrases) };
+  for (const rules of [value.copyRules, value.pictureRules, value.videoRules]) {
+    if (rules.length > LIMITS.contentRules) return { ok: false, error: `Keep each list to ${LIMITS.contentRules} rules.` };
+    if (rules.some((r) => r.length > LIMITS.contentRule)) return { ok: false, error: `Keep each rule under ${LIMITS.contentRule.toLocaleString('en-US')} characters.` };
+  }
+  if (value.flagPhrases.length > LIMITS.flagPhrases) return { ok: false, error: `Keep it to ${LIMITS.flagPhrases} phrases to flag.` };
+  if (value.flagPhrases.some((p) => p.length < 2 || p.length > LIMITS.flagPhrase)) return { ok: false, error: `Each phrase to flag is 2 to ${LIMITS.flagPhrase} characters.` };
+  return { ok: true, value };
 }
 
 /** What a person asks the image model to draw: the scene. The brand's picture style goes with it. */

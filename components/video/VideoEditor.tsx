@@ -110,6 +110,7 @@ export function VideoEditor({
   brand,
   setTitle,
   platforms = [],
+  flagPhrases = [],
   onClose,
   onSaved,
   onApply,
@@ -123,6 +124,8 @@ export function VideoEditor({
   brand: { name: string; website: string };
   setTitle: string;
   platforms?: Platform[];
+  /** The team's phrases to flag (Brand memory). */
+  flagPhrases?: readonly string[];
   onClose: () => void;
   onSaved?: (saved: SavedVideo) => void;
   /** Before the run: the edit every ad will start from (null for the clip as it is), handed back rather than saved. */
@@ -230,7 +233,7 @@ export function VideoEditor({
     return hit ? { x: (hit.x + hit.width / 2) / previewSize.width, y: (hit.y + hit.height / 2) / previewSize.height, scale: 1 } : null;
   };
 
-  const flags = [...(variant ? guardrailWarnings(words, variant.copy, platforms).filter((f) => f.startsWith('image text')) : []), ...videoWarnings(edit)];
+  const flags = [...(variant ? guardrailWarnings(words, variant.copy, platforms, {}, flagPhrases).filter((f) => f.startsWith('image text')) : []), ...videoWarnings(edit, flagPhrases)];
   const saving = compactEdit(edit);
   const changed = JSON.stringify(saving) !== JSON.stringify(compactEdit(started)) || (variant !== undefined && words.trim() !== variant.creative.text);
 

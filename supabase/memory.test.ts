@@ -77,6 +77,38 @@ describe('brand memory', () => {
     await t.asUser(outsider, () => expect(t.db.query(`select public.update_brand_memory('{}', '{}'::jsonb, null)`)).rejects.toThrow(/Only the QGR team/));
   });
 
+  it('starts with the rules the agents followed, keeps the team’s edits tidied, and hands them to every agent and every picture', async () => {
+    type Rules = { copy_rules: string[]; picture_rules: string[]; video_rules: string[]; flag_phrases: string[] };
+    const seeded = await t.value<Rules>(`select to_jsonb(b) from public.brand_profile b`);
+    expect(seeded.copy_rules).toContain('Call the company Quantum Global (or Quantum Global Residency), never QGR.');
+    expect(seeded.picture_rules[1]).toMatch(/^The people are Indian/);
+    expect(seeded.video_rules).toContain('No flags.');
+    expect(seeded.flag_phrases).toEqual(expect.arrayContaining(['QGR', "shouldn't", 'not pressure']));
+
+    await t.asUser(member, () =>
+      t.db.query(`select public.update_content_rules(array[' Write U.S. ', 'Speak to parents.'], array['The people are Indian.'], '{}', array['QGR', ' qgr ', 'act now'])`),
+    );
+    const saved = await t.value<Rules>(`select to_jsonb(b) from public.brand_profile b`);
+    expect(saved.copy_rules).toEqual(['Write U.S.', 'Speak to parents.']);
+    expect(saved.picture_rules).toEqual(['The people are Indian.']);
+    expect(saved.video_rules).toEqual([]);
+    // A phrase is kept once, whatever its case.
+    expect(saved.flag_phrases).toHaveLength(2);
+    expect(saved.flag_phrases).toEqual(expect.arrayContaining(['act now']));
+
+    await t.asUser(member, async () => {
+      await expect(t.db.query(`select public.update_content_rules(array[$1], '{}', '{}', '{}')`, ['x'.repeat(1001)])).rejects.toThrow(/Up to 30 rules/);
+      await expect(t.db.query(`select public.update_content_rules('{}', '{}', '{}', array['x'])`)).rejects.toThrow(/phrases to flag/);
+    });
+    await t.asUser(outsider, () => expect(t.db.query(`select public.update_content_rules('{}', '{}', '{}', '{}')`)).rejects.toThrow(/Only the QGR team/));
+
+    // Every agent is given them with the brand.
+    const runId = await t.asUser(member, () => t.value<string>(`select public.create_run('custom', 'text', 'Rules check', array['meta'], 'consultations', p_excerpt => $1)`, [EXCERPT]));
+    const begun = await t.asService(() => t.value<{ brand: Rules }>(`select public.agent_begin($1, 'strategist')`, [runId]));
+    expect(begun.brand.copy_rules).toEqual(['Write U.S.', 'Speak to parents.']);
+    expect(begun.brand.flag_phrases).toEqual(expect.arrayContaining(['act now']));
+  });
+
   it('keeps posts that work for the team, and gives every agent the memory', async () => {
     await t.asUser(member, () => t.db.query(`select public.update_brand_memory(array['Family moves'], '{"facebook": "Two short paragraphs."}'::jsonb, 'Warm light.')`));
     const pasted = await t.asUser(member, () => t.value<string>(`select public.add_brand_example('instagram', '  Three questions to ask before you pick a project.  ', ' Saved and shared a lot ')`));
