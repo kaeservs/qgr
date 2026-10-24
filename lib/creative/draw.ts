@@ -42,7 +42,7 @@ const TYPE: Record<CreativeStyle, Record<CreativeRatio, number>> = {
 /** The preview the chip's fixed pixel sizes were set at; a bigger picture scales them up. */
 const PREVIEW_WIDTH = 440;
 
-/** The logo's height on a 440-pixel preview, as previews.module.css sets it: smaller on the wide shape, which is half as tall. */
+/** The Q's height on a 440-pixel preview, as previews.module.css sets it: smaller on the wide shape, which is half as tall. */
 const LOGO_TALL: Record<CreativeRatio, number> = { square: 52, wide: 34 };
 
 export interface CreativeArt {
@@ -52,11 +52,18 @@ export interface CreativeArt {
 }
 
 /**
- * The client's full logo exactly as given (gold Q, indigo words), transparent,
- * on every ground: the client asked for it unchanged (2026-10-22), so no
- * white-word or all-indigo version is drawn.
+ * The Q alone, transparent, top left, with a soft white glow, as the client's
+ * own videos carry it (2026-10-24; until then the full logo, top right). The
+ * glow keeps the indigo of the Q readable on a dark picture. Pictures only:
+ * a video's Q (lib/video/draw.ts) has no glow.
  */
-export const LOGO_FILE = '/brand/qgr-logo-full.png';
+export const LOGO_FILE = '/brand/qgr-q.png';
+
+/** The glow round the Q: two white shadows, wide and soft then close, as shares of the logo's height (previews.module.css matches them). */
+export const LOGO_GLOW = [
+  { blur: 0.36, color: 'rgb(255 255 255 / 0.9)' },
+  { blur: 0.12, color: 'rgb(255 255 255 / 0.95)' },
+] as const;
 
 /** The logo, decoded; null if it could not be loaded, and the page's name shows instead. */
 export const loadLogo = (): Promise<CanvasImageSource | null> => loadMark(LOGO_FILE);
@@ -226,7 +233,7 @@ export function drawCreative(
   const light = creative.style === 'spotlight' && !picture;
   const face = WORD_FONT_FACE[design?.font ?? DEFAULT_FONT];
 
-  // Where the logo goes: top right unless moved. Computed first so the words keep clear of it.
+  // Where the logo goes: top left unless moved. Computed first so the words keep clear of it.
   const showLogo = design?.logo ?? true;
   const logoSpot = spots[LOGO];
   let logoBox: { x: number; y: number; width: number; height: number } | null = null;
@@ -234,7 +241,7 @@ export function drawCreative(
     const scale = logoSpot?.scale ?? 1;
     const tall = LOGO_TALL[creative.ratio] * (w / PREVIEW_WIDTH) * scale;
     const { width, height } = brand.logo ? { width: tall * aspectOf(brand.logo), height: tall } : chipSize(ctx, size, brand.name, scale);
-    logoBox = { x: logoSpot ? logoSpot.x * w - width / 2 : w - w * 0.05 - width, y: logoSpot ? logoSpot.y * h - height / 2 : w * 0.045, width, height };
+    logoBox = { x: logoSpot ? logoSpot.x * w - width / 2 : w * 0.05, y: logoSpot ? logoSpot.y * h - height / 2 : w * 0.045, width, height };
   }
 
   const text = creative.text.trim();
@@ -250,7 +257,7 @@ export function drawCreative(
     const rule = light ? ruleGap + ruleHeight : 0;
     // Nothing overlaps the logo (the client's ask, 2026-10-22): words that reach
     // under it start below it, set smaller where they must be to fit.
-    const below = !placed && logoBox && !logoSpot && left + maxWidth > logoBox.x ? logoBox.y + logoBox.height + 3 * cq : null;
+    const below = !placed && logoBox && !logoSpot && left < logoBox.x + logoBox.width && left + maxWidth > logoBox.x ? logoBox.y + logoBox.height + 3 * cq : null;
     const room = h - padY - (below ?? padY);
     const usual = TYPE[creative.style][creative.ratio] * face.scale * w * (placed?.scale ?? 1);
     let fontSize = usual;
@@ -310,8 +317,15 @@ export function drawCreative(
   }
 
   if (logoBox && brand.logo) {
-    // The full logo, transparent, at its usual size LOGO_TALL preview pixels tall.
-    ctx.drawImage(brand.logo, logoBox.x, logoBox.y, logoBox.width, logoBox.height);
+    // The Q, transparent, LOGO_TALL preview pixels tall at its usual size, drawn
+    // once per shadow so the glow builds up as the client's videos show it.
+    ctx.save();
+    for (const glow of LOGO_GLOW) {
+      ctx.shadowColor = glow.color;
+      ctx.shadowBlur = glow.blur * logoBox.height;
+      ctx.drawImage(brand.logo, logoBox.x, logoBox.y, logoBox.width, logoBox.height);
+    }
+    ctx.restore();
     hits.push({ id: LOGO, ...logoBox });
   } else if (logoBox) {
     // Without the logo (it could not be loaded), the page's name in a chip.
