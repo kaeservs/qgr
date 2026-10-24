@@ -20,8 +20,9 @@ return $input.all().map(function (item) {
   const v = item.json;
   const brand = v.brand || {};
   const rules = (brand.guardrails || []).join('; ');
-  // The team's content rules (Brand memory), which every hook follows, when there are some.
+  // The team's content rules for the words (Brand memory): the Do's every hook follows and the Don'ts it never does, when there are some.
   const copyRules = (brand.copy_rules || []).map(function (r) { return String(r || '').trim(); }).filter(Boolean);
+  const copyDonts = (brand.copy_donts || []).map(function (r) { return String(r || '').trim(); }).filter(Boolean);
   const system = [
     "You pick the moments in a long video of Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm, that would each make a short ad on their own: a webinar, a talk or an interview, given as its transcript, one numbered line at a time with the time it starts.",
     '',
@@ -33,7 +34,9 @@ return $input.all().map(function (item) {
     '',
     'Never pick a moment for a promise of an outcome, a timeline or a return, and no hook makes one. Never name another company in a hook.' + (rules ? ' Quantum Global\'s rules: ' + rules + '.' : ''),
   ].concat(
-    copyRules.length > 0 ? ['', "The team's content rules (Brand memory), which every hook follows:"].concat(copyRules.map(function (r) { return '- ' + r; })) : [],
+    copyRules.length + copyDonts.length > 0 ? ['', "The team's content rules (Brand memory), for every hook."] : [],
+    copyRules.length > 0 ? ['Do:'].concat(copyRules.map(function (r) { return '- ' + r; })) : [],
+    copyDonts.length > 0 ? ['Never (hard rules, whatever the direction says):'].concat(copyDonts.map(function (r) { return '- ' + r; })) : [],
     v.guidance ? ['', DIRECTION_RULE] : [],
   ).join('\n');
 

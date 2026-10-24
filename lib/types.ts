@@ -430,14 +430,18 @@ export interface BrandMemory {
 }
 
 /**
- * How content is made (Brand memory), the team's to edit: the rules for the
- * words, for pictures and for videos, and the phrases the checks flag. What
- * keeps an ad legally safe is not here: it stays in code.
+ * How content is made (Brand memory), the team's to edit: for the words, for
+ * pictures and for videos, the Do's the AI follows and the Don'ts it never
+ * does (hard no's, over a run's direction), and the phrases the checks flag.
+ * What keeps an ad legally safe is not here: it stays in code.
  */
 export interface ContentRules {
   copyRules: string[];
+  copyDonts: string[];
   pictureRules: string[];
+  pictureDonts: string[];
   videoRules: string[];
+  videoDonts: string[];
   flagPhrases: string[];
 }
 

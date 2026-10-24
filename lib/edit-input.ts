@@ -111,12 +111,20 @@ export function parseBrandMemory(body: unknown): ParseResult<BrandMemory> {
   return { ok: true, value: { topics, postFormats, pictureStyle } };
 }
 
-/** The team's content rules: three lists of rules and the phrases to flag, each trimmed, empty ones left out. */
+/** The team's content rules: Do's and Don'ts for the words, pictures and videos, and the phrases to flag, each trimmed, empty ones left out. */
 export function parseContentRules(body: unknown): ParseResult<ContentRules> {
   if (!isRecord(body)) return { ok: false, error: 'Nothing to save.' };
   const list = (v: unknown) => (Array.isArray(v) ? [...new Set(v.map(text).filter(Boolean))] : []);
-  const value: ContentRules = { copyRules: list(body.copyRules), pictureRules: list(body.pictureRules), videoRules: list(body.videoRules), flagPhrases: list(body.flagPhrases) };
-  for (const rules of [value.copyRules, value.pictureRules, value.videoRules]) {
+  const value: ContentRules = {
+    copyRules: list(body.copyRules),
+    copyDonts: list(body.copyDonts),
+    pictureRules: list(body.pictureRules),
+    pictureDonts: list(body.pictureDonts),
+    videoRules: list(body.videoRules),
+    videoDonts: list(body.videoDonts),
+    flagPhrases: list(body.flagPhrases),
+  };
+  for (const rules of [value.copyRules, value.copyDonts, value.pictureRules, value.pictureDonts, value.videoRules, value.videoDonts]) {
     if (rules.length > LIMITS.contentRules) return { ok: false, error: `Keep each list to ${LIMITS.contentRules} rules.` };
     if (rules.some((r) => r.length > LIMITS.contentRule)) return { ok: false, error: `Keep each rule under ${LIMITS.contentRule.toLocaleString('en-US')} characters.` };
   }

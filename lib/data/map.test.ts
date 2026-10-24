@@ -649,14 +649,25 @@ describe('brand memory', () => {
     topics: ['EB-5 basics'],
     post_formats: { instagram: 'Hashtags last.', tiktok: 'No.', linkedin: '  ' },
     picture_style: null,
-    copy_rules: ['Write U.S., never US.'],
+    copy_rules: ['Write U.S.'],
+    copy_donts: ['Call the company QGR.'],
     picture_rules: ['The people are Indian.'],
-    video_rules: ['No flags.'],
+    picture_donts: [],
+    video_rules: ['One continuous shot.'],
+    video_donts: ['Flags.'],
     flag_phrases: ['QGR'],
   };
 
   it('gives the team’s content rules as Brand memory edits them', () => {
-    expect(toContentRules(row)).toEqual({ copyRules: ['Write U.S., never US.'], pictureRules: ['The people are Indian.'], videoRules: ['No flags.'], flagPhrases: ['QGR'] });
+    expect(toContentRules(row)).toEqual({
+      copyRules: ['Write U.S.'],
+      copyDonts: ['Call the company QGR.'],
+      pictureRules: ['The people are Indian.'],
+      pictureDonts: [],
+      videoRules: ['One continuous shot.'],
+      videoDonts: ['Flags.'],
+      flagPhrases: ['QGR'],
+    });
   });
 
   it('reads the topics, the format notes for known places, and an empty picture style', () => {

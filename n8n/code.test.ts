@@ -613,7 +613,7 @@ describe('Ad Strategist', () => {
     const directed = run('strategist-build-request.js', run('strategist-plan.js', { ...customCtx, run: { ...customCtx.run, guidance: 'Lead with the family angle.' } })) as { body: Json };
     expect(materialOf(directed.body).direction).toBe('Lead with the family angle.');
     expect(String(directed.body.system)).toContain("direction is the Quantum Global team's brief for this run");
-    expect(String(directed.body.system)).toContain('the rule above wins');
+    expect(String(directed.body.system)).toContain('or for anything the team\'s content rules say never to do, those rules win');
     const plain = (run('strategist-build-request.js', run('strategist-plan.js', customCtx)) as { body: Json }).body;
     expect(materialOf(plain)).not.toHaveProperty('direction');
     expect(String(plain.system)).not.toContain('direction');
@@ -894,22 +894,37 @@ describe('Content Agent', () => {
     expect(String(plain.body.system)).not.toContain('source is QGR');
     expect(String(plain.body.system)).toContain('The people are made up, never real or famous');
     expect(String(plain.body.system)).toContain('nothing that shows a promised outcome');
-    expect(String(plain.body.system)).toContain('Follow picture_rules, where given.');
+    expect(String(plain.body.system)).toContain('Follow picture_rules and never show what picture_donts names, where given.');
     expect(materialOf(plain.body)).not.toHaveProperty('picture_rules');
   });
 
-  it('writes to the team’s content rules from Brand memory, and asks exactly as before without them', () => {
-    const rules = { copy_rules: ['Call the company Quantum Global, never QGR.'], picture_rules: ['The people are Indian.'], video_rules: ['No flags.'] };
+  it('writes to the team’s Do’s and Don’ts from Brand memory, and asks exactly as before without them', () => {
+    const rules = {
+      copy_rules: ['Call the company Quantum Global.'],
+      copy_donts: ['Call the company QGR.'],
+      picture_rules: ['The people are Indian.'],
+      picture_donts: ['People posing at the camera.'],
+      video_rules: ['One continuous shot.'],
+      video_donts: ['Flags.'],
+    };
     const ruled = (run('content-build-request.js', { ...ctx, brand: { ...ctx.brand, ...rules } }) as { body: Json }).body;
-    expect(String(ruled.system)).toContain("The team's content rules (Brand memory), which every hook, headline, image line and post follows:\n- Call the company Quantum Global, never QGR.");
+    expect(String(ruled.system)).toContain(
+      "The team's content rules (Brand memory), for every hook, headline, image line and post.\nDo:\n- Call the company Quantum Global.\nNever (hard rules, whatever the direction or the material says):\n- Call the company QGR.",
+    );
     expect(materialOf(ruled).picture_rules).toEqual(['The people are Indian.']);
+    expect(materialOf(ruled).picture_donts).toEqual(['People posing at the camera.']);
     // Video rules go only with a video run's prompts.
     expect(materialOf(ruled)).not.toHaveProperty('video_rules');
+    expect(materialOf(ruled)).not.toHaveProperty('video_donts');
+    // Only Don'ts: the Do list is left out.
+    const dontsOnly = (run('content-build-request.js', { ...ctx, brand: { ...ctx.brand, copy_donts: ['Call the company QGR.'] } }) as { body: Json }).body;
+    expect(String(dontsOnly.system)).toContain("post.\nNever (hard rules, whatever the direction or the material says):\n- Call the company QGR.");
+    expect(String(dontsOnly.system)).not.toContain('Do:');
     const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
     expect(String(plain.system)).not.toContain("The team's content rules");
     const textCtx = { run: { id: 'run-9', kind: 'custom', input: 'text', title: 'Notes', excerpt: 'Our webinar on the 24th.', platforms: ['meta'], goal: 'webinar' }, brand, report: null };
     const strategy = (run('strategist-build-request.js', run('strategist-plan.js', { ...textCtx, brand: { ...brand, ...rules } })) as { body: Json }).body;
-    expect(String(strategy.system)).toContain('- Call the company Quantum Global, never QGR.');
+    expect(String(strategy.system)).toContain('Do:\n- Call the company Quantum Global.\nNever (hard rules, whatever the direction or the material says):\n- Call the company QGR.');
     expect(String((run('strategist-build-request.js', run('strategist-plan.js', textCtx)) as { body: Json }).body.system)).not.toContain("The team's content rules");
   });
 
@@ -965,7 +980,7 @@ describe('Content Agent', () => {
     expect(schema).toContain('"video_prompt":{"type":"string"}');
     expect(schema).toContain('"required":["label","creative_text","creative_style","image_prompt","copy","video_prompt","posts"]');
     expect(String(body.system)).toContain('- creative_text: the words shown over the ad\'s video, eight words at most.');
-    expect(String(body.system)).toContain('- video_prompt: the ad\'s video, for a video model making 4 seconds at 1:1, in under 600 characters. Follow video_rules, where given.');
+    expect(String(body.system)).toContain('- video_prompt: the ad\'s video, for a video model making 4 seconds at 1:1, in under 600 characters. Follow video_rules and never show what video_donts names, where given.');
     expect(String(body.system)).toContain('Write image_prompt and video_prompt to use them where they fit, naming each as reference 1, reference 2 and so on.');
     expect(materialOf(body).references).toEqual([{ number: 1, shows: 'Our Miami office' }, { number: 2 }]);
 

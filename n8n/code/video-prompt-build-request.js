@@ -19,8 +19,9 @@ return $input.all().map(function (item) {
   const r = (item.json && item.json.body) || {};
   const brand = r.brand || {};
   const rules = (brand.guardrails || []).join('; ');
-  // The team's video rules (Brand memory, "How content is made"), when the page sends them.
+  // The team's Do's and Don'ts for videos (Brand memory, "How content is made"), when the page sends them.
   const videoRules = (brand.rules || []).map(function (v) { return String(v || '').trim(); }).filter(Boolean);
+  const videoDonts = (brand.donts || []).map(function (v) { return String(v || '').trim(); }).filter(Boolean);
   const cover = r.mode === 'cover';
   const system = [
     "You write the prompt for one short AI video (Higgsfield's video models) that goes into a video of Quantum Global Residency (Quantum Global), an EB-5 and U.S. residency advisory firm, at a point the team chose." +
@@ -33,7 +34,7 @@ return $input.all().map(function (item) {
     '- Never a real or famous person.',
     '- No words, signs, logos, money or documents with writing in the picture: the video\'s own words go over it later.',
     '- Nothing that promises an outcome: no approved papers, no green cards held up, no celebrations of a result.' + (rules ? " Quantum Global's rules: " + rules + '.' : ''),
-  ].concat(videoRules.map(function (v) { return '- ' + v; }), [
+  ].concat(videoRules.map(function (v) { return '- ' + v; }), videoDonts.map(function (v) { return '- Never: ' + v; }), [
     brand.look ? '- Keep to the brand\'s picture style: ' + brand.look : "- The brand's colours are indigo and warm gold: let them show in the light or the setting, never as text.",
     '- why: one short sentence saying what in the transcript the video shows, for the team.',
   ]).join('\n');

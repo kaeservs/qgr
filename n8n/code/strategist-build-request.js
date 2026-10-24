@@ -13,12 +13,20 @@ const GOALS = {
   guide: 'Guide downloads',
 };
 
-// The team's content rules (Brand memory, "How content is made"): the words'
-// tone, the company's name and what makes an ad clear at a glance. Only when
-// there are some; what keeps an ad legally safe is written above, in code.
-const copyRules = ((p.brand && p.brand.copy_rules) || []).filter(function (r) { return String(r || '').trim(); });
-const COPY_RULES = copyRules.length > 0
-  ? "The team's content rules (Brand memory), which every angle, hook and the positioning follow, and that no guardrail of the strategy may break:\n" + copyRules.map(function (r) { return '- ' + String(r).trim(); }).join('\n')
+// The team's content rules for the words (Brand memory, "How content is
+// made"): the Do's it follows and the Don'ts it never does, which win over the
+// run's direction. Only when there are some; what keeps an ad legally safe is
+// written above, in code.
+function ruleList(list) {
+  return (list || []).map(function (r) { return String(r || '').trim(); }).filter(Boolean);
+}
+const copyDo = ruleList(p.brand && p.brand.copy_rules);
+const copyDont = ruleList(p.brand && p.brand.copy_donts);
+const COPY_RULES = copyDo.length + copyDont.length > 0
+  ? ["The team's content rules (Brand memory), for every angle, hook and the positioning; no guardrail of the strategy may break them."]
+      .concat(copyDo.length > 0 ? ['Do:'].concat(copyDo.map(function (r) { return '- ' + r; })) : [])
+      .concat(copyDont.length > 0 ? ['Never (hard rules, whatever the direction or the material says):'].concat(copyDont.map(function (r) { return '- ' + r; })) : [])
+      .join('\n')
   : null;
 
 const system = [
@@ -64,7 +72,7 @@ const pastPosts = shown.map(function (x) {
 });
 // The team's direction for the run, in their words: the brief. Only when they
 // gave one; without it the request is exactly as before.
-const DIRECTION_RULE = "direction is the Quantum Global team's brief for this run, in their own words. Follow it where the material allows: the angles it asks for, the hooks it wants tested, what to leave out. Where it asks for a promise of an outcome, a timeline or a return, the rule above wins.";
+const DIRECTION_RULE = "direction is the Quantum Global team's brief for this run, in their own words. Follow it where the material allows: the angles it asks for, the hooks it wants tested, what to leave out. Where it asks for a promise of an outcome, a timeline or a return, or for anything the team's content rules say never to do, those rules win.";
 // Brand memory: what Quantum Global usually posts about (brand.topics) and the posts the
 // team keeps as ones that work. Each rule only when there is something for it.
 const examples = (p.examples || []).slice(0, 8).map(function (e) {

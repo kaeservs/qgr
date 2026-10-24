@@ -1,15 +1,16 @@
 // Shared by the scripts that ask an image model for a picture (joined in
 // front of each): what it is asked to draw, for each ask. The scene (a
 // person's prompt in the studio, or the Content Agent's), then the team's
-// picture rules (Brand memory, "How content is made": the look, who is in it,
-// the setting; they were written here until 2026-10-23), the brand's picture
-// style, a line on the run's reference pictures when Higgsfield is given
+// picture Do's (Brand memory, "How content is made": the look, who is in it,
+// the setting; they were written here until 2026-10-23) and Don'ts ("Avoid:"),
+// the brand's picture style, a line on the run's reference pictures when Higgsfield is given
 // some, then what every picture keeps whatever the team writes: no words (the
 // ad's words go over the picture), people who are made up rather than anyone
 // real or famous, and nothing that shows a promised outcome. Cloudflare's
 // FLUX takes 2,048 characters at most; Higgsfield's GPT Image far more, so
 // its scripts pass HIGGSFIELD_PROMPT_MAX. The scene is shortened first, at a
-// word, then a long picture style, then the team's rules; the last never is.
+// word, then a long picture style, then the team's Do's, then their Don'ts;
+// PICTURE_SAFETY never is.
 const PROMPT_MAX = 2048;
 const HIGGSFIELD_PROMPT_MAX = 6000;
 const PICTURE_SAFETY = 'No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. Never a green card or visa held up as approved, never money.';
@@ -31,14 +32,17 @@ function picturePrompt(ask, max) {
   const fixed = references + ' ' + PICTURE_SAFETY;
   const room = limit - fixed.length - SCENE_MIN;
   const sentence = function (t) { return /[.!?]$/.test(t) ? t : t + '.'; };
-  // The team's rules first, then the picture style, in what room the scene leaves.
-  let rules = (Array.isArray(ask.rules) ? ask.rules : [])
-    .map(function (r) { return String(r || '').trim().replace(/\s+/g, ' '); })
-    .filter(Boolean)
-    .map(sentence)
-    .join(' ');
-  if (rules.length > room - 2) rules = atWord(rules, room - 2);
-  const ruled = rules ? ' ' + sentence(rules) : '';
+  const clean = function (list) {
+    return (Array.isArray(list) ? list : []).map(function (r) { return String(r || '').trim().replace(/\s+/g, ' '); }).filter(Boolean);
+  };
+  // The team's Don'ts first, then their Do's, then the picture style, in what room the scene leaves.
+  let donts = clean(ask.donts).map(function (r) { return r.replace(/[.!?]+$/, ''); }).join('; ');
+  if (donts.length > room - ' Avoid: .'.length) donts = atWord(donts, room - ' Avoid: .'.length);
+  const avoided = donts ? ' Avoid: ' + donts + '.' : '';
+  let rules = clean(ask.rules).map(sentence).join(' ');
+  const rulesRoom = room - avoided.length - 2;
+  if (rules.length > rulesRoom) rules = rulesRoom > 20 ? atWord(rules, rulesRoom) : '';
+  const ruled = (rules ? ' ' + sentence(rules) : '') + avoided;
   let look = String(ask.look || '').trim().replace(/\s+/g, ' ');
   const lookRoom = room - ruled.length - ' Picture style: .'.length;
   if (look.length > lookRoom) look = lookRoom > 20 ? atWord(look, lookRoom) : '';

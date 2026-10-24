@@ -88,7 +88,7 @@ export interface VideoPromptPayload {
   mode: PromptMode;
   idea: string;
   lines: TranscriptLine[];
-  brand: { company: string; offer: string; audience: string; guardrails: string[]; look: string | null; rules: string[] };
+  brand: { company: string; offer: string; audience: string; guardrails: string[]; look: string | null; rules: string[]; donts: string[] };
 }
 
 export type VideoPrompt = { ok: true; prompt: string; why: string } | { ok: false; error: string };
