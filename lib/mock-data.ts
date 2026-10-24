@@ -1302,31 +1302,49 @@ export const notices: Notice[] = [
 export const NEXT_SCAN = '2026-10-12T13:00:00Z';
 
 /** What the agents read beside the brand profile: what the team posts about, how, and how its pictures look. */
-/** How content is made, as the database seeds it (supabase/migrations/20261023184024_content_rules.sql). */
+/** How content is made, as the database seeds it (supabase/migrations/20261023184024_content_rules.sql, split into Do's and Don'ts by 20261024140651_content_donts.sql). */
 export const contentRules: ContentRules = {
   copyRules: [
-    'Write for the family seeing the ad: an Indian family thinking about a future in the U.S. They should understand it at first glance, from the picture and its words alone.',
-    'The words on the picture say plainly what the ad is about (EB-5, a U.S. Green Card, studying, working or living in the U.S.) in everyday words: no clever wordplay, no jargon.',
-    "Positive marketing only: every hook, headline, image line and post leads with what the family gains: the future, the opportunity, Quantum Global's guidance and support.",
-    'Never open on a problem, a worry or what the reader lacks (no "shouldn\'t", "doesn\'t depend on", "tired of", "uncertainty").',
-    'No "X, not Y" or "without..." contrasts that imply other advisors pressure, rush or fail people (no "not pressure", "rather than a sales pitch"), and never knock other advisors or programs. Where a competitor\'s hook is built on a pain, answer the hope behind it.',
-    'Never write that EB-5 is an investment with risk, and never say or imply that Quantum Global turns projects down or filters them out (no "before it reaches you"): say what Quantum Global reviews and explains instead.',
-    'Call the company Quantum Global (or Quantum Global Residency), never QGR.',
-    'Write U.S., never US.',
+    "Write for the family seeing the ad: an Indian family thinking about a future in the U.S. They understand it at first glance, from the picture and its words alone.",
+    "The words on the picture say plainly what the ad is about (EB-5, a U.S. Green Card, studying, working or living in the U.S.) in everyday words.",
+    "Positive marketing: every hook, headline, image line and post leads with what the family gains: the future, the opportunity, Quantum Global's guidance and support.",
+    "Where a competitor's hook is built on a pain, answer the hope behind it.",
+    "Say what Quantum Global reviews and explains for the family.",
+    "Call the company Quantum Global (or Quantum Global Residency).",
+    "Write U.S., with the dots.",
+  ],
+  copyDonts: [
+    "Open on a problem, a worry or what the reader lacks (\"shouldn't\", \"doesn't depend on\", \"tired of\", \"uncertainty\").",
+    "\"X, not Y\" or \"without...\" contrasts that imply other advisors pressure, rush or fail people (\"not pressure\", \"rather than a sales pitch\").",
+    "Knock other advisors or programs.",
+    "Say that EB-5 is an investment with risk.",
+    "Say or imply that Quantum Global turns projects down or filters them out (\"before it reaches you\").",
+    "Call the company QGR.",
+    "Write US without the dots.",
+    "Clever wordplay or jargon on the picture.",
   ],
   pictureRules: [
-    'A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose.',
+    "A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion.",
     "The people are Indian: Indian families, parents, children, students and professionals, as most of Quantum Global's clients are.",
-    'People interact with each other (embracing, playing, laughing, talking) in a moment the family lives or hopes for, never posing at the camera.',
-    'It reads as a life in the U.S. at a glance: a U.S. landmark or city skyline softly behind, a U.S. campus, or a home or street that looks American.',
-    'A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them.',
-    "Quantum Global's indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches (clothing, a cushion, evening light), never a tint over the picture.",
+    "People interact with each other (embracing, playing, laughing, talking) in a moment the family lives or hopes for.",
+    "It reads as a life in the U.S. at a glance: a U.S. landmark or city skyline softly behind, a U.S. campus, or a home or street that looks American.",
+    "A U.S. flag or quiet props such as passports, a folder or a gavel may appear.",
+    "Quantum Global's indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches: clothing, a cushion, evening light.",
+  ],
+  pictureDonts: [
+    "An illustration, a 3D render or a stock-photo pose.",
+    "People posing or looking at the camera.",
+    "Writing on a flag, a passport, a folder or any prop.",
+    "The brand's colours as a tint over the picture.",
   ],
   videoRules: [
-    'One continuous shot: the scene and how the camera moves.',
-    'No identifiable people: seen from behind, in profile with the face not shown, at a distance or as hands.',
-    'No flags.',
-    'It reads as a life in the U.S. at a glance.',
+    "One continuous shot: the scene and how the camera moves.",
+    "People seen from behind, in profile with the face not shown, at a distance or as hands.",
+    "It reads as a life in the U.S. at a glance.",
+  ],
+  videoDonts: [
+    "A face anyone could recognise.",
+    "Flags.",
   ],
   flagPhrases: [
     'investment with risk', 'turn down', 'turns down', 'turned down', "wouldn't back", 'before it reaches you', 'falls short',

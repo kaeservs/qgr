@@ -683,7 +683,7 @@ describe('a picture, from the studio to the image model and back', () => {
     const [written] = step(WRITE_PROMPT, asks);
     expect(written).toMatchObject({ variant_id: variantId, url: `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT}/ai/run/@cf/black-forest-labs/flux-1-schnell` });
     expect((written!.body as { prompt: string }).prompt).toBe(
-      "A quiet harbour at dawn, boats at rest. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. Not an illustration, a 3D render or a stock-photo pose. The people are Indian: Indian families, parents, children, students and professionals, as most of Quantum Global's clients are. People interact with each other (embracing, playing, laughing, talking) in a moment the family lives or hopes for, never posing at the camera. It reads as a life in the U.S. at a glance: a U.S. landmark or city skyline softly behind, a U.S. campus, or a home or street that looks American. A U.S. flag or quiet props such as passports, a folder or a gavel may appear, with no writing on them. Quantum Global's indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches (clothing, a cushion, evening light), never a tint over the picture. Picture style: Warm evening light, deep indigo and gold accents. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. Never a green card or visa held up as approved, never money.",
+      "A quiet harbour at dawn, boats at rest. A real photograph, as a documentary or lifestyle photographer would take it: natural light, real skin, hands and textures, candid and unposed, honest emotion. The people are Indian: Indian families, parents, children, students and professionals, as most of Quantum Global's clients are. People interact with each other (embracing, playing, laughing, talking) in a moment the family lives or hopes for. It reads as a life in the U.S. at a glance: a U.S. landmark or city skyline softly behind, a U.S. campus, or a home or street that looks American. A U.S. flag or quiet props such as passports, a folder or a gavel may appear. Quantum Global's indigo (#1C1B9D) and gold (#EFB74A) only as small natural touches: clothing, a cushion, evening light. Avoid: An illustration, a 3D render or a stock-photo pose; People posing or looking at the camera; Writing on a flag, a passport, a folder or any prop; The brand's colours as a tint over the picture. Picture style: Warm evening light, deep indigo and gold accents. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. Never a green card or visa held up as approved, never money.",
     );
 
     // Cloudflare answers a JPEG: the path takes its extension, and it is uploaded there.
@@ -707,7 +707,7 @@ describe('a picture, from the studio to the image model and back', () => {
     });
   });
 
-  it('keeps every prompt to what FLUX takes: the scene shortened first, then the style, then the team’s rules, never what keeps a picture safe', () => {
+  it('keeps every prompt to what FLUX takes: the scene shortened first, then the style, then the team’s Do’s, then their Don’ts, never what keeps a picture safe', () => {
     const rules = ['A real photograph, candid and unposed.', 'The people are Indian.', 'It reads as a life in the U.S. at a glance'];
     const style = 'Soft daylight. '.repeat(40).trim();
     const [long] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A wide harbour scene with boats and gulls '.repeat(80), look: style, rules }]);
@@ -728,6 +728,14 @@ describe('a picture, from the studio to the image model and back', () => {
     const cut = (ruled!.body as { prompt: string }).prompt;
     expect(cut.length).toBeLessThanOrEqual(2048);
     expect(cut.endsWith('held up as approved, never money.')).toBe(true);
+    // The team's Don'ts follow their Do's as "Avoid:", and outlast them: Do's too long to fit go first.
+    const donts = ['People posing at the camera.', 'Writing on any prop'];
+    const [avoid] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A garden', look: null, rules: ['The people are Indian.'], donts }]);
+    expect((avoid!.body as { prompt: string }).prompt).toContain('A garden. The people are Indian. Avoid: People posing at the camera; Writing on any prop. No readable text');
+    const [crowded] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: 'A garden', look: null, rules: ['Golden hour warmth on every face. '.repeat(80)], donts }]);
+    const kept = (crowded!.body as { prompt: string }).prompt;
+    expect(kept.length).toBeLessThanOrEqual(2048);
+    expect(kept).toContain('. Avoid: People posing at the camera; Writing on any prop. No readable text');
     // Without a picture style or rules, the scene and what keeps it safe.
     const [plain] = step(WRITE_PROMPT, [{ variant_id: 'v', path: 'p', account: ACCOUNT, prompt: '  A desk   lamp at night ', look: null }]);
     expect((plain!.body as { prompt: string }).prompt).toBe('A desk lamp at night. No readable text, letters, numbers, logos or watermarks anywhere, on signs, books or documents either. Everyone shown is a made-up person: never a real, famous or recognisable one. Never a green card or visa held up as approved, never money.');

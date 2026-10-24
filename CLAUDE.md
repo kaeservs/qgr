@@ -427,29 +427,41 @@ X's ads APIs, which each need their own access.
   12 voice words (`LIMITS` in `lib/edit-input.ts`, and the database's
   functions and checks). Every agent call sends it, so it stays bounded.
 
-### How content is made (`brand_profile.copy_rules`, `picture_rules`, `video_rules`, `flag_phrases`)
+### How content is made (`brand_profile.copy_rules`/`copy_donts`, `picture_rules`/`picture_donts`, `video_rules`/`video_donts`, `flag_phrases`)
 
 - The client's ask (2026-10-23): the rules the content is made by live in
   Brand memory, where the team edits them ("How content is made",
-  `ContentRulesForm`, `update_content_rules`; up to 30 rules a list, 1,000
-  characters each, 80 phrases of 2 to 60), not in the agents' scripts. They
-  were seeded with the rules the scripts carried until then
-  (`20261023184024_content_rules.sql`, the same in `contentRules` in
+  `ContentRulesForm`, `save_content_rules`; up to 30 rules a list, 1,000
+  characters each, 80 phrases of 2 to 60), not in the agents' scripts. Each
+  part (words, pictures, videos) has Do's, which the AI follows (the
+  `*_rules` columns), and Don'ts, hard no's it never does, whatever a run's
+  direction or material says (`*_donts`; the client's ask, 2026-10-24: "do's
+  are the ones the AI will follow, don'ts are the hard no"). The form shows
+  them one under the other, Do in green and Don't in red.
+  `update_content_rules` stays for a page opened before and leaves the
+  Don'ts as they are. They were seeded with the rules the scripts carried
+  until then (`20261023184024_content_rules.sql`, split into Do's and Don'ts
+  by `20261024140651_content_donts.sql`; the same in `contentRules` in
   `lib/mock-data.ts`): positive marketing, understood at first glance from
-  the picture and its words, Quantum Global never QGR, "U.S."; Indian
-  families in real, unposed photographs that read as a life in the U.S.;
-  videos in one shot with no identifiable people or flags.
-- Words and tone (`copy_rules`) go to the strategist and the Content Agent
-  as a list in their system prompt, and to the Moments agent for its hooks,
-  only when there are some; `agent_begin` hands the whole brand row, so
-  nothing else changed to carry them. Pictures (`picture_rules`) go to the
-  Content Agent with its `image_prompt` and with every picture ask
-  (`picture_take_due` → `rules`): `pictures-prompt.js` puts them after the
-  scene, before the picture style, and shortens the scene first, then the
-  style, then the rules, never `PICTURE_SAFETY` (no readable text, made-up
-  people, no approved green card, no money). Videos (`video_rules`) go to
-  the Content Agent with a video run's `video_prompt`, and to the prompt
-  writer (`brand.rules`, sent by the app).
+  the picture and its words, Quantum Global, "U.S." (and never QGR, never a
+  problem first, never "X, not Y", never "investment with risk" or "turn
+  down"); Indian families in real, candid photographs that read as a life
+  in the U.S. (never posed at the camera, never a render, no writing on
+  props); videos in one shot (never a recognisable face, never flags).
+- Words and tone go to the strategist and the Content Agent in their system
+  prompt as "Do:" and "Never (hard rules, whatever the direction or the
+  material says):", and to the Moments agent for its hooks, only when there
+  are some; the run's direction gives way to them. `agent_begin` hands the
+  whole brand row, so nothing else changed to carry them. Pictures go to the
+  Content Agent beside its `image_prompt` (`picture_rules`,
+  `picture_donts`) and with every picture ask (`picture_take_due` → `rules`,
+  `donts`): `pictures-prompt.js` puts the Do's after the scene, then the
+  Don'ts as "Avoid: …", before the picture style, and shortens the scene
+  first, then the style, then the Do's, then the Don'ts, never
+  `PICTURE_SAFETY` (no readable text, made-up people, no approved green
+  card, no money). Videos go to the Content Agent with a video run's
+  `video_prompt` (`video_rules`, `video_donts`), and to the prompt writer
+  (`brand.rules` and `brand.donts`, as "- Never: …", sent by the app).
 - Phrases to flag (`flag_phrases`) are checked whole, in any case, with
   either apostrophe (`phraseRules` in `lib/guardrails.ts`, the same in
   `content-read-answer.js`), after the fixed checks, by the Content Agent and
@@ -1385,14 +1397,16 @@ X's ads APIs, which each need their own access.
   in `PlatformIcon.tsx`.
 - Ad previews use the system font, as the platforms do; only the image wears
   the brand's type.
-- A picture ad carries the client's full logo exactly as given (2026-10-22:
-  the gold Q over indigo "Quantum Global, Residency and Citizenship"),
-  transparent, top right, as in their brochure, on every ground: the client
-  asked for no other version (`LOGO_FILE`, `loadLogo` in
-  `lib/creative/draw.ts`). Nothing overlaps it: words that would reach under
-  it start below it, set smaller where they must be to fit, unless a person
-  moved either. The studio's CSS preview matches it. Without the file, the
-  page's name in a chip.
+- A picture ad carries the Q alone (`qgr-q.png`), transparent, top left,
+  with a soft white glow, as the client's own videos carry it (2026-10-24;
+  until then the full logo, top right): `LOGO_FILE`, `loadLogo` and
+  `LOGO_GLOW` in `lib/creative/draw.ts`, two white shadows drawn as shares
+  of the logo's height, so the glow grows with a Q a person enlarges; the
+  studio's CSS preview matches them with two `drop-shadow`s. Pictures only:
+  a video's Q has no glow. Nothing overlaps it: words that would reach
+  under it start below it, set smaller where they must be to fit, unless a
+  person moved either (with the Q top left, every style's words start below
+  it). Without the file, the page's name in a chip.
 - A video carries no logo until a person picks a corner in the editor (most
   of the client's clips have one already; `defaultEdit`), and then the Q
   alone, transparent (`qgr-q.png`, `LOGO_SRC` in `lib/video/draw.ts`); the

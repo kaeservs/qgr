@@ -761,7 +761,7 @@ export const liveData: DataSource = {
     const config = videoPromptConfig();
     if (!config) return { ok: false, status: 503, error: 'The prompt writer is in n8n: its webhook is not set on this server.' };
     const supabase = await db();
-    const { data: brand } = await supabase.from('brand_profile').select('company, offer, audience, guardrails, picture_style, video_rules').eq('id', 1).maybeSingle();
+    const { data: brand } = await supabase.from('brand_profile').select('company, offer, audience, guardrails, picture_style, video_rules, video_donts').eq('id', 1).maybeSingle();
     const answer = await askVideoPrompt(config, {
       long_video_id: request.longVideoId,
       at: request.at,
@@ -777,6 +777,7 @@ export const liveData: DataSource = {
         guardrails: brand?.guardrails ?? [],
         look: brand?.picture_style ?? null,
         rules: brand?.video_rules ?? [],
+        donts: brand?.video_donts ?? [],
       },
     });
     return answer.ok ? { ok: true, value: { prompt: answer.prompt, why: answer.why }, sample: false } : { ok: false, status: 502, error: answer.error };
@@ -1178,10 +1179,13 @@ export const liveData: DataSource = {
   },
 
   saveContentRules: async (rules) => {
-    const { error } = await (await db()).rpc('update_content_rules', {
-      p_copy_rules: rules.copyRules,
-      p_picture_rules: rules.pictureRules,
-      p_video_rules: rules.videoRules,
+    const { error } = await (await db()).rpc('save_content_rules', {
+      p_copy_do: rules.copyRules,
+      p_copy_dont: rules.copyDonts,
+      p_picture_do: rules.pictureRules,
+      p_picture_dont: rules.pictureDonts,
+      p_video_do: rules.videoRules,
+      p_video_dont: rules.videoDonts,
       p_flag_phrases: rules.flagPhrases,
     });
     if (error) return refused(error, 'The content rules could not be saved.');

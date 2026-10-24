@@ -689,7 +689,15 @@ export const toBrandProfile = (row: BrandRow): BrandProfile => ({
 
 /** What the agents read beside the profile. A picture style left empty is an empty string. */
 /** The team's content rules, as Brand memory edits them. */
-export const toContentRules = (row: BrandRow): ContentRules => ({ copyRules: row.copy_rules, pictureRules: row.picture_rules, videoRules: row.video_rules, flagPhrases: row.flag_phrases });
+export const toContentRules = (row: BrandRow): ContentRules => ({
+  copyRules: row.copy_rules,
+  copyDonts: row.copy_donts,
+  pictureRules: row.picture_rules,
+  pictureDonts: row.picture_donts,
+  videoRules: row.video_rules,
+  videoDonts: row.video_donts,
+  flagPhrases: row.flag_phrases,
+});
 
 export function toBrandMemory(row: BrandRow): BrandMemory {
   const formats: BrandMemory['postFormats'] = {};

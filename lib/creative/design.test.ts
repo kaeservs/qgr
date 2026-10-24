@@ -23,6 +23,10 @@ function fakeCtx(): Ctx {
     fill: noop,
     roundRect: noop,
     drawImage: noop,
+    save: noop,
+    restore: noop,
+    shadowColor: '',
+    shadowBlur: 0,
     fillStyle: '',
     textAlign: 'left',
     textBaseline: 'alphabetic',
@@ -103,14 +107,14 @@ describe('drawing a design', () => {
   it('draws a plain design where the style puts things, and says where', () => {
     const hits = drawCreative(fakeCtx(), square, art, brand);
     expect(hits.map((h) => h.id)).toEqual([WORDS, LOGO]);
-    // Without the logo loaded, the page's name in a chip, top right.
+    // Without the logo loaded, the page's name in a chip, top left.
     const chip = hits[1]!;
     expect(chip.y).toBeCloseTo(square.width * 0.045);
-    expect(chip.x + chip.width).toBeCloseTo(square.width * 0.95);
+    expect(chip.x).toBeCloseTo(square.width * 0.05);
   });
 
   it('starts long words below the logo, so nothing overlaps it, unless someone moved either', () => {
-    const withLogo = { name: 'Quantum Global', logo: { width: 438, height: 252 } as unknown as CanvasImageSource };
+    const withLogo = { name: 'Quantum Global', logo: { width: 256, height: 256 } as unknown as CanvasImageSource };
     const long = { ...art, style: 'spotlight' as const, text: 'Meet our team in person at Century G’s in downtown Dubai on 21 and 22 November, and bring every question you have about moving your family to the U.S.' };
     const hits = drawCreative(fakeCtx(), square, long, withLogo);
     const words = hits.find((h) => h.id === WORDS)!;
@@ -121,24 +125,38 @@ describe('drawing a design', () => {
     expect(bare.y).toBeLessThan(logo.y + logo.height);
   });
 
-  it('draws the client’s logo as given on every ground, top right, and scales it where moved', () => {
-    const given = { width: 438, height: 252 } as unknown as CanvasImageSource;
-    const drawn: unknown[] = [];
-    const ctx = Object.assign(fakeCtx(), { drawImage: (i: unknown) => drawn.push(i) });
+  it('draws the Q top left on every ground, glowing white, and scales it where moved', () => {
+    const given = { width: 256, height: 256 } as unknown as CanvasImageSource;
+    const drawn: { image: unknown; blur: number; glow: string }[] = [];
+    const ctx = fakeCtx();
+    Object.assign(ctx, { drawImage: (image: unknown) => drawn.push({ image, blur: ctx.shadowBlur, glow: String(ctx.shadowColor) }) });
     const withLogo = { name: 'Quantum Global', logo: given };
     const logo = drawCreative(ctx, square, art, withLogo).find((h) => h.id === LOGO)!;
     const tall = 52 * (square.width / 440);
     expect(logo.height).toBeCloseTo(tall);
-    expect(logo.width).toBeCloseTo(tall * (438 / 252));
-    expect(logo.x + logo.width).toBeCloseTo(square.width * 0.95);
+    expect(logo.width).toBeCloseTo(tall);
+    expect(logo.x).toBeCloseTo(square.width * 0.05);
     expect(logo.y).toBeCloseTo(square.width * 0.045);
+    // Drawn once per white shadow, wide and soft, then close.
+    expect(drawn.map((d) => [Math.round(d.blur), d.glow])).toEqual([
+      [Math.round(tall * 0.36), 'rgb(255 255 255 / 0.9)'],
+      [Math.round(tall * 0.12), 'rgb(255 255 255 / 0.95)'],
+    ]);
     drawCreative(ctx, square, { ...art, style: 'arcs' }, withLogo);
     drawCreative(ctx, square, { ...art, style: 'spotlight' }, withLogo);
     drawCreative(ctx, square, art, withLogo, { image: given, width: 10, height: 10 });
-    expect(drawn.filter((i) => i === given)).toHaveLength(5);
+    expect(drawn.filter((d) => d.image === given)).toHaveLength(9);
     const moved = drawCreative(fakeCtx(), square, art, withLogo, null, moveTo(PLAIN_DESIGN, 'square', LOGO, { x: 0.5, y: 0.5, scale: 2 })).find((h) => h.id === LOGO)!;
     expect(moved.height).toBeCloseTo(logo.height * 2);
     expect(moved.x + moved.width / 2).toBeCloseTo(540);
+  });
+
+  it('starts the split style’s words below the Q, which now sits over them', () => {
+    const withLogo = { name: 'Quantum Global', logo: { width: 256, height: 256 } as unknown as CanvasImageSource };
+    const hits = drawCreative(fakeCtx(), square, art, withLogo);
+    const words = hits.find((h) => h.id === WORDS)!;
+    const logo = hits.find((h) => h.id === LOGO)!;
+    expect(words.y).toBeGreaterThanOrEqual(logo.y + logo.height);
   });
 
   it('draws the words white by default, indigo on the light spotlight, and in the font and colour a design picks', () => {
@@ -173,7 +191,7 @@ describe('drawing a design', () => {
     // The wide shape keeps its own layout.
     const wide = drawCreative(fakeCtx(), PICTURE_SIZE.wide, { ...art, ratio: 'wide' }, brand, null, design);
     const wideLogo = wide.find((h) => h.id === LOGO)!;
-    expect(wideLogo.x + wideLogo.width).toBeCloseTo(PICTURE_SIZE.wide.width * 0.95);
+    expect(wideLogo.x).toBeCloseTo(PICTURE_SIZE.wide.width * 0.05);
   });
 
   it('stacks added texts from the bottom, and leaves the logo off when asked', () => {

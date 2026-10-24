@@ -188,3 +188,62 @@
   border-color: var(--line);
   background: var(--surface);
 }
+
+/* How content is made: a section's Do's beside its Don'ts, stacked on a phone. */
+.doDont {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: 14px;
+}
+
+.ruleColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+
+.ruleHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.ruleHead svg {
+  flex: none;
+  box-sizing: content-box;
+  padding: 4px;
+  border-radius: 999px;
+}
+
+.ruleDo .ruleHead svg {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
+.ruleDont .ruleHead svg {
+  color: var(--fail);
+  background: var(--fail-bg);
+}
+
+.ruleDo {
+  border-top: 3px solid var(--ok);
+}
+
+.ruleDont {
+  border-top: 3px solid var(--fail);
+}
+
+.ruleColumn .ruleList {
+  background: var(--surface);
+}
+
+.ruleNone {
+  margin: 0;
+}

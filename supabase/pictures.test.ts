@@ -38,7 +38,7 @@ async function adSet(): Promise<{ runId: string; variant: Record<'A' | 'B' | 'C'
 }
 
 const ask = (variantId: string, user = member) => t.asUser(user, () => t.db.query(`select public.request_picture($1)`, [variantId]));
-type Ask = { variant_id: string; label: string; prompt: string; style: string; look: string | null; model: string; account: string | null; path: string };
+type Ask = { variant_id: string; label: string; prompt: string; style: string; look: string | null; rules: string[]; donts: string[]; model: string; account: string | null; path: string };
 const takeDue = () => t.asService(() => t.value<Ask[]>(`select public.picture_take_due()`));
 const upload = (path: string) => t.asService(() => t.db.query(`insert into storage.objects (bucket_id, name) values ('ad-pictures', $1)`, [path]));
 const finish = (variantId: string, path: string | null, standIn = false) =>
@@ -229,6 +229,9 @@ describe('a picture for an ad', () => {
 
     const [due] = await takeDue();
     expect(due).toMatchObject({ variant_id: variant.A, prompt: 'A quiet harbour at dawn, no people', look: 'Warm evening light, deep indigo and gold.', model: 'stand-in', account: null });
+    // The team's picture Do's and Don'ts (Brand memory) go with every ask.
+    expect(due!.rules[1]).toMatch(/^The people are Indian/);
+    expect(due!.donts).toContain('People posing or looking at the camera.');
     await upload(due!.path);
     await finish(variant.A, due!.path);
     expect(await kept(variant.A)).toEqual([expect.objectContaining({ path: due!.path, prompt: 'A quiet harbour at dawn, no people' })]);

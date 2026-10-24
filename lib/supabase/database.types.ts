@@ -1,6 +1,5 @@
 // Generated from the deployed schema (Supabase-QGR, generate_typescript_types).
 // Regenerate after every migration; do not edit by hand.
-
 export type Json =
   | string
   | number
@@ -317,17 +316,20 @@ export type Database = {
         Row: {
           audience: string
           company: string
+          copy_donts: string[]
           copy_rules: string[]
           flag_phrases: string[]
           guardrails: string[]
           id: number
           offer: string
           page_name: string
+          picture_donts: string[]
           picture_rules: string[]
           picture_style: string | null
           post_formats: Json
           topics: string[]
           updated_at: string
+          video_donts: string[]
           video_rules: string[]
           voice: string[]
           website: string
@@ -336,17 +338,20 @@ export type Database = {
         Insert: {
           audience: string
           company: string
+          copy_donts?: string[]
           copy_rules?: string[]
           flag_phrases?: string[]
           guardrails?: string[]
           id?: number
           offer: string
           page_name: string
+          picture_donts?: string[]
           picture_rules?: string[]
           picture_style?: string | null
           post_formats?: Json
           topics?: string[]
           updated_at?: string
+          video_donts?: string[]
           video_rules?: string[]
           voice?: string[]
           website: string
@@ -355,17 +360,20 @@ export type Database = {
         Update: {
           audience?: string
           company?: string
+          copy_donts?: string[]
           copy_rules?: string[]
           flag_phrases?: string[]
           guardrails?: string[]
           id?: number
           offer?: string
           page_name?: string
+          picture_donts?: string[]
           picture_rules?: string[]
           picture_style?: string | null
           post_formats?: Json
           topics?: string[]
           updated_at?: string
+          video_donts?: string[]
           video_rules?: string[]
           voice?: string[]
           website?: string
@@ -1802,6 +1810,18 @@ export type Database = {
         Returns: undefined
       }
       run_of_variant: { Args: { p_variant_id: string }; Returns: string }
+      save_content_rules: {
+        Args: {
+          p_copy_do: string[]
+          p_copy_dont: string[]
+          p_flag_phrases: string[]
+          p_picture_do: string[]
+          p_picture_dont: string[]
+          p_video_do: string[]
+          p_video_dont: string[]
+        }
+        Returns: undefined
+      }
       save_long_video_edit: {
         Args: { p_edit: Json; p_id: string }
         Returns: undefined

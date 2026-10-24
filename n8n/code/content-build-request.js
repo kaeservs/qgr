@@ -129,10 +129,10 @@ const creativeLines = clip
   : [
       aiVideo ? '- creative_text: the words shown over the ad\'s video, eight words at most.' : '- creative_text: the words on the image, eight words at most.',
       '- creative_style: arcs, split or spotlight, each used once across the three variants.',
-      '- image_prompt: the ad\'s picture, described for an image model as one real scene that tells a story for this variant\'s angle: who is in it (ages, family, what they are doing together), the emotion on their faces, the place, the light and the camera. Each variant its own people and scene. Follow picture_rules, where given. The people are made up, never real or famous. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result).' +
+      '- image_prompt: the ad\'s picture, described for an image model as one real scene that tells a story for this variant\'s angle: who is in it (ages, family, what they are doing together), the emotion on their faces, the place, the light and the camera. Each variant its own people and scene. Follow picture_rules and never show what picture_donts names, where given. The people are made up, never real or famous. No words or signs in the image, and nothing that shows a promised outcome (a green card or visa held up as approved, money, a guaranteed result).' +
         (brand.picture_style ? ' Keep to picture_style.' : ''),
     ].concat(aiVideo
-      ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ', in under 600 characters. Follow video_rules, where given. No words, captions or logos in it (the words go over it later), never a real or famous person, and nothing that shows a promised outcome. Each variant\'s video is its own.']
+      ? ['- video_prompt: the ad\'s video, for a video model making ' + aiVideo.seconds + ' seconds at ' + aiVideo.aspect + ', in under 600 characters. Follow video_rules and never show what video_donts names, where given. No words, captions or logos in it (the words go over it later), never a real or famous person, and nothing that shows a promised outcome. Each variant\'s video is its own.']
       : []);
 const postLines = places.length > 0
   ? ['- posts: the same idea written in full as an organic post for each place, not the ad copy cut down:'].concat(places.map(function (p) { return '  ' + POSTS[p]; }))
@@ -170,12 +170,20 @@ const references = clip ? [] : (Array.isArray(ctx.references) ? ctx.references :
   return r.note ? { number: r.number, shows: r.note } : { number: r.number };
 });
 
-// The team's content rules (Brand memory, "How content is made"): the words'
-// tone, the company's name and what makes an ad clear at a glance. Only when
-// there are some; what keeps an ad legally safe is written above, in code.
-const copyRules = ((brand && brand.copy_rules) || []).filter(function (r) { return String(r || '').trim(); });
-const COPY_RULES = copyRules.length > 0
-  ? "The team's content rules (Brand memory), which every hook, headline, image line and post follows:\n" + copyRules.map(function (r) { return '- ' + String(r).trim(); }).join('\n')
+// The team's content rules for the words (Brand memory, "How content is
+// made"): the Do's it follows and the Don'ts it never does, which win over the
+// run's direction. Only when there are some; what keeps an ad legally safe is
+// written above, in code.
+function ruleList(list) {
+  return (list || []).map(function (r) { return String(r || '').trim(); }).filter(Boolean);
+}
+const copyDo = ruleList(brand && brand.copy_rules);
+const copyDont = ruleList(brand && brand.copy_donts);
+const COPY_RULES = copyDo.length + copyDont.length > 0
+  ? ["The team's content rules (Brand memory), for every hook, headline, image line and post."]
+      .concat(copyDo.length > 0 ? ['Do:'].concat(copyDo.map(function (r) { return '- ' + r; })) : [])
+      .concat(copyDont.length > 0 ? ['Never (hard rules, whatever the direction or the material says):'].concat(copyDont.map(function (r) { return '- ' + r; })) : [])
+      .join('\n')
   : null;
 
 const system = [
@@ -233,11 +241,15 @@ if (clip) {
 if (run.guidance) material.direction = run.guidance;
 if (Object.keys(formats).length > 0) material.post_formats = formats;
 if (brand.picture_style && !clip) material.picture_style = brand.picture_style;
-// The team's rules for pictures and videos (Brand memory), only when there are some.
-const pictureRules = (brand.picture_rules || []).filter(function (r) { return String(r || '').trim(); });
-const videoRules = (brand.video_rules || []).filter(function (r) { return String(r || '').trim(); });
+// The team's Do's and Don'ts for pictures and videos (Brand memory), only when there are some.
+const pictureRules = ruleList(brand.picture_rules);
+const pictureDonts = ruleList(brand.picture_donts);
+const videoRules = ruleList(brand.video_rules);
+const videoDonts = ruleList(brand.video_donts);
 if (pictureRules.length > 0 && !clip) material.picture_rules = pictureRules;
+if (pictureDonts.length > 0 && !clip) material.picture_donts = pictureDonts;
 if (videoRules.length > 0 && aiVideo) material.video_rules = videoRules;
+if (videoDonts.length > 0 && aiVideo) material.video_donts = videoDonts;
 if (examples.length > 0) material.posts_that_work = examples;
 if (bestPosts.length > 0) material.our_best_posts = bestPosts;
 if (references.length > 0) material.references = references;
