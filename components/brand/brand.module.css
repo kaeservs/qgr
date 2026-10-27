@@ -42,7 +42,22 @@
   list-style: none;
 }
 
+/* A topic can be a sentence: its chip wraps within the card rather than
+   running past it, the remove button kept beside the first line. */
+.topics li {
+  height: auto;
+  min-height: 28px;
+  max-width: 100%;
+  padding-block: 4px;
+  border-radius: 14px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.4;
+}
+
 .topicRemove {
+  flex: none;
+  align-self: flex-start;
   display: inline-grid;
   place-items: center;
   width: 18px;
