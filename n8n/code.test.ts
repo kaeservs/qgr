@@ -677,6 +677,18 @@ describe('Ad Strategist', () => {
     expect(String(plain.system)).not.toContain('chosen_ads');
   });
 
+  it('looks for new angles beside the last runs’ ones, and asks exactly as before without them', () => {
+    const recent_angles = [{ name: 'Your child’s U.S. future', hook: 'Secure your child’s future with a Green Card' }, { name: 'Meet our CEO', hook: 'Ask the CEO who went through EB-5 herself' }];
+    const { body } = run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, recent_angles })) as { body: Json };
+    const material = JSON.parse(String((body.messages as { content: string }[])[0]!.content).split('\n').slice(1).join('\n'));
+    expect(material.recent_angles).toEqual(['Your child’s U.S. future: Secure your child’s future with a Green Card', 'Meet our CEO: Ask the CEO who went through EB-5 herself']);
+    expect(String(body.system)).toContain("recent_angles are the angles Quantum Global's last runs already used");
+    const plain = (run('strategist-build-request.js', run('strategist-plan.js', competitorCtx)) as { body: Json }).body;
+    const empty = (run('strategist-build-request.js', run('strategist-plan.js', { ...competitorCtx, recent_angles: [] })) as { body: Json }).body;
+    expect(empty).toEqual(plain);
+    expect(String(plain.system)).not.toContain('recent_angles');
+  });
+
   describe('how QGR’s own posts did', () => {
     const result = (angle: string, place: string, counts: Json) => ({ angle, creative_text: `Hook for ${angle}`, headline: `Headline ${angle}`, place, posted_at: '2026-09-28T15:00:09+00:00', reach: null, views: null, reactions: null, comments: null, shares: null, clicks: null, ...counts });
     const results = [
@@ -935,6 +947,23 @@ describe('Content Agent', () => {
     const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
     expect(materialOf(plain)).not.toHaveProperty('direction');
     expect(String(plain.system)).not.toContain('direction');
+  });
+
+  it('writes new words beside the last runs’ ads, and asks exactly as before without them', () => {
+    const recent_ads = [
+      { image_words: 'Secure your child’s future with a Green Card', headline: 'Plan your child’s U.S. education', copy: 'Your child’s university years in the U.S. See how EB-5 can help.', post: 'Planning your child’s education in the U.S.? Many families ask one question.' },
+      { image_words: 'Live, study and work freely in the U.S.' },
+      {},
+    ];
+    const { body } = run('content-build-request.js', { ...ctx, recent_ads }) as { body: Json };
+    expect(materialOf(body).recent_ads).toEqual([
+      { image_words: 'Secure your child’s future with a Green Card', headline: 'Plan your child’s U.S. education', copy_opens: 'Your child’s university years in the U.S.', post_opens: 'Planning your child’s education in the U.S.?' },
+      { image_words: 'Live, study and work freely in the U.S.' },
+    ]);
+    expect(String(body.system)).toContain("recent_ads are the words of the ads Quantum Global's last runs made");
+    const plain = (run('content-build-request.js', ctx) as { body: Json }).body;
+    expect((run('content-build-request.js', { ...ctx, recent_ads: [] }) as { body: Json }).body).toEqual(plain);
+    expect(String(plain.system)).not.toContain('recent_ads');
   });
 
   it('spreads the three variants over the angles the team picked, and asks exactly as before without picks', () => {

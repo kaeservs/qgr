@@ -212,6 +212,25 @@ const DIRECTION_RULE = "direction is the Quantum Global team's brief for this ru
 const CLIP_RULE = "clip.what_is_said is what is said in the team's video, which every ad shows. Write each variant from it: its words, its moments, and any event, date, place or offer it names, so the copy and posts match what people see and hear. Do not add claims it does not make.";
 const SOURCE_RULE = "source is Quantum Global's own material this run is made from. Write each variant from it: its specifics (what it explains, who it is for, any event, date, place or offer it names), not generic EB-5 lines.";
 
+// What the last runs' ads already said (the client's ask, 2026-10-28: every
+// run read the same): the words on the picture, the headline and the first
+// sentence of the copy and the post. Only when there were runs before; without
+// them the request is exactly as before.
+function opening(text) {
+  const t = String(text || '').trim();
+  const end = t.search(/[.?!](\s|$)/);
+  return end === -1 ? t : t.slice(0, end + 1);
+}
+const recentAds = (Array.isArray(ctx.recent_ads) ? ctx.recent_ads : []).slice(0, 18).map(function (r) {
+  const ad = {};
+  if (r.image_words) ad.image_words = r.image_words;
+  if (r.headline) ad.headline = r.headline;
+  if (r.copy) ad.copy_opens = opening(r.copy);
+  if (r.post) ad.post_opens = opening(r.post);
+  return ad;
+}).filter(function (ad) { return Object.keys(ad).length > 0; });
+const RECENT_RULE = "recent_ads are the words of the ads Quantum Global's last runs made. This run's ads say something new: new words on the picture, a new headline and a new opening for the copy and every post. Never repeat one of them, reuse its opening words or its shape (the same question, the same \"Secure your...\" line); take a different benefit, moment or detail from the material. The team's taglines set the tone, not the words to copy. What the rules require every ad to say (the contact line, the investment amount) stays; how the ad leads into it is new.";
+
 const material = {
   brand: { company: brand.company, website: brand.website, offer: brand.offer, audience: brand.audience },
   strategy: { title: strategy.title, positioning: strategy.positioning, audiences: strategy.audiences, angles: picked || strategy.angles, channels: strategy.channels },
@@ -253,6 +272,7 @@ if (videoDonts.length > 0 && aiVideo) material.video_donts = videoDonts;
 if (examples.length > 0) material.posts_that_work = examples;
 if (bestPosts.length > 0) material.our_best_posts = bestPosts;
 if (references.length > 0) material.references = references;
+if (recentAds.length > 0) material.recent_ads = recentAds;
 
 return [{
   json: {
@@ -265,6 +285,7 @@ return [{
         COPY_RULES ? [COPY_RULES] : [],
         material.clip ? [CLIP_RULE] : material.source ? [SOURCE_RULE] : [],
         run.guidance ? [DIRECTION_RULE] : [],
+        recentAds.length > 0 ? [RECENT_RULE] : [],
       ).join('\n\n'),
       messages: [{ role: 'user', content: 'The brand, the strategy and what it came from, as JSON:\n' + JSON.stringify(material) }],
     },

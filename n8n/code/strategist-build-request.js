@@ -97,11 +97,17 @@ const CHOSEN_RULE = "competitor_report.chosen_ads are the competitor's ads the Q
 // made from it, so the strategy is too. A clip run once got one angle from the
 // clip and two from the brand's strengths, which read as generic (2026-10-22).
 const SOURCE_RULE = "source is what this run's ads are made from (from a clip, the ads are that clip). Build the strategy on it: every angle comes from what the source says (a moment, a question it answers, a promise it makes, an event, date or place it names), and why quotes or names that moment. The brand's strengths may back an angle up but never stand in for one; brand.topics, posts_that_work and our_past_posts shape how the angles are said, not what they are about. Keep the source's specifics (who it speaks to, an event and its dates, what it offers) in the positioning, the audiences and the title.";
+// What the last runs already said (the client's ask, 2026-10-28: every run
+// read the same). Only when there were runs before; without them the request
+// is exactly as before.
+const recentAngles = (p.recentAngles || []).slice(0, 18).map(function (a) { return a.name + ': ' + a.hook; });
+const RECENT_RULE = "recent_angles are the angles Quantum Global's last runs already used, each with its hook. Find three new ones for this run: a different benefit, family moment, question or proof point, each with a new hook. Never repeat one of them or reword it, unless this run's source or direction is about exactly that.";
 const RESULTS_RULE = "our_past_posts is how Quantum Global's own recent posts did, best engagement first. Build on the angles and hooks that engaged, and an angle may name one as its evidence; bring back one that did poorly only with a reason. These numbers are history, not a promise: no ad may quote them.";
 
 const material = { brand: p.brand, goal: GOALS[run.goal], platforms: run.platforms };
 if (run.guidance) material.direction = run.guidance;
 if (pastPosts.length > 0) material.our_past_posts = pastPosts;
+if (recentAngles.length > 0) material.recent_angles = recentAngles;
 if (examples.length > 0) material.posts_that_work = examples;
 if (p.report) {
   material.competitor_report = {
@@ -187,6 +193,7 @@ return [{
           p.brand && p.brand.topics && p.brand.topics.length > 0 ? [TOPICS_RULE] : [],
           examples.length > 0 ? [EXAMPLES_RULE] : [],
           pastPosts.length > 0 ? [RESULTS_RULE] : [],
+          recentAngles.length > 0 ? [RECENT_RULE] : [],
         )
         .join('\n\n'),
       messages: [{ role: 'user', content: 'The material, as JSON:\n' + JSON.stringify(material) }],

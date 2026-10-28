@@ -5,7 +5,8 @@
 // How the team's own recent posts did comes along too (ctx.results), and the
 // posts the team keeps in brand memory as ones that work (ctx.examples). A run
 // built on a few of a report's ads, chosen by a person, brings them too
-// (ctx.chosen_ads), with the report they came from.
+// (ctx.chosen_ads), with the report they came from, and so do the angles the
+// last runs used (ctx.recent_angles), so this run finds new ones.
 const ctx = $input.first().json;
 const run = ctx.run;
 const KIND = { podcast: 'Podcast', blog: 'Blog post', video: 'Video', text: 'Text' };
@@ -28,6 +29,7 @@ return [{
     results: Array.isArray(ctx.results) ? ctx.results : [],
     examples: Array.isArray(ctx.examples) ? ctx.examples : [],
     chosenAds: Array.isArray(ctx.chosen_ads) ? ctx.chosen_ads : [],
+    recentAngles: Array.isArray(ctx.recent_angles) ? ctx.recent_angles : [],
     sourceText: sourceText,
     sourceLabel: custom ? (clip ? 'Uploaded clip' : KIND[run.input]) + ' · ' + run.title : null,
   },

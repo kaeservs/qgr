@@ -486,6 +486,13 @@ X's ads APIs, which each need their own access.
   words). Its read step fails a variant without a post for a place, or with one
   past 3,000 characters (never cut), and flags posts as it flags copy.
   `max_tokens` is 32,000 for it and 24,000 for the strategist.
+- Every run says something new (the client's ask, 2026-10-28: every run read
+  the same). `agent_begin` hands the strategist the angles of the last six runs
+  (`recent_angles`) and the Content Agent the words of their ads (`recent_ads`:
+  the words on the picture, the headline, the first sentence of the copy and
+  of the post); each is told to write new ones, not repeat or reword them. A
+  deleted run, or one started after this one, does not count. Without earlier
+  runs both requests are exactly as before (`n8n/code.test.ts`).
 - The studio shows each variant as an ad on a platform or a post on a place
   (the Ads and Posts buttons), with the chain under its name: why the angle
   should work, and the competitor hook it answers, linked to the report. A
